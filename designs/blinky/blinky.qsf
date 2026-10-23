@@ -1,0 +1,16 @@
+# Pins and standards: Terasic DE25-Nano user manual (Sep 2025), section 3.6,
+# cross-checked against github.com/spersvold/de25_nano.
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY blinky
+set_global_assignment -name VERILOG_FILE blinky.v
+set_global_assignment -name SDC_FILE blinky.sdc
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+
+set_location_assignment PIN_V16 -to CLOCK1_50
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CLOCK1_50
+set_location_assignment PIN_C8 -to KEY0
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to KEY0
+set_location_assignment PIN_DF35 -to LED0
+set_instance_assignment -name IO_STANDARD "1.1-V" -to LED0

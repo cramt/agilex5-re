@@ -1,0 +1,5 @@
+# Quartus-derived output never gets committed.
+/specimens/
+/build/
+target/
+.claude/
