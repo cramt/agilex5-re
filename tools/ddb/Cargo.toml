@@ -1,0 +1,16 @@
+[package]
+name = "ddb"
+version = "0.1.0"
+edition = "2021"
+description = "Reader for Quartus Prime Pro (PDB v25) .ddb device database files (Agilex 5)"
+
+[dependencies]
+# Pure-Rust codecs so the crate builds without system liblzma/zlib on NixOS.
+lzma-rs = "0.3"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+debug = 1

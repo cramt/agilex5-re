@@ -1,0 +1,49 @@
+# ddb_<die><package>_pkg.ddb: package balls. Checked token for token against
+# the PDB_ASCII_DUMP trace of ddb_sm4revb_eb_b_b795b_csvpbga795b_pkg.ddb.
+# Array lengths are the bit counts of the matching *_enum_is_valid vectors.
+# m_int_data elements and 2d/vec int elements are not traced by Quartus.
+
+class DEV_PKG_INFO_BODY
+  m_pin_list                  vec ptr DEV_PIN
+  m_pkg_net_hash              map str ptr DEV_PKG_NET
+  m_board_net_hash            map str ptr DEV_PKG_NET   # empty in every file seen
+  m_bool_data                 bits
+  m_int_data                  arr 20 i32~
+  m_string_data               arr 16 str
+  m_2d_int_data               arr 11 vec vec i32~
+  m_vec_double_data           arr 5 vec f64
+  m_vec_int_data              arr 4 vec i32~
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_string_enum_is_valid      bits
+  m_2d_int_enum_is_valid      bits
+  m_vec_double_enum_is_valid  bits
+  m_vec_int_enum_is_valid     bits
+  m_pin_bool_enum_is_valid    bits
+  m_pin_int_enum_is_valid     bits
+  m_pin_string_enum_is_valid  bits
+  m_pin_vec_int_enum_is_valid bits
+  m_pin_string_hash_enum_is_valid bits
+  m_ids_by_string             map str i32
+end
+
+class DEV_PKG_NET
+  m_string_data               arr 4 str
+  m_vec_string_data           arr 4 vec str
+  m_2d_string_data            arr 5 vec vec str
+end
+
+class DEV_PIN
+  m_id                        i32
+  m_bool_data                 bits
+  m_int_data                  arr 25 i32~
+  m_string_data               arr 15 str
+  m_vec_int_data              arr 7 vec i32~
+  m_string_hash_data          arr 4 map str str   # empty in every file seen
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_string_enum_is_valid      bits
+  m_vec_int_enum_is_valid     bits
+  m_string_hash_enum_is_valid bits
+  m_pad_id_list               vec i32
+end

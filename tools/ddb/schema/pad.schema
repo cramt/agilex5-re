@@ -1,0 +1,87 @@
+# ddb_<die>_pad.ddb: die pads, I/O standards, I/O rules. Checked token for
+# token against the PDB_ASCII_DUMP traces of ddb_z1698c_pad.ddb (sm4revb)
+# and ddb_sundancemesa_pad.ddb (family). Array lengths are the bit counts
+# of the matching *_enum_is_valid vectors.
+
+class DEV_PAD_INFO_BODY
+  m_pad_list                  vec ptr DEV_PAD
+  m_default_pad_body          ptr DEV_PAD_BODY
+  m_bool_data                 bits
+  m_int_data                  arr 28 i32~
+  m_string_data               arr 10 str
+  m_vec_string_data           arr 5 vec str
+  m_vec_int_data              arr 4 vec i32~
+  m_2d_int_data               arr 14 vec vec i32~
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_string_enum_is_valid      bits
+  m_vec_string_enum_is_valid  bits
+  m_vec_int_enum_is_valid     bits
+  m_2d_int_enum_is_valid      bits
+  m_ids_by_global_id          map i32 i32
+  m_ids_by_string             map str i32
+  m_io_standards              vec ptr DEV_IO_STANDARD_DESC
+  m_io_standards_by_string    map str ptr DEV_IO_STANDARD_DESC
+  m_default_io_standards_by_enum arr 172 ptr DEV_IO_STANDARD_DESC
+  m_io_standard_enums         vec i32
+  m_io_rules                  vec ptr DEV_IO_RULE
+end
+
+class DEV_IO_RULE
+  m_body                      ptr DEV_IO_RULE_BODY
+end
+
+class DEV_IO_RULE_BODY
+  m_bool_data                 bits
+  m_int_data                  arr 5 i32~
+  m_string_data               arr 3 str
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_string_enum_is_valid      bits
+end
+
+class DEV_IO_STANDARD_DESC
+  m_body                      ptr DEV_IO_STANDARD_DESC_BODY
+end
+
+class DEV_IO_STANDARD_DESC_BODY
+  m_bool_data                 bits
+  m_int_data                  arr 35 i32~
+  m_string_data               arr 28 str
+  m_2d_int_data               arr 32 vec vec i32~
+  m_current_set               vec i32
+  m_oct_set                   vec i32
+  # 160 untraced bytes; two 20-entry arrays (m_current_enum_is_valid has 20
+  # bits), like the gnd/vcc current arrays of Quartus 13. Names unknown.
+  m_current_data_a            arr 20 i32~
+  m_current_data_b            arr 20 i32~
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_string_enum_is_valid      bits
+  m_current_enum_is_valid     bits
+  m_oct_impedance_matching_enum_is_valid bits
+  m_2d_int_enum_is_valid      bits
+end
+
+class DEV_PAD
+  m_body                      ptr DEV_PAD_BODY
+end
+
+class DEV_PAD_BODY
+  m_id                        i32
+  m_default_pad_body          ptr DEV_PAD_BODY
+  m_bool_data                 bits
+  m_int_data                  arr 59 i32~
+  m_string_data               arr 33 str
+  m_2d_int_data               arr 10 vec vec i32~
+  m_string_hash_data          arr 4 map str str
+  m_double_data               arr 5 f64~
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_string_enum_is_valid      bits
+  m_2d_int_enum_is_valid      bits
+  m_string_hash_enum_is_valid bits
+  m_double_enum_is_valid      bits
+  m_io_standards              vec ptr DEV_IO_STANDARD_DESC
+  m_io_standards_by_enum      arr 172 ptr DEV_IO_STANDARD_DESC
+end
