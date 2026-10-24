@@ -352,3 +352,30 @@ pub fn fmt_e(v: f64) -> String {
     let e: i32 = e.parse().unwrap();
     format!("{m}E{}{:02}", if e < 0 { '-' } else { '+' }, e.abs())
 }
+
+impl Val {
+    pub fn to_json(&self) -> serde_json::Value {
+        use serde_json::{json, Value};
+        match self {
+            Val::I(v) => json!(v),
+            Val::F(v) => json!(v),
+            Val::B(v) => json!(v),
+            Val::S(v) => json!(v),
+            Val::Bits(v) => Value::String(v.iter().map(|&b| if b { '1' } else { '0' }).collect()),
+            Val::Ptr(None) => Value::Null,
+            Val::Ptr(Some(r)) => json!(r.id),
+            Val::List(v) => Value::Array(v.iter().map(Val::to_json).collect()),
+            Val::Map(v) => Value::Array(v.iter().map(|(k, x)| json!([k.to_json(), x.to_json()])).collect()),
+            Val::Pair(p) => json!([p.0.to_json(), p.1.to_json()]),
+            Val::Obj(v) => Value::Array(v.iter().map(Val::to_json).collect()),
+        }
+    }
+}
+
+impl Object<'_> {
+    pub fn to_json(&self) -> serde_json::Value {
+        let m: serde_json::Map<String, serde_json::Value> =
+            self.fields.iter().zip(&self.vals).map(|(f, v)| (f.name.clone(), v.to_json())).collect();
+        serde_json::Value::Object(m)
+    }
+}

@@ -1,0 +1,64 @@
+# ddb_<die>_<part>_hdr.ddb: device basic info and the DEV_ELEMENT_DESC
+# table (element enum -> name, the types of routing/cell elements). Checked
+# against the trace of ddb_sm4revb_eb_b_b795b_cs_hdr.ddb.
+
+class DEV_BASIC_INFO_BODY
+  m_bool_data                 bits
+  m_int_data                  arr 98 i32~
+  m_enum_data                 arr 6 i32~
+  m_dev_element_data          arr 1 i16
+  m_string_data               arr 33 str
+  m_2d_int_data               arr 25 vec vec i32~
+  m_locations                 vec ptr DEV_LOCATION_DESC
+  m_elements                  vec ptr DEV_ELEMENT_DESC
+  m_locations_by_enum         arr 24 ptr DEV_LOCATION_DESC
+  m_elements_by_enum          map i16 ptr DEV_ELEMENT_DESC
+  m_locations_by_string       map str ptr DEV_LOCATION_DESC
+  m_elements_by_string        map str ptr DEV_ELEMENT_DESC
+  m_ports_by_string           map str i32               # empty
+  m_location_enums            vec i32
+  m_element_enums             vec i16
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_dev_element_enum_is_valid bits
+  m_enum_enum_is_valid        bits
+  m_string_enum_is_valid      bits
+  m_2d_int_enum_is_valid      bits
+end
+
+class DEV_LOCATION_DESC
+  m_body                      ptr DEV_LOCATION_DESC_BODY
+end
+
+class DEV_LOCATION_DESC_BODY
+  m_bool_data                 bits
+  m_int_data                  arr 6 i32~
+  m_string_data               arr 7 str
+  m_id                        i32
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_string_enum_is_valid      bits
+end
+
+class DEV_ELEMENT_DESC
+  m_body                      ptr DEV_ELEMENT_DESC_BODY
+end
+
+class DEV_ELEMENT_DESC_BODY
+  m_bool_data                 bits
+  m_int_data                  arr 27 i32~
+  m_dev_element_data          arr 2 i16
+  m_string_data               arr 11 str
+  m_2d_int_data               arr 35 vec vec i32~
+  m_2d_string_data            arr 1 vec vec str
+  m_locations                 vec ptr DEV_LOCATION_DESC
+  m_location_enums            vec i32
+  m_ports                     vec i32
+  m_id                        i32
+  m_bool_enum_is_valid        bits
+  m_int_enum_is_valid         bits
+  m_dev_element_enum_is_valid bits
+  m_string_enum_is_valid      bits
+  m_2d_int_enum_is_valid      bits
+  m_2d_string_enum_is_valid   bits
+end

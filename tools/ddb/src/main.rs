@@ -11,6 +11,8 @@ fn usage() -> ! {
   ddb unpack <file.ddb> <dir>         write decompressed body / footer
   ddb trace <file.ddb> <schema>       decode with a schema, print the trace token
                                       stream (compare with verify/trace_tokens.py)
+  ddb dump <file.ddb> <schema>        every decoded object as one JSON line
+                                      (table, id, class, fields; pointers are ids)
   ddb pins <pkg.ddb> <pad.ddb>        package ball -> pad -> location, every slot, CSV"
     );
     std::process::exit(2)
@@ -73,6 +75,21 @@ fn main() -> Result<()> {
             drop(out);
             let dec = res?;
             eprintln!("decoded {} deferred objects, body fully consumed", dec.objects.len());
+        }
+        ("dump", [f, sch]) => {
+            use std::io::Write;
+            let d = container::Ddb::open(&PathBuf::from(f))?;
+            let footer = pdb::parse_footer(&d.footer)?;
+            let schema = schema::Schema::parse(&std::fs::read_to_string(sch)?)?;
+            let dec = reader::Reader::new(&d.body, &footer, &schema, None).decode(&footer.root_type_name)?;
+            let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+            writeln!(out, "{}", serde_json::json!({"table": footer.root_type_name, "id": 1, "class": dec.root.class, "fields": dec.root.to_json()}))?;
+            let mut keys: Vec<_> = dec.objects.keys().cloned().collect();
+            keys.sort();
+            for k in keys {
+                let o = &dec.objects[&k];
+                writeln!(out, "{}", serde_json::json!({"table": k.0, "id": k.1, "class": o.class, "fields": o.to_json()}))?;
+            }
         }
         ("pins", [pkg, pad]) => {
             let (spkg, spad) = (schema::Schema::parse(schemas::PKG)?, schema::Schema::parse(schemas::PAD)?);
