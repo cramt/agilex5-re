@@ -1,0 +1,38 @@
+# ddb_<die>_place.ddb: placement grid facts. Checked against the trace of
+# ddb_sm4revb_place.ddb (read by quartus_asm).
+
+class DYGR_PLACE_INFO_UDM
+  m_clock_region_info         ptr DYGR_CLOCK_REGION_INFO
+  m_blk_interfaces_info       ptr DYGR_BLK_INTERFACES_INFO
+  m_user_string_to_place_block_location_hash map str i32   # empty
+  m_dev_id_to_properties      vec obj DEV_ID_PROPERTIES
+end
+
+struct DEV_ID_PROPERTIES
+  highest_hierarchy_level     i16
+  is_composite                bool
+  enforces_zero_z_starts      bool
+  route_type_invalid          bool
+  max_x_extent                i32
+  max_y_extent                i32
+end
+
+class DYGR_BLK_INTERFACES_INFO
+  m_interface_ids             arr 3 vec vec i16~   # 112-byte stride per column: 54 x i16
+  m_names                     vec str
+  m_nx                        i32
+  m_ny                        i32
+end
+
+class DYGR_CLOCK_REGION_INFO
+  m_id_string                 str
+  m_clock_region_list         arr 12 vec obj CLOCK_REGION
+end
+
+struct CLOCK_REGION
+  m_lower_left_x              i32
+  m_lower_left_y              i32
+  m_upper_right_x             i32
+  m_upper_right_y             i32
+  m_signal_capacity           i32
+end

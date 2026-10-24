@@ -18,6 +18,7 @@ hexre = re.compile(r'^ {4}([0-9A-F]+) +(.*)$')
 ptrre = re.compile(r'^ {3}@([0-9a-f]+) +([+-]\d+) (.*)$')
 strre = re.compile(r'^ {4}= "(.*)"$', re.S)
 objre = re.compile(r'^@[0-9a-f]+: (.*)$')
+boolre = re.compile(r'^ {5,}([01]) +(\S.*)$')
 dblre = re.compile(r'^ {4}(-?\d\.\d+E[+-]\d+|-?nan|-?inf) +(.*)$', re.I)
 
 
@@ -45,6 +46,10 @@ def main(path):
                     out.write(f'H{pw} {pv:0{2 * pw}X}\n')
                     pending = None
                 h = m.group(1)
+                if len(h) == 1:
+                    # bools print as a bare 0/1
+                    out.write(f'H1 {int(h):02X}\n')
+                    continue
                 if len(h) == 8:
                     pending = (int(h, 16), 4, name)
                 else:
@@ -67,6 +72,10 @@ def main(path):
             m = strre.match(l)
             if m:
                 out.write(f'S {m.group(1)}\n')
+                continue
+            m = boolre.match(l)
+            if m:
+                out.write(f'H1 {int(m.group(1)):02X}\n')
                 continue
             m = dblre.match(l)
             if m:

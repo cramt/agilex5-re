@@ -28,5 +28,6 @@ done <<'LIST'
 10nm/sm4revb/ddb_z1698c_pad pad
 10nm/ddb_sundancemesa_pad pad
 10nm/sm4revb/ddb_sm4revb_eb_b_b795b_cs_hdr hdr
+10nm/sm4revb/ddb_sm4revb_place place
 LIST
 exit $fail
