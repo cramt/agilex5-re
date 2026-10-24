@@ -113,6 +113,7 @@ interpreter (`src/reader.rs`) decodes them. Verified token for token:
 | `pkg` | `ddb_sm4revb_eb_b_b795b_csvpbga795b_pkg` | 52,054 | 841 | all 96 sm4revb `*_pkg.ddb` |
 | `pad` | `ddb_z1698c_pad`, `ddb_sundancemesa_pad` | 191,187 + 2,200 | 1,226 + 80 | the pad file of all 9 Agilex 5 dies |
 | `hdr` | `ddb_sm4revb_eb_b_b795b_cs_hdr` | 327,184 | 6,617 | all 96 sm4revb `*_hdr.ddb` |
+| `place` | `ddb_sm4revb_place` (quartus_asm trace) | 6,319 | 3 | |
 
 "Also decodes" means the body is consumed to its last byte with every
 pointer in range; there is no trace for those files.
