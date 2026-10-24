@@ -162,9 +162,7 @@ rest of `LED[1..7]` are DJ32, DN22, DP23, DN25, DP25, DJ27, DP30.
   (zlib, 353 MB uncompressed for sm1, root class `ASMMDB_ROOT`; probably
   the successor of `asm`/`asmdb` [inf]), and timing per corner
   (`*_timing_*`, `*_fdi.ddb`).
-- Where the routing graph lives is [unk]. No `routing`/`icname` ddb exists
-  per die. Candidates are `asmm`, `.mdb`, `gid_database` and the
-  `agilex_common` package.
+- Where the routing graph lives: not in any `.ddb`. See (e).
 
 ### (c) `PDB_ASCII_DUMP` still works
 
@@ -175,14 +173,17 @@ rest of `LED[1..7]` are DJ32, DN22, DP23, DN25, DP25, DJ27, DP30.
 - [obs] With `PDB_ASCII_DUMP=on` in `quartus.ini` in the working directory
   (Quartus prints `Info: Using INI file …`), every database a tool reads is
   traced to **`<database>.ddb.dmp` next to the database itself**, not to
-  stdout as in Quartus 13. The format is the same annotated one: value,
-  raw delta, C++ member name. For example
+  stdout as in Quartus 13. The format is close to the old one, but v25
+  stores raw values (no deltas), so a line is value and C++ member name;
+  plain `int` arrays are not traced at all
+  ([docs/pdb-v25.md](docs/pdb-v25.md#the-oracle-trace)). For example
   `ptr.m_ids_by_string … = "DF35"` in the sm4revb package dump. A
   `quartus_syn` run plus one `get_part_info` call wrote 9 dumps (about
   290 MB, mostly `ddb_cumulative_info`).
-- Consequence: the dumps land in the install tree. Move them to
-  `specimens/pdbdump/` after each run, as was done here. A bind-mounted
-  overlay of `devices/` would be cleaner.
+- Consequence: the dumps land in the install tree. `tools/pdbdump.sh` runs
+  a tool in a scratch copy of a project and moves every `.ddb.dmp` to
+  `specimens/pdbdump/` afterwards; the install had no `.dmp` left after the
+  runs here [obs].
 
 ### (d) Prior art
 
@@ -201,6 +202,73 @@ rest of `LED[1..7]` are DJ32, DN22, DP23, DN25, DP25, DJ27, DP30.
 - Useful public code: openFPGALoader's Agilex SRAM loader, OPAE `pacsign`
   (bitstream container and signature blocks), `altera-fpga/librsu`.
 - The `PDB_ASCII_DUMP` trick is only documented in `cyclone2-re`.
+
+### (e) Phase 1: v25 reader and device model
+
+`tools/ddb` is a Rust crate forked from cyclone2-re's reader. Format
+details are in [docs/pdb-v25.md](docs/pdb-v25.md).
+
+- **Container** [obs]: v25 header (0xAA bytes), raw LZMA1 or zlib body and
+  footer, v25 footer class table. `ddb check` parses **765 of the 771**
+  files relevant to sm4revb to the declared sizes (612 LZMA1, 153 zlib).
+  The other 6 are not PDB: 2 zlib text dumps behind an `ac 0f` wrapper and
+  4 `.mdb` mapped databases. `ddb info` prints header and class table.
+- **Body encoding** [obs]: no deltas any more; pointers are `class << 2`
+  for a new object and `(rel << 2) | 2` for a back-reference. Class
+  layouts live in `tools/ddb/schema/*.schema` files that one interpreter
+  reads. `ddb trace` re-emits Quartus's trace token stream from the
+  decoder, and `tools/ddb/verify/run.sh` compares it with the real trace.
+
+  | schema | checked token for token against the trace | decodes cleanly |
+  |---|---|---|
+  | `pkg` (balls) | VPBGA 795 `_cs` package: 52,054 tokens, 841 objects | all 96 sm4revb packages |
+  | `pad` (pads, I/O standards) | `z1698c` (sm4revb) and family pad files: 193,387 tokens | the pad file of all 9 Agilex 5 dies |
+  | `hdr` (part info, 3,302 element types) | `eb_b_b795b_cs`: 327,184 tokens, 6,617 objects | all 96 sm4revb `hdr` files |
+  | `place` (grid, block types, clock regions) | `ddb_sm4revb_place`: 6,319 tokens | |
+
+- **(a) Pin map, DE25-Nano** [obs]: `ddb pins <pkg> <pad>` joins balls to
+  pads. All 795 balls carry the same pad number as the blinky fit
+  report's "All Package Pins" table (795/795,
+  `verify/pins_fit_check.py`), and the 3 placed I/Os sit at the decoded
+  pad X/Y:
+
+  | signal | ball | pad | location | block | bank (fit report) |
+  |---|---|---|---|---|---|
+  | CLOCK1_50 | V16 | 383 | X108Y53 SUB_LOC764 | `hviowr` `hvio_3_1` | 6C, 3.3 V |
+  | KEY0 | C8 | 403 | X107Y53 SUB_LOC764 | `hviowr` `hvio_3_1` | 6D, 3.3 V |
+  | LED0 | DF35 | 124 | X62Y0 SUB_LOC121 | `io96` `pio_0_0` | 2A_T, 1.1 V |
+  | CLOCK0_50 | DJ35 | 125 | X62Y0 SUB_LOC118 | `io96` | 2A |
+  | CLOCK2_50 | BF23 | 427 | X121Y8 SUB_LOC1186 | `hviowr` `hvio_1_1` | 6E |
+
+  The fit report's Z (778 for V16, 123 for DF35) is not the pad's
+  SUB_LOC; it is presumably the I/O buffer cell [inf]. Which slot holds the
+  bank is [unk] (no string slot matches the report's bank names).
+- **(b) Routing graph** [obs for the counts, inf for the storage]: the
+  fabric grid is **122 x 54** (`DYGR_BLK_INTERFACES_INFO::m_nx/m_ny`;
+  pads run to X121, Y53). Quartus's route report lists **3,293,202
+  routing resources** in 34 classes, among them 500,456 block input
+  muxes, 526,400 block interconnects, 526,400 direct links, R0/R1/R2/R4/R6/
+  R12 = 401,380 / 229,360 / 115,620 / 117,500 / 118,440 / 34,404 and
+  C1/C4/C8 = 234,240 / 229,360 / 22,936. The element enum table in `hdr`
+  names the wire types (`H0 H1 H2 H4 H6 H12 V1 V4 V8 LAB_LINE`, clock
+  muxes). **No routing/icname `.ddb` exists** in Quartus Pro. The graph is
+  most likely built at load time from `devdata/10nm/sm4revb/sm4revb.udm`
+  (482 MB, the `.mdb` mapped-database format, which holds the full-chip
+  module and port hierarchy) [inf]. Decoding the udm is [unk] and the next
+  step for routing.
+- **(c) Configuration bits** [obs for structure, unk for meaning]:
+  `ddb_sm4revb_asmm.ddb` (`ASMMDB_ROOT`, 392,070,987-byte body) is one
+  opaque member, `m_pdb`, which Quartus serializes with raw
+  `get_int`/`get_char` calls. The trace therefore only gives widths, at
+  about 0.9 MB/s; a full trace would take about 5 hours, so only a
+  131 MB prefix was kept. Its first part is a table of **4,911,334**
+  `(i32 link, i32 len, chars)` records ending at body offset 0xB97E7E6:
+  configuration-bit and feature names such as `cram_mux2_hg[3]`,
+  `powerdown_mode`, `iossm_mem_init_N_bit[k]` (40 x 32,768 of those), and
+  11,210 `cram*` names. The other 198 MB, after the table, is a different
+  record format and is [unk]. Decoding it needs the reader code (REA on
+  the asmm library) or a full trace. The `bcm2bits_db` files stay
+  encrypted [inf].
 
 ## Oracle
 
