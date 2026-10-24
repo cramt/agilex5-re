@@ -339,34 +339,37 @@ interface) is visible. It reads the namespace's own link list; note that
 `quartus-pro` chipsmith isn't on `PATH`.
 
 `designs/blinky` (LED[0] at about 1.5 Hz from CLOCK1_50, KEY[0] resets)
-**synthesises offline** [obs: 26 logic cells, 2 in, 1 out]. It stops at the
-Fitter for lack of the licence. There is also a "use the Reset Release IP"
+**compiles offline to `.sof`** with the licence [obs]: fitter 1 h 14 min on
+the loaded machine, then a separate `quartus_asm` (6 min; the flow's
+`quartus_sta` step fails, see (f)). There is also a "use the Reset Release IP"
 critical warning, which a real design should follow.
 
 ## Plan
 
-0. **Licence** (user action): get the no-cost Agilex 5 licence, then
-   compile blinky through to `.sof`/`.rbf` with `ORACLE_LICENSE_MAC` set.
-   That is the first real oracle output.
-1. **Container**: parse a real `.rbf` against the Security TRM (sections,
-   descriptors, CMF, hashes). Split it into Altera-signed firmware and
-   fabric sections. Check how stable the firmware is across designs and
-   options.
-2. **Reader**: teach cyclone2-re's `tools/ddb` (or a fork here) the v25
-   header and raw-LZMA1 bodies, and check the result against the `.ddb.dmp`
-   traces the way cyclone2-re did.
-3. **Device model for sm4revb**: package/pad map (`pkg`, `pad`), then find
-   the routing graph and the `asmm` configuration database. Decode
-   `sof_meta.pb` for the sector and frame layout.
-4. **bcm2bits**: find where Quartus decrypts `.bcm.xml` (REA on the loader
-   library). If the plaintext is the block bit map, it seeds LAB/MLAB/M20K
-   configuration.
-5. **Fuzzing**: pair-diff the fabric sections per feature (LUT, FF,
-   routing, I/O), as for Cyclone II. Expect per-sector hashes to change
-   with any bit, so diff after stripping them.
+Done in phase 1: licence and first `.sof`/`.rbf`; the v25 reader with
+trace-verified `pkg`, `pad`, `hdr` and `place` schemas; the DE25-Nano pin
+map; the container layout. Next, in order:
+
+1. **Container hashes**: find what the `IO`/`CORE` hashes and the keyed
+   hashes cover (REA on `quartus_pfg`'s writer, or pair-diff two designs),
+   and what the CMF word at 0x1F00 means. Compile a second design to check
+   that the patched CMF only depends on the section count.
+2. **Design section payload**: how the 19.75 MB `.sof` image becomes 120 KB
+   of `CORE` (compression or frame selection), using `sof_meta.pb`'s
+   sector/frame/CRAM table.
+3. **Routing graph**: decode the `.udm`/`.mdb` mapped-database format
+   (header offsets, `SCHEMA_ID` table) for sm4revb, or find the DYGR code
+   that builds the graph from it (REA).
+4. **Config bits**: the second half of `asmm` (198 MB after the
+   4,911,334-name table), by REA on its reader since the trace only
+   gives widths; `bcm2bits` decryption.
+5. **Fuzzing**: pair-diff `.sof` images per feature (LUT, FF, routing,
+   I/O), as for Cyclone II. The `.sof` image is unhashed, so diff it rather
+   than the `.rbf`.
 6. **Writer and loader**: emit fabric sections with correct hashes, splice
-   in the user's own Altera-signed CMF, and load with openFPGALoader after
-   adding the A5EB013B IDCODE. On-board testing needs the user.
+   in the user's own install's `main.cmf` (patched as in (f)), and load
+   with openFPGALoader after adding the A5EB013B IDCODE. On-board testing
+   needs the user.
 7. **Open flow**: yosys and nextpnr (himbaechel), fed from `db/`, the same
    way chipsmith `open` works for Cyclone II.
 
