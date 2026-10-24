@@ -270,6 +270,64 @@ details are in [docs/pdb-v25.md](docs/pdb-v25.md).
   the asmm library) or a full trace. The `bcm2bits_db` files stay
   encrypted [inf].
 
+### (f) Phase 1: bitstream container (blinky)
+
+`tools/bitstream.py` prints the structure of a `.sof` or `.rbf`. Numbers
+are from blinky (`/tmp/agilex5-re/pfg`, not committed).
+
+- **`.sof`** [obs]: gzip (536,285 bytes) of a 19,783,011-byte image: `SOF\0`,
+  u32 0, u32 record count (13), then `(u16 tag, u32 length, data)`
+  records. Tag 0x01 is the Quartus version, 0x02 the part
+  (`a5eb013bb23be4scs`), 0x2f the die and snapshot (`sm4revb`,
+  `snap-REL1.0SM4revC0__26ww115a--Grp14`), and 0x36 an 18,499-byte
+  protobuf (the same kind as `sof_meta.pb`). The first **0x3a record
+  holds the uncompressed configuration image: 19,754,724 bytes**, exactly
+  the size `devices/10nm/sm4revb/sof_meta.pb` declares. Of its 4,822 4 KiB
+  pages, 1,457 are non-zero. Three more 0x3a records (3,458 / 725 / 5,166
+  bytes, protobuf-like) follow, then 0x24 (`design_hash.bin`), 0x41
+  (40 bytes, hash-like) and 0x08 (a 2-byte CRC). The `.sof` has no SDM
+  firmware; `quartus_pfg` adds it.
+- **`.rbf`** (`quartus_pfg -c blinky.sof blinky.rbf`, 970,752 bytes;
+  `--check_integrity`: OK) [obs]: magic 0x62294895 at 0, then three
+  4 KiB-aligned sections, each with header magic 0x97566593:
+
+  | section | offset | size | content |
+  |---|---|---|---|
+  | `CMF` | 0x000000 | 434,176 | SDM firmware 26.1.1 (0x1A010100), build id `Sign-26.1.1sm-7`; header at +0x400 as in TRM table 35 |
+  | `IO` | 0x06A000 | 413,696 | I/O configuration; "IO hash" from the pfg log sits at +0x348 |
+  | `CORE` | 0x0CF000 | 122,880 | fabric; "Design hash" at +0x1E0 |
+
+  Each section's first two 4 KiB blocks end in a CRC-32 (MSB first, poly
+  0x04C11DB7, init and xorout 0xFFFFFFFF, i.e. CRC-32/BZIP2) over
+  `[block, block+0xFFC)`. The pfg log's two "Keyed hash" values are at
+  +0xBB0 of `IO` and `CORE`. Which bytes the IO/design hashes cover is
+  [unk]: plain SHA-256 of the section, of the `.sof` image and of 4 KiB
+  sub-ranges don't match. The 19.75 MB image shrinks to 120 KB of `CORE`,
+  so design sections are compressed or sparse [inf].
+- **Firmware is copied, not generated** [obs]: the `CMF` section is
+  byte-identical to `devices/programmer/firmware/agilex5e.zip:
+  sm4revb/SHA_384/main.cmf` from the install, **except 5 bytes**: the
+  word at 0x1F00 goes from 0 to 2 (probably the count or pointer of the
+  sections that follow [inf]), and the CRC at 0x1FFC is recomputed. So
+  an open writer can take the firmware from the user's own install, patch
+  one word and one CRC, and leave Altera's signature untouched. That
+  resolves the "can't be generated" concern in (a); whether 0x1F00 depends
+  on more than the section count is [unk].
+- `-o sign_later=ON` produces a byte-identical `.rbf`: the default
+  output already has no owner signature on the design sections [obs].
+
+### quartus_sta fails under chipsmith [obs]
+
+The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
+cannot load `quartus/linux64/libsys_pdpw.so`, because the install's own
+`qcore/linux64/libQt6Network.so.6` has `NEEDED libbrotlidec.so.1` and
+`RUNPATH $ORIGIN`, and Quartus doesn't bundle brotli (it bundles `libzstd`,
+the other compression dependency). chipsmith's
+`crates/chipsmith-quartus-common/compat.nix` provides no brotli. The fix
+belongs in chipsmith: add `brotli = pkgs.brotli.lib.outPath;` to that
+list. Fitter and assembler are unaffected, so blinky was assembled with a
+separate `quartus_asm blinky`.
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through

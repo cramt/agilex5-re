@@ -1,0 +1,53 @@
+# Print the container structure of an Agilex 5 .sof or .rbf.
+#   python3 -I tools/bitstream.py design.sof|design.rbf
+# .sof: gzip of "SOF\0", u32 0, u32 record count, then (u16 tag, u32 len, data).
+# .rbf: 4 KiB-aligned SDM sections, each with header magic 0x97566593 (at
+#       +0x400 in the first, CMF, section; at +0 in the others), u32 size at
+#       +8 and a 4-character type at +0xC (Security TRM, "SDM Firmware
+#       Section Header Block").
+import gzip
+import hashlib
+import struct
+import sys
+
+SECTION_MAGIC = 0x97566593
+RBF_MAGIC = 0x62294895
+
+
+def sof(raw):
+    d = gzip.decompress(raw) if raw[:2] == b'\x1f\x8b' else raw
+    assert d[:4] == b'SOF\0', 'not a SOF'
+    n, = struct.unpack_from('<I', d, 8)
+    print(f'SOF, {len(d)} bytes uncompressed, {n} records')
+    p = 12
+    while p < len(d):
+        tag, ln = struct.unpack_from('<HI', d, p)
+        body = d[p + 6:p + 6 + ln]
+        text = body[:40].split(b'\0')[0]
+        show = text.decode('latin1') if text.isascii() and len(text) > 3 else body[:16].hex()
+        print(f'  tag {tag:#06x} at {p:#09x} len {ln:9d}  {show}')
+        p += 6 + ln
+
+
+def rbf(d):
+    u = lambda o: struct.unpack_from('<I', d, o)[0]
+    assert u(0) == RBF_MAGIC, 'not an RBF'
+    print(f'RBF, {len(d)} bytes')
+    base = 0
+    while base < len(d):
+        h = base + (0x400 if base == 0 else 0)
+        assert u(h) == SECTION_MAGIC, f'no section magic at {h:#x}'
+        size, typ = u(h + 8), d[h + 12:h + 16].rstrip(b'\0').decode()
+        ver = u(h + 0x20)
+        extra = ''
+        if typ == 'CMF':
+            build = d[0xfe0:0xffc].split(b'\0')[0].decode()
+            extra = f' firmware {ver >> 24}.{ver >> 16 & 0xff}.{ver >> 8 & 0xff}, build id {build!r}'
+        sha = hashlib.sha256(d[base:base + size]).hexdigest()[:16]
+        print(f'  {typ:5s} at {base:#08x} size {size:#08x} ({size} bytes){extra}  sha256 {sha}...')
+        base += size
+
+
+if __name__ == '__main__':
+    raw = open(sys.argv[1], 'rb').read()
+    rbf(raw) if raw[:4] == struct.pack('<I', RBF_MAGIC) else sof(raw)
