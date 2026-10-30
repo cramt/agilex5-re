@@ -316,6 +316,55 @@ are from blinky (`/tmp/agilex5-re/pfg`, not committed).
 - `-o sign_later=ON` produces a byte-identical `.rbf`: the default
   output already has no owner signature on the design sections [obs].
 
+### (g) Phase 2: `.sof` integrity and the sector image
+
+`tools/sof.py` reads, edits and re-signs a `.sof`; `tools/pbraw.py` dumps
+any protobuf (`sof_meta.pb`, the `.sof` 0x36 record) without a schema.
+
+- **The `.sof` has two integrity values, and `quartus_pfg` checks both**
+  [obs]. Changing one byte anywhere gives `Error (19192): ... The SOF file
+  content is corrupted`.
+  - Record 0x08 is a **CRC-16/X-25** (reflected poly 0x8408, init and
+    xorout 0xFFFF), little endian, over every byte before its own data
+    (`PGM_COMMON::calculate_sof_crc16` in `libpgm_common.so`).
+  - Record 0x41 is 8 zero bytes and an **HMAC-SHA256** over every byte
+    before the HMAC itself (`OSTREAM_HMAC_CRC_TRANSPORT` in
+    `qcore/linux64/libpgm_pof.so`). The key is `HMAC_KEY_1` XOR a 32-byte
+    mask that `HMAC_TRANSPORT`'s constructor stores. It is Altera's, so it
+    isn't committed: `sof.py key` derives it from the local install into
+    `specimens/`.
+  - With both recomputed, `quartus_pfg` turns a hand-edited `.sof` into an
+    `.rbf` in about 20 s. A flipped image bit becomes a changed `.rbf`
+    with no fitter run, so the `.sof` → `.rbf` mapping (Plan step 2) can
+    be measured bit by bit. A re-signed but unedited `.sof` gives a
+    byte-identical `.rbf`, so pfg output is deterministic [obs].
+- **Image layout** [obs, `sof_meta.pb` field 3 against the blinky image]:
+  the 19,754,724-byte image is 7 programming objects in a row, each a
+  header (type 9) followed by data, with sizes from field 9
+  (`pgm_<name>~<n>`, entries `(type, ?, count, width in bits)`):
+
+  | image offset | object | parts |
+  |---|---|---|
+  | 0 | `pgm_perictrl~0` | 902-byte header, type 29: 1,048,576 x 32 bits |
+  | 4,195,206 | `pgm_io96~0` | 5,855-byte header, type 40: 4,096 x 32, type 41: 132,352 x 32 |
+  | 4,746,853 | `pgm_perictrl~2` | as `~0` |
+  | 8,942,059 | `pgm_io96~1` | as `~0` |
+  | 9,493,706 | `pgm_perictrl~1` | 2,658-byte header, type 29 |
+  | 13,690,668 | `pgm_sectorbnxplv~0` | 412-byte header, **type 0 (CRAM): 4,704 frames x 4,320 bits**, type 1: 24,576 x 160 bits |
+  | 16,722,760 | `pgm_sectorbnxplv~1` | 284-byte header, type 0, type 1 |
+
+  So the A5EB013B fabric is **two sectors of type `sectorbnxplv`**, which
+  matches pfg's "Regular SEU info => 2 sector(s)". Each sector's CRAM is
+  4,704 frames of 4,320 bits (540 bytes); `sof_meta.pb` field 4 builds it
+  as `sectorbnxplv_CRAM` = 48 x `_frames` = 48 x 98 x `_dr` (4,320 bits).
+  Which of the two `perictrl`/`io96` copies is which instance is [inf]
+  from the header sizes. Type 1 (160-bit words) is all zero in blinky
+  (memory contents, presumably) [inf].
+- **The CRAM is highly regular** [obs]: sector 0 of blinky has 1,549,318
+  bits set but only 55 distinct frames, 945 of them identical. Set bits
+  repeat every 16 bytes (`ff` at byte 0, 14, 16, 30, …), so most of them
+  are default values, not design bits [inf].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
