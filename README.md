@@ -365,6 +365,68 @@ any protobuf (`sof_meta.pb`, the `.sof` 0x36 record) without a schema.
   repeat every 16 bytes (`ff` at byte 0, 14, 16, 30, …), so most of them
   are default values, not design bits [inf].
 
+### (h) Phase 2: Quartus's own configuration model is scriptable
+
+These remove most of the need for fit-based fuzzing. Commands and argument
+forms were recovered from the binaries, since `-help` prints nothing.
+
+- **`asm2`, the assembler's Tcl package** [obs]. Run `quartus_asm -t
+  script.tcl` (not `quartus_sh`: under `quartus_sh`, `load_devices`
+  fails), then `load_package asm2; load_devices`. No licence is needed.
+  - `open_sof f.sof` returns a handle; `write_sof $h out.sof` writes it
+    back in about 1.2 s. An unmodified round trip has a byte-identical
+    image.
+  - `get_block_types sm4revb` lists 26 block types.
+  - `get_uids sm4revb <type>` lists instances, 11,549 in all: 2,392
+    `cw_la_lab`, 2,392 `cw_ml_mlab`, 366 `cw_mm_m20k`, 192 `cw_dssm`,
+    4,992 `cw_rt_lab_base`, 768 `cw_rt_m20k_dsp_base`, 104 + 104
+    `cw_rt_vio_{lab,mlab}_base`, 96 `cw_rt_hiol_base`, 5 `hviowr`,
+    2 `io96`, and clock blocks (`cw_cc_*`). Instance names are
+    `<type>_r<row>_c<col>`.
+  - Each block type has a fixed list of named configuration bits
+    (`get_bit_names sm4revb <type>`; 1,165 for `cw_la_lab`) and attributes
+    (`get_attribute_names`; 1,085), with `get_attribute_values` and
+    `get_bit_names_for_attribute`. A LAB is 10 ALMs
+    (`x{top,bot}half/xale0..4`); `lut_mask` is `rb1lut[]` there.
+  - `get_bit $h <uid> <bit>` and `set_bit $h <uid> <bit> <0|1>` read and
+    write single named bits, and `get_attribute`/`set_attribute` do the
+    same for attributes. So **set a named bit, `write_sof`, diff the
+    image** maps it to a CRAM address with no fitter run. Example:
+    `cw_la_lab_r50_c62 xtophalf/xale0/xcw_la_le_lut/rb1lut[0]` is sector 1,
+    frame 4605, byte 14, bit 7.
+  - `get_max_cram_badd 0` / `get_max_cram_bdata 0` = 4704 / 4320, which
+    matches the `.sof` sector geometry.
+  - `get_cram_bitname_by_address sm4revb 0 <0|1> <a> <b>` names a CRAM bit,
+    e.g. `0 0 7 2208` is `xtophalf/xale4/xcw_ml_le_lut/rb1lut[16]`. But
+    `<a>`/`<b>` are not plain (frame, bit): frame 4605 fails `data <
+    data_width`. Its axes are [unk].
+  - `set_bit_routing`/`get_bit_routing $h <re_uid> <signal>` set routing
+    by routing-element id. `dump_re_network` needs an open project
+    (`hdb_mgr`). Both are untested [unk].
+- **`Bcm_device`, the block configuration model** [obs]. `load
+  quartus/linux64/libddb_dbcm_tcl.so Bcm_device` in `quartus_sh`, then
+  `read_bcm_device -device sm4revb; create_bcm_chip`. This is the
+  decrypted content of `bcm2bits_db`, one level up: block intents
+  (`cw_la_lab` → `cw_la_halflab` → `cw_la_ale` → `cw_la_le_lut`, …),
+  attributes with type and legal settings (`lut_mask` DIRECT, size 64;
+  `hipi_clken` CUSTOM {TIE_OFF REG_PATH COMB_PATH}), and setting → named
+  bit values (`get_setting_bit_values -bcm ce_la_lcb_adder -attribute
+  hipi_clken -setting REG_PATH` = `0 1` for bits `rclken rntot`). Routing
+  tiles (`cw_rt_lab_base`) carry mux attributes such as
+  `ifdim_col/xfdim_ale0/xfdim_0/sel` ∈ {MUXIN0_ … MUXIN7_, STITCH,
+  MUX_DIS}. Which wire drives each MUXIN is the routing graph, still [unk].
+- **Quartus Pro ECO works for fuzzing** [obs]. `quartus_fit <rev> --eco
+  eco.tcl` loads the post-fit snapshot (about 4 min) and runs ECO commands
+  (`modify_lutmask`, `place_node`, `make_connection`,
+  `get_node_location`). It commits with "Successfully committed final
+  database", then `quartus_asm` runs (`tools/eco.sh`). On `designs/fz`
+  (HVIO pins only: fit 20 min, compared with 74 min for blinky with its
+  IO96 pin), the four WYSIWYG LUTs sit at
+  `LABCELL_X120_Y48_N0/N6/N12/N18`. Their all-zero and all-one masks
+  differ in exactly 256 CRAM bits (sector 1, frames 4374–4409, bdata
+  4176–4183), and **LUT mask bits are stored inverted** (a mask of all
+  ones gives all zeros) [obs].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -394,6 +456,12 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 2 status** (branch `phase2`): `.sof` re-signing works (g). Quartus's
+own assembler and configuration-model Tcl APIs are open (h), so step 4
+(config bits) becomes a dump rather than a fuzz. The `CORE` 2D compression
+(step 2) is being decoded separately. Next: a full bit map from asm2, then
+the routing graph.
 
 Done in phase 1: licence and first `.sof`/`.rbf`; the v25 reader with
 trace-verified `pkg`, `pad`, `hdr` and `place` schemas; the DE25-Nano pin
