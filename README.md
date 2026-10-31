@@ -661,6 +661,7 @@ forms were recovered from the binaries, since `-help` prints nothing.
   | `cw_dssm` (DSP) | 188 | 521 | all | 1 | CRAM |
   | `sm_hssi_top` | 1 | 186,662 | all | 1 | `perictrl0` data region |
   | `cw_mm_m20k` (M20K) | 358 | 20,588 | all, extrapolated from rows 5, 6, 27, 43, 51 | 1 | configuration in CRAM, 20,480 content bits in the sector's `ram` part |
+  | `io96` | 2 | 4,312,033 | 4,303,895 (`pio_0_0` brute-forced; `pio_1_0` placed by probe and checked on 2,000 random bits, 0 wrong) | 1 | `io96_*` `hdr`/`t40`/`t41` (PHY, hard memory controller, IOSSM memory init) |
 
   The LAB anchors decompose exactly [obs]: frame = 200 + 98·(Y − 6),
   so one LAB row per 98-frame group (`sof_meta`'s `_frames` unit), and
@@ -685,6 +686,17 @@ forms were recovered from the binaries, since `-help` prints nothing.
   bits in the fz0 image are named bits** (1,547,304 of 1,549,318 in
   sector 0). The remaining 38–44 set bits per row group are [unk] until the
   M20K/DSP types are mapped.
+- **Aliased bits** [obs]: some named bits share one image bit with others
+  (MLAB `r_nram`, `r_n32mode`, `rmdl_init`, all `remulation` bits), so the
+  binary code drops them as clashes. `single.tcl`/`single.py` flip them one
+  at a time on one instance, and `aliases.py` adds them to the layout,
+  checked on a second instance in the other sector. MLAB 58 → 6 physical
+  bits, LAB 25, routing tiles 4, `cw_cc_ts_base*` 18 each: all at the
+  predicted offsets on the second instance.
+- **Coverage** [obs]: `tools/bitmap/coverage.py` marks every named bit
+  position in the image. On fz0, **every set bit in both sectors' CRAM and
+  headers is a named bit** (1,549,318 + 1,549,288). On blinky 4 set bits
+  were left, all MLAB RAM-mode aliases that are now mapped.
 - **Cross-checked against the fitter** [obs]: the 256 CRAM bits that the
   ECO runs changed (fz's four LUT masks, all-0 against all-1) are, by the
   asm2 map, exactly `cw_la_lab_r48_c120` `xtophalf/xale{0..3}/xcw_la_le_lut`
