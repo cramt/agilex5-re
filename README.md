@@ -951,17 +951,17 @@ fitter, so the ports come from `read_atom_netlist`).
   |---|---|---|
   | routed connections (`report_routing`) | 48 | 723 |
   | hops, all of them graph edges | 1,710 | 17,528 |
-  | configured edges written by the join | 65 | 3,151 |
-  | routing bits Quartus set | 1,614 | 6,325 |
-  | of them, set by the join from the routes | 1,606 | 6,220 |
+  | edges written by the join (with the clock rules below) | 67 | 3,157 |
+  | routing bits Quartus set | 1,617 | 6,334 |
+  | of them, set by the join from the routes | 1,609 | 6,229 |
   | set by the join but not by Quartus | 0 | 0 |
   | left: LL → LEIM edges into FF data inputs | 8 | 105 |
 
   The bits left over are exactly the decoded settings of LL → LEIM edges
   into `xleim_1`/`xleim_6`, the FF data-input muxes. Those connections (FF
   `D` fed by a LUT) are the ones `report_routing` crashes the fitter on, so
-  the dump skips them. `a5db routed` on the Quartus image finds 73 and
-  3,256 active edges: exactly the routes' configured edges plus those.
+  the dump skips them. `a5db routed` on the Quartus image finds 75 and
+  3,262 active edges: exactly the edges the routes write plus those.
 - **"Direct links" resolved** [obs]: a direct link is an LL node driven
   straight from a LAB_RE (a block output fed back into a block's local
   interconnect), one per LL node, hence 526,400. rt0's fit report counts 548
