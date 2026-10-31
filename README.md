@@ -603,6 +603,19 @@ forms were recovered from the binaries, since `-help` prints nothing.
   Quartus's on all 315 decodable for the LAB and all 318 for MLAB
   `r47_c108` [obs]. The third instance's query hit an asm2 internal error
   (`asm2_state.cpp:347`), so it is unchecked.
+- **`tools/a5db` (Rust): read and write attributes without Quartus**
+  [obs]. `a5db attrs|bits <db> <sof> <uid>` decodes; `a5db set <db> in.sof
+  out.sof <hmac.key> <uid> attr=value…` writes CUSTOM settings and DIRECT
+  bit strings (`db/sm4revb/direct.tsv`; LAB/MLAB `lut_mask` so far) and
+  re-signs the `.sof`.
+  - Decode: on fz0's `cw_la_lab_r48_c120`, 325 attributes equal asm2's
+    `get_attribute` (315 CUSTOM, 10 `lut_mask`) and none differ, in 0.8 s.
+  - Encode: setting a 64-bit `lut_mask` plus `register_comb=REGIN`,
+    `reg_input=LUTOUT_6LUT`, `ce_sel=CE` and `hipi_clken=REG_PATH` on
+    `cw_la_lab_r10_c1` gives **an image byte-identical to the one asm2's own
+    `set_attribute` + `write_sof` produces** (13 bytes changed in both).
+    asm2 reads all five values back, and pfg turns it into an `.rbf` that
+    `bitstream.py check` passes.
 - **Quartus Pro ECO works for fuzzing** [obs]. `quartus_fit <rev> --eco
   eco.tcl` loads the post-fit snapshot (about 4 min) and runs ECO commands
   (`modify_lutmask`, `place_node`, `make_connection`,
