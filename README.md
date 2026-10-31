@@ -546,6 +546,7 @@ forms were recovered from the binaries, since `-help` prints nothing.
   | type | instances | bits/instance | mapped | layouts | where |
   |---|---|---|---|---|---|
   | `cw_la_lab` | 2,340 (spare rows skipped) | 1,165 | 1,140 (2,667,600 pairs; 7,020 clash bits) | **1** | CRAM, 94 frames x 16 bdata |
+  | `cw_ml_mlab` | 2,340 | 1,206 | 1,148 (2,686,320 pairs; 14,040 clash bits) | **1** | CRAM, 94 x 16, same row frames as LABs |
   | `hviowr` | 5 | 5,927 | 4,748 | 1 | `perictrl{0,1,2}` object headers |
 
   The LAB anchors decompose exactly [obs]: frame = 200 + 98·(Y − 6),

@@ -20,46 +20,47 @@ from imagemap import addr  # noqa: E402
 def main(base_path, outdir):
     base = sof.image(sof.load(base_path))
     base_np = np.frombuffer(base, np.uint8)
-    pairs = {}
-    with open(os.path.join(outdir, 'pairs.txt')) as f:
+    pairs_path = os.path.join(outdir, 'pairs.txt')
+    with open(pairs_path) as f:
         width = int(f.readline().split('width=')[1])
-        for line in f:
-            i, u, b, v = line.split()
-            pairs[int(i)] = (u, b, int(v))
-    # For every image, the positions (byte * 8 + bit) that differ from the
-    # base; each position collects its code bits by summing 1 << k (the k
-    # are distinct, so the sum is the OR).
-    codes = {}
+    # Dense per-image-bit code arrays: an image's changed positions are
+    # distinct, so OR-ing 1 << k into them by fancy indexing is exact.
+    nbits = len(base) * 8
+    codes = {want: np.zeros(nbits, np.uint32) for want in (1, 0)}
     for want in (1, 0):
-        pos, val = [], []
         for k in range(width):
             img = np.frombuffer(sof.image(sof.load(os.path.join(outdir, f'{k}.{want}.sof'))), np.uint8)
             p = np.flatnonzero(np.unpackbits(img ^ base_np, bitorder='little'))
-            pos.append(p)
-            val.append(np.full(len(p), 1 << k, np.int64))
-        pos, val = np.concatenate(pos), np.concatenate(val)
-        uniq, inv = np.unique(pos, return_inverse=True)
-        acc = np.zeros(len(uniq), np.int64)
-        np.add.at(acc, inv, val)
-        codes[want] = dict(zip(uniq.tolist(), acc.tolist()))
+            codes[want][p] |= np.uint32(1 << k)
     one, zero = codes[1], codes[0]
-    out, clash = [], 0
+    touched = np.flatnonzero(one | zero)
     full = (1 << width) - 1
-    for key in set(one) | set(zero):
-        a, z = one.get(key, 0), zero.get(key, 0)
-        if a & z or (a | z) != full:
-            clash += 1
-            continue
-        u, b, v = pairs[a]
-        o, k = divmod(key, 8)
-        cram = base[o] >> k & 1
-        out.append((u, b, v, *addr(o, k), int(cram == v)))
-    out.sort(key=lambda r: (r[0], r[1]))
-    with open(os.path.join(outdir, 'map.tsv'), 'w') as f:
-        for r in out:
-            f.write('\t'.join(map(str, r)) + '\n')
-    mapped = {(r[0], r[1]) for r in out}
-    print(f'{len(pairs)} pairs, {len(out)} CRAM bits decoded, {len(mapped)} pairs mapped, '
+    a, z = one[touched].astype(np.int64), zero[touched].astype(np.int64)
+    good = ((a & z) == 0) & ((a | z) == full)
+    clash = int((~good).sum())
+    ids, pos = a[good], touched[good]
+    order = np.argsort(ids, kind='stable')
+    ids, pos = ids[order].tolist(), pos[order].tolist()
+    del codes, one, zero, touched, a, z, good
+    # pairs.txt is in id order: merge it with the decoded (id, position) list.
+    n_pairs = mapped = 0
+    i = 0
+    with open(pairs_path) as f, open(os.path.join(outdir, 'map.tsv'), 'w') as out:
+        f.readline()
+        for line in f:
+            n_pairs += 1
+            pid, u, b, v = line.split()
+            pid, v = int(pid), int(v)
+            while i < len(ids) and ids[i] < pid:
+                i += 1
+            hit = False
+            while i < len(ids) and ids[i] == pid:
+                o, k = divmod(pos[i], 8)
+                out.write('\t'.join(map(str, (u, b, v, *addr(o, k), int((base[o] >> k & 1) == v)))) + '\n')
+                hit = True
+                i += 1
+            mapped += hit
+    print(f'{n_pairs} pairs, {len(ids)} CRAM bits decoded, {mapped} pairs mapped, '
           f'{clash} CRAM bits with a clash')
 
 
