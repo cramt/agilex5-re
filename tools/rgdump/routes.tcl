@@ -12,9 +12,11 @@ foreach_in_collection a [get_atom_nodes] {
     set name [get_atom_node_info -node $a -key NAME]
     set type [get_atom_node_info -node $a -key TYPE]
     puts $out "A $name $type"
-    # report_routing to a top-level PORT atom crashes the fitter; the I/O
-    # buffer atoms behind the ports carry those routes.
-    if {$type eq "PORT"} { continue }
+    # report_routing crashes the fitter on top-level PORT and IO_PAD atoms
+    # and on Quartus's own "~ALTERA..." atoms (the configuration oscillator).
+    # None of them is fabric routing; the I/O buffers behind the ports carry
+    # those routes.
+    if {$type eq "PORT" || $type eq "IO_PAD" || [string index $name 0] eq "~"} { continue }
     foreach p [get_atom_iports -node $a] {
         set ptype [get_atom_port_info -node $a -port_id $p -type iport -key TYPE]
         if {[catch {get_atom_port_info -node $a -port_id $p -type iport -key FANIN} src] || $src eq "" || $src < 0} {

@@ -3,14 +3,30 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use rustc_hash::FxHashMap;
+
 use anyhow::{Context, Result};
 
 use crate::db::{BitPos, Db};
 use crate::graph::{Graph, Join, Miss};
 
+/// Fitter element types as DYGR names them: the fitter drops DYGR's
+/// underscores (`HVIOWRX1RGMIIWRCONNRE` is `HVIOWR_X1_RGMII_WR_CONN_RE`).
+pub fn type_aliases(g: &Graph) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for n in &g.names {
+        if let Some((t, _)) = n.split_once(':') {
+            if t.contains('_') && !out.contains_key(&t.replace('_', "")) {
+                out.insert(t.replace('_', ""), t.to_owned());
+            }
+        }
+    }
+    out
+}
+
 /// A fitter routing-node name (`R0_X120_Y48_N0_I27`) as DYGR names it
 /// (`H0:X120Y48Z0I27`); other names pass through.
-pub fn dygr_name(fit: &str) -> String {
+pub fn dygr_name(fit: &str, aliases: &HashMap<String, String>) -> String {
     let Some((head, i)) = fit.rsplit_once("_I") else { return fit.to_owned() };
     let parse = || -> Option<String> {
         let (head, n) = head.rsplit_once("_N")?;
@@ -22,10 +38,11 @@ pub fn dygr_name(fit: &str) -> String {
         let t = match t {
             "LOCAL_INTERCONNECT" => "LL".to_owned(),
             "BLOCK_INPUT_MUX_PASSTHROUGH" => "LEIM".to_owned(),
+            "BLOCK_INPUT_MUX_PASSTHROUGH_WB" => "LEIM_WB".to_owned(),
             _ => match (t.as_bytes()[0], t[1..].parse::<u32>()) {
                 (b'R', Ok(k)) => format!("H{k}"),
                 (b'C', Ok(k)) => format!("V{k}"),
-                _ => t.to_owned(),
+                _ => aliases.get(t).cloned().unwrap_or_else(|| t.to_owned()),
             },
         };
         Some(format!("{t}:X{x}Y{y}Z{n}I{i}"))
@@ -36,7 +53,7 @@ pub fn dygr_name(fit: &str) -> String {
 /// Routing paths from `tools/rgdump/routes.tcl` output ("C …", "R <hop>
 /// <fanout>"…, "E"), or one path of DYGR/fitter node names per line. Hops
 /// that are netlist ports (contain '/') are dropped.
-pub fn read_routes(path: &str) -> Result<Vec<Vec<String>>> {
+pub fn read_routes(path: &str, aliases: &HashMap<String, String>) -> Result<Vec<Vec<String>>> {
     let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
     let mut out = Vec::new();
     let mut cur: Option<Vec<String>> = None;
@@ -47,22 +64,24 @@ pub fn read_routes(path: &str) -> Result<Vec<Vec<String>>> {
             let name = h.split_whitespace().next().unwrap_or("");
             if let Some(c) = cur.as_mut() {
                 if !name.contains('/') {
-                    c.push(dygr_name(name));
+                    c.push(dygr_name(name, aliases));
                 }
             }
         } else if l == "E" {
             out.extend(cur.take());
-        } else if !l.starts_with("X ") && !l.trim().is_empty() && cur.is_none() {
-            out.push(l.split_whitespace().map(dygr_name).collect());
+        } else if !l.starts_with("X ") && !l.starts_with("A ") && !l.trim().is_empty() && cur.is_none() {
+            out.push(l.split_whitespace().map(|n| dygr_name(n, aliases)).collect());
         }
     }
     Ok(out)
 }
 
-/// Every image bit some edge configuration writes, with its polarity, and
-/// the misses of edges that resolve to no bits.
+/// Every image bit some edge configuration writes, with its polarity and
+/// the first (uid id, config id) that writes it, and the misses of edges
+/// that resolve to no bits.
 pub struct Universe {
-    pub bits: HashMap<(usize, u8), bool>,
+    /// (polarity, idle value, uid id, config id)
+    pub bits: FxHashMap<(usize, u8), (bool, bool, u32, u32)>,
     pub misses: BTreeMap<Miss, usize>,
     pub edges: usize,
     pub resolved: usize,
@@ -70,20 +89,22 @@ pub struct Universe {
 }
 
 pub fn universe(join: &mut Join, graph: &Graph) -> Result<Universe> {
-    let mut seen: HashMap<(u32, u32), usize> = HashMap::new();
+    let mut seen: FxHashMap<(u32, u32), usize> = FxHashMap::default();
     for e in 0..graph.dst.len() {
         if graph.cfg[e] != 0 {
             *seen.entry((graph.uid[e], graph.cfg[e])).or_default() += 1;
         }
     }
-    let mut u = Universe { bits: HashMap::new(), misses: BTreeMap::new(), edges: 0, resolved: 0, pairs: seen.len() };
+    let mut u = Universe { bits: FxHashMap::default(), misses: BTreeMap::new(), edges: 0, resolved: 0, pairs: seen.len() };
     for (&(uid, cfg), &n) in &seen {
         u.edges += n;
         match join.pair(uid, cfg)? {
-            Some(Ok(w)) => {
+            Some(Ok(_)) => {
                 u.resolved += n;
-                for (p, _) in w {
-                    u.bits.insert((p.byte, p.bit), p.equal);
+                if let Some(Ok(idle)) = join.pair_idle(uid, cfg)? {
+                    for (p, v) in idle {
+                        u.bits.entry((p.byte, p.bit)).or_insert((p.equal, v, uid, cfg));
+                    }
                 }
             }
             Some(Err(m)) => *u.misses.entry(m).or_default() += n,
@@ -140,31 +161,17 @@ pub fn apply(join: &mut Join, graph: &Graph, idx: &HashMap<&str, u32>, paths: &[
     Ok(a)
 }
 
-/// Clear every routing bit to its unset state (MUX_DIS is all named bits 0).
+/// Set every routing bit to its mux's idle state.
 pub fn clear(u: &Universe, img: &mut [u8]) {
-    for (&(byte, bit), &equal) in &u.bits {
-        BitPos { byte, bit, equal }.set(img, false);
+    for (&(byte, bit), &(equal, idle, ..)) in &u.bits {
+        BitPos { byte, bit, equal }.set(img, idle);
     }
 }
 
-/// Name the routing bits at the given positions: uid and named bit.
-pub fn name_bits(join: &mut Join, graph: &Graph, want: &HashSet<(usize, u8)>) -> Result<HashMap<(usize, u8), String>> {
-    let mut out = HashMap::new();
-    let mut seen = HashSet::new();
-    for e in 0..graph.dst.len() {
-        let (u, c) = (graph.uid[e], graph.cfg[e]);
-        if c == 0 || !seen.insert((u, c)) {
-            continue;
-        }
-        if let Some(Ok(ws)) = join.pair(u, c)? {
-            for (p, _) in ws {
-                if want.contains(&(p.byte, p.bit)) {
-                    out.entry((p.byte, p.bit)).or_insert_with(|| format!("{} {}", graph.uids[u as usize], graph.cfgs[c as usize].split(' ').next().unwrap_or("")));
-                }
-            }
-        }
-    }
-    Ok(out)
+/// A routing bit's block and mux, from the first configuration writing it.
+pub fn bit_name(u: &Universe, graph: &Graph, at: (usize, u8)) -> String {
+    let (_, _, uid, cfg) = u.bits[&at];
+    format!("{} {}", graph.uids[uid as usize], graph.cfgs[cfg as usize].split(' ').next().unwrap_or(""))
 }
 
 pub fn open(dbdir: &str, gdir: &str) -> Result<(Db, Graph)> {

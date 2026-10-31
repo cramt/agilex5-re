@@ -143,8 +143,13 @@ pub enum Miss {
     UnmappedBit(String),
 }
 
-/// Named bit writes, relative to a block: (bit path, value).
-pub type Named = Vec<(String, bool)>;
+/// Named bit writes relative to a block, (bit path, value): the edge's
+/// setting and, for the same bits, the mux's idle setting (`VCC` where the
+/// mux has one, as unused clock gates are tied, else `MUX_DIS`, else 0).
+pub struct Named {
+    writes: Vec<(String, bool)>,
+    idle: Vec<(String, bool)>,
+}
 
 /// Resolves edges to bit writes. Settings are resolved once per (block
 /// type, configuration); only the anchor differs between instances.
@@ -176,6 +181,15 @@ impl<'a> Join<'a> {
     }
 
     pub fn pair(&mut self, u: u32, c: u32) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        self.pair_with(u, c, false)
+    }
+
+    /// The idle state of the bits an edge's setting writes.
+    pub fn pair_idle(&mut self, u: u32, c: u32) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        self.pair_with(u, c, true)
+    }
+
+    fn pair_with(&mut self, u: u32, c: u32, idle: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
         if c == 0 {
             return Ok(None);
         }
@@ -193,8 +207,9 @@ impl<'a> Join<'a> {
             Err(m) => return Ok(Some(Err(m.clone()))),
         };
         let map = self.db.map(&btype);
-        let mut out = Vec::with_capacity(named.len());
-        for (b, v) in named.iter() {
+        let list = if idle { &named.idle } else { &named.writes };
+        let mut out = Vec::with_capacity(list.len());
+        for (b, v) in list.iter() {
             match map.pos(uid, b) {
                 Some(p) => out.push((p, *v)),
                 None => return Ok(Some(Err(Miss::UnmappedBit(format!("{btype} {}", generic(b)))))),
@@ -206,7 +221,7 @@ impl<'a> Join<'a> {
     fn resolve(&mut self, btype: &str, c: u32) -> Result<std::result::Result<std::rc::Rc<Named>, Miss>> {
         let (top, stages) = parse_config(&self.graph.cfgs[c as usize])?;
         let choices = if stages.is_empty() { vec![top] } else { stages };
-        let mut named = Vec::new();
+        let (mut writes, mut idle) = (Vec::new(), Vec::new());
         for ch in choices {
             let Some(a) = self.db.attribute(btype, &ch.attr) else {
                 let mux = ch.attr.strip_suffix("/sel").unwrap_or(&ch.attr);
@@ -230,10 +245,15 @@ impl<'a> Join<'a> {
                 _ => bail!("{btype} {}: {} settings match {}", ch.attr, found.len(), ch.input),
             };
             for (b, &(v, _)) in s.bits.iter().zip(&s.values) {
-                named.push((format!("{}{b}", a.prefix), v));
+                writes.push((format!("{}{b}", a.prefix), v));
+            }
+            let rest = ["VCC", "MUX_DIS"].iter().find_map(|n| all.iter().find(|x| x.name == *n));
+            for b in &s.bits {
+                let v = rest.and_then(|r| r.bits.iter().position(|x| x == b).map(|i| r.values[i].0)).unwrap_or(false);
+                idle.push((format!("{}{b}", a.prefix), v));
             }
         }
-        Ok(Ok(std::rc::Rc::new(named)))
+        Ok(Ok(std::rc::Rc::new(Named { writes, idle })))
     }
 }
 

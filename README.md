@@ -859,6 +859,116 @@ u32 uid id, u32 config id`, with gids minus `0x80000000`. Line k of
   V/H wires that cross tiles and other tile types (`cw_rt_m20k_dsp_base`,
   `cw_rt_hiol_base`, `cw_rt_vio_*`) needs a design that routes through them.
 
+### (j) Phase 3: big tables stored compressed
+
+Tables bigger than 4 MiB in `db/` are `xz -9` files (`<name>.tsv.xz`):
+`io96.layout.tsv` (318 MB) is 2.7 MB and `sm_hssi_top.layout.tsv` (45 MB)
+is 0.9 MB [obs]. `a5db` (`db::read_table`, pure-Rust `lzma-rust2`) and the
+Python tools (`tools/bitmap/table.py`) read `.tsv` or `.tsv.xz`; `pack.py`
+and `aliases.py` write whichever the size calls for, and Python's `lzma`
+preset 9 writes the same bytes as `xz -9`. Every `a5db attrs`/`bits` output
+on fz0 (io96 `pio_0_0`, `hssi_mono_0_0`, `hvio_3_1`, a LAB) and
+`coverage.py`'s output are byte-identical before and after [obs]. The old
+plain files stay in history.
+
+### (l) Phase 3: the `.rbf` writer (Plan step 6)
+
+`a5db rbf <db> <in.sof> <out.rbf> <quartus root> <keyed-hash.key>` writes the
+whole `.rbf` from a `.sof` image with no Quartus tool in the loop
+(`tools/a5db/src/rbf/`). It reads three things from the user's own install
+and commits none of them: the signed firmware (`main.cmf` and the `.fw`
+modules from `devices/programmer/firmware/agilex5e.zip`), two codebooks from
+`devices/programmer/sm4revb_npcf.ddb`, and the CRAM `s4` group list from
+`sof_meta.pb`. The key is `tools/bitstream.py key`'s.
+
+- **Verified** [obs] on all 60 `.sof`/`.rbf` pairs from phases 2 and 3
+  (blinky, fz0, the random-header, random-IO, pattern, random-CRAM and
+  bit-flip specimens):
+  - the `CMF` section is byte-identical to pfg's;
+  - the `IO` section is byte-identical to pfg's, including the specimens
+    whose t41 stream needs four chain tables and the one with random
+    perictrl0 data;
+  - `bitstream.py check` passes, and the `CORE` header's per-design fields
+    (+0x78 sum, design hash, IO hash) equal pfg's;
+  - `quartus_pfg --check_integrity` says `Integrity status: OK` for the
+    fz0 `.rbf`; with one `CORE` bit flipped it fails with `Section hash
+    mismatch, expect 0x992B32EA`, which is the +0x3C word below.
+  - The all-literal `CORE` decodes (`core_decode.py verify`) to exactly the
+    `.sof` CRAM: 0 frames differ on fz0, blinky, the random-CRAM specimen and
+    v_dense. Every design-independent `CORE` page (both codebooks, the
+    482,784-byte block, the BBM header, the second action page, the
+    sector-header stream) is byte-identical to pfg's.
+- **`CORE` is not byte-identical, by construction** [obs]: pfg picks libs and
+  BBM codes (`run_row_target`, `update_with_libs`, `run_combined_target`) and
+  sets the S4 flags, none of which is reimplemented. The writer stores every
+  column literally (code 0), one zero lib per IP id, and S4 pairs as plain
+  `00ab` nibbles. That makes fz0's `CORE` 248 KiB against pfg's 112 KiB
+  (36 frame pages instead of 2), and the random-CRAM one slightly smaller
+  than pfg's. Whether the SDM accepts plain nibbles where pfg would have set
+  the S4 flag is the open question the board test answers [unk].
+
+Section format, now complete [obs, every item checked on the 60 pairs]:
+
+- **Header block** (+0): constants (the same in every specimen; the writer
+  carries them as offset/hex runs) plus:
+  - +0x08 the section size;
+  - **+0x3C: the first 4 bytes of SHA-256 over [+0x2000, end)**, which pfg's
+    integrity check calls the "section hash". Flipping one `CORE` bit
+    changes only `CORE`'s, one IO bit only `IO`'s;
+  - **+0x78: the byte sum (u32) of every object header plus both sectors'
+    CRAM** of the image. One flipped CRAM bit moved it by exactly 1 in both
+    sections; t40/t41 and perictrl data are not included. +0x7C and +0x80
+    hold a constant `0xc362c0dd`;
+  - +0xC0 SHA-384 of the first chain table, the design and IO hashes
+    (g2), the keyed hash at +0xBB0, and **+0xBD0: SHA-384 over
+    [+0x2000, end)**; then the CRC at +0xFFC.
+- **Block 1**: SHA-384 of block 0, and **at +0xF00 the number of sections
+  that follow**: 2 in `CMF` (the word (f) saw patched from 0 to 2), 1 in
+  `IO`, 0 in `CORE`. It is 2 in blinky, fz0 and all other specimens, so the
+  CMF patch only depends on the section count [obs].
+- **Chain tables**: `u32 1, u32 16 + 52n, u32 n, u32 0`, then n entries of
+  SHA-384 and flag. A table holds at most 78 entries. When more pages
+  remain, entry 57 is the flag-4 link to the next table, whose page sits at
+  that point in the file, and 20 more entries follow it; the last table
+  takes the rest.
+- **Pages**: a firmware module is its pages without the trailing `MFST`
+  page, the first hashed with flag 0x80000002. A stream is its deflate
+  output cut into zero-padded pages. `IO`: `enable_pm.fw`, `cssm.fw`, action
+  page, streams 0–2, `cssm_reset_release.fw`, `cssm_ux_phy.fw`,
+  `io_config.fw`, action page, streams 3–5. `CORE`: `lsm_init.fw`, action
+  page, both sectors' lib pages (sector 0 then 1), then the two sectors'
+  remaining pages alternating (codebook, block, codebook, BBM, frames; the
+  longer one runs on alone), `unfreeze_routing_fw.fw`, action page, the
+  sector-header stream, `enter_user_mode_fw.fw`.
+- **Action pages**: TLV records that are the same in every specimen except
+  that a **0x17 record (one per stream) has the stream's page count (link
+  pages excluded) in word 0 and ends in a page bitmap**, one bit per page,
+  set for sector-1 pages in `CORE` and zero in `IO`. That is the "7 extra
+  words" phase 2 saw in t41's record: ⌈pages / 32⌉ − 1 words beyond the
+  first. `CORE`'s `0x1f` records hold the lib offsets and `0x15 (n, s, 4)`
+  the lib page count.
+- **The perictrl0 register list** (phase 2 [unk]): every 32-bit word that
+  holds an `sm_hssi_top` named bit, except 8 control words: the `ux_quad`
+  clock-mux configuration at 0xA1000 and seven `ss_ctrl` CSR words at
+  0x20F000, 0x20F004, 0x20F034, 0x20F114, 0x20F120, 0x20F124 and 0x20F128.
+  That reproduces pfg's 521 ranges exactly. Why those 8 are skipped is
+  [inf]: the firmware owns them.
+- **The codebooks** are NPCF parameters (`FBGEN_GEN::copy_altera_codebook`
+  reads `GZIP_ALTERA_LITERALS` through `FBGEN_BLOCK_CONFIG::get_param_values`).
+  `sm4revb_npcf.ddb` stores them sparsely as 12-byte `(value, offset, 0)`
+  records; it holds three 256-entry tables, and pfg's first codebook page
+  is the second table, its second page the first, one u64 per entry.
+- **The 482,784-byte block** after the first codebook is generated: 47
+  groups × 4 records of `8, w, 128, 2` and 2,564 zero bytes, with w = 12,
+  16, 20, 25.
+- **The sector-header stream** (one page after the second `CORE` action
+  page): both sectors' headers, twice. Each is a send of the header's bits
+  reversed and shifted by 24 bits, behind a command word (0x0CA8004C,
+  0x08A8004C, then 0x0CA80040, 0x08A80040); the first pass also forces 4–5
+  bits. After each pass come the control pairs `0x0064000d` and `0x0004000c`.
+  The forced bits are constants copied from the specimens [inf: their
+  meaning is unknown, and sector headers never varied in any specimen].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

@@ -151,7 +151,7 @@ fn join(dbdir: &str, gdir: &str) -> Result<()> {
 fn route_cmd(dbdir: &str, gdir: &str, inp: &str, routes: &str, out: Option<(&str, &str)>, check: bool) -> Result<()> {
     let (mut db, g) = route::open(dbdir, gdir)?;
     let mut sof = sof::Sof::read(inp)?;
-    let paths = route::read_routes(routes)?;
+    let paths = route::read_routes(routes, &route::type_aliases(&g))?;
     let idx = g.index();
     let mut j = graph::Join::new(&mut db, &g);
     let orig = sof.image().to_vec();
@@ -175,7 +175,7 @@ fn route_cmd(dbdir: &str, gdir: &str, inp: &str, routes: &str, out: Option<(&str
         let img = sof.image();
         let (mut set_q, mut set_p, mut both) = (0, 0, 0);
         let mut diff = std::collections::HashSet::new();
-        for (&(byte, bit), &equal) in &u.bits {
+        for (&(byte, bit), &(equal, ..)) in &u.bits {
             let p = db::BitPos { byte, bit, equal };
             let (q, pr) = (p.get(&orig), p.get(img));
             set_q += q as usize;
@@ -186,12 +186,11 @@ fn route_cmd(dbdir: &str, gdir: &str, inp: &str, routes: &str, out: Option<(&str
             }
         }
         println!("routing bits: {} in the device; set by Quartus {set_q}, by the join {set_p}, both {both}", u.bits.len());
-        let names = route::name_bits(&mut j, &g, &diff)?;
         let mut by: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
         for &(byte, bit) in &diff {
-            let equal = u.bits[&(byte, bit)];
+            let equal = u.bits[&(byte, bit)].0;
             let q = db::BitPos { byte, bit, equal }.get(&orig);
-            let e = by.entry(names.get(&(byte, bit)).cloned().unwrap_or_default()).or_default();
+            let e = by.entry(route::bit_name(u, &g, (byte, bit))).or_default();
             if q { e.0 += 1 } else { e.1 += 1 }
         }
         for (k, (q, p)) in &by {
