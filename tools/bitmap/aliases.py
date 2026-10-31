@@ -10,11 +10,12 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from layout import load  # noqa: E402
+from table import open_table, write_table  # noqa: E402
 
 
 def offsets(prefix, single_map):
     anc = {}
-    for r in csv.DictReader(open(prefix + '.anchors.tsv'), delimiter='\t'):
+    for r in csv.DictReader(open_table(prefix + '.anchors.tsv'), delimiter='\t'):
         anc.setdefault(r['uid'], {})[r['part']] = r
     rows = []
     for u, bits in load(single_map).items():
@@ -27,17 +28,17 @@ def offsets(prefix, single_map):
 
 def add(prefix, single_map):
     path = prefix + '.layout.tsv'
-    have = {(r['layout'], r['bit']) for r in csv.DictReader(open(path), delimiter='\t')}
+    with open_table(path) as f:
+        text = f.read()
+    have = {(r['layout'], r['bit']) for r in csv.DictReader(text.splitlines(), delimiter='\t')}
     new = [r for r in offsets(prefix, single_map) if (r[0], r[1]) not in have]
-    with open(path, 'a') as f:
-        for r in new:
-            f.write('\t'.join(map(str, r)) + '\n')
+    write_table(path, text + ''.join('\t'.join(map(str, r)) + '\n' for r in new))
     print(f'{path}: {len(new)} aliased bits added')
 
 
 def check(prefix, single_map):
     lay = {(r['layout'], r['bit']): (r['part'], int(r['dframe']), int(r['dbdata']), int(r['polarity']))
-           for r in csv.DictReader(open(prefix + '.layout.tsv'), delimiter='\t')}
+           for r in csv.DictReader(open_table(prefix + '.layout.tsv'), delimiter='\t')}
     rows = offsets(prefix, single_map)
     ok = sum(lay.get((l, b)) == (p, df, dd, pol) for l, b, p, df, dd, pol in rows)
     print(f'{ok} of {len(rows)} aliased bits at the predicted offsets')

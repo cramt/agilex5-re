@@ -3,6 +3,7 @@
 //! and CUSTOM settings, and DIRECT attributes' bit lists.
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -73,8 +74,24 @@ pub struct BlockMap {
     anchors: HashMap<String, Placed>,
 }
 
+/// A database table: `path` itself, or `path.xz` when the table is stored
+/// compressed (the big io96 and HSSI layouts).
+pub fn read_table(path: &Path) -> Result<String> {
+    if path.exists() {
+        return std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()));
+    }
+    let mut xz = path.as_os_str().to_owned();
+    xz.push(".xz");
+    let file = std::fs::File::open(&xz).with_context(|| format!("reading {} (or .xz)", path.display()))?;
+    let mut text = String::new();
+    lzma_rust2::XzReader::new(std::io::BufReader::new(file), false)
+        .read_to_string(&mut text)
+        .with_context(|| format!("decompressing {}.xz", path.display()))?;
+    Ok(text)
+}
+
 fn tsv(path: &Path) -> Result<Vec<Vec<String>>> {
-    let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let text = read_table(path)?;
     Ok(text.lines().skip(1).map(|l| l.split('\t').map(str::to_owned).collect()).collect())
 }
 

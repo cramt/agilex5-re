@@ -37,6 +37,12 @@ half (X ≤ 60) and sector 1 the right half, mirrored.
   part, `frame + dframe` is a bit offset into the part (byte = offset / 8,
   bit = offset % 8) and `bdata` / `dbdata` are 0.
 - Every block type has exactly one layout.
+- A table bigger than 4 MiB is stored xz-compressed as `<name>.tsv.xz`
+  (`xz -9`, which Python's `lzma` preset 9 reproduces byte for byte):
+  `io96.layout.tsv` (318 MB, 2.7 MB stored) and `sm_hssi_top.layout.tsv`
+  (45 MB, 0.9 MB). Readers look for `<name>.tsv` first, then `.tsv.xz`
+  (`a5db`'s `db::read_table`, `tools/bitmap/table.py`); `pack.py` and
+  `aliases.py` write whichever form the size calls for.
 - `bcm_types.json`: the BCM type tree. For each type, `children`
   (instance name → type), `custom` (CUSTOM attribute names) and `direct`
   (DIRECT attribute widths). A block attribute path is the instance names

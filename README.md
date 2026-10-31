@@ -889,6 +889,13 @@ critical warning, which a real design should follow.
 
 ## Plan
 
+**Phase 3 status** (branch `phase3`):
+
+- Step 1 (big tables compressed): **done**. `io96` and `sm_hssi_top`
+  layouts are `.tsv.xz` (318 MB + 45 MB → 2.7 MB + 0.9 MB); a5db and the
+  Python tools read either form, and every a5db `attrs`/`bits` output and
+  `coverage.py` on fz0 is byte-identical before and after.
+
 **Phase 2 status** (branch `phase2`):
 
 - Step 1 (container hashes): **done** (g2).

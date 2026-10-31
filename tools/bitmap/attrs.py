@@ -17,14 +17,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sof  # noqa: E402
 from imagemap import FRAME_BYTES, PARTS  # noqa: E402
+from table import open_table  # noqa: E402
 
 
 def read_bits(img, prefix, uid):
     start = {(o, p): s for o, p, s, _ in PARTS}
-    anchors = {r['part']: r for r in csv.DictReader(open(prefix + '.anchors.tsv'), delimiter='\t') if r['uid'] == uid}
+    anchors = {r['part']: r for r in csv.DictReader(open_table(prefix + '.anchors.tsv'), delimiter='\t') if r['uid'] == uid}
     lid = next(iter(anchors.values()))['layout']
     bits = {}
-    for r in csv.DictReader(open(prefix + '.layout.tsv'), delimiter='\t'):
+    for r in csv.DictReader(open_table(prefix + '.layout.tsv'), delimiter='\t'):
         if r['layout'] != lid:
             continue
         a = anchors[r['part']]

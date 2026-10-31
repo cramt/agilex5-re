@@ -73,7 +73,7 @@ fn bits(dbdir: &str, sof_path: &str, uid: &str) -> Result<()> {
     let mut db = Db::open(dbdir)?;
     let sof = sof::Sof::read(sof_path)?;
     let btype = db.type_of(uid)?;
-    let names: Vec<String> = std::fs::read_to_string(db.dir.join("bits").join(format!("{btype}.layout.tsv")))?
+    let names: Vec<String> = db::read_table(&db.dir.join("bits").join(format!("{btype}.layout.tsv")))?
         .lines()
         .skip(1)
         .filter_map(|l| l.split('\t').nth(1).map(str::to_owned))

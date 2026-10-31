@@ -19,6 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from layout import layout, load  # noqa: E402
 from pack import write  # noqa: E402
+from table import open_table  # noqa: E402
 
 
 def layouts(subset_map):
@@ -72,10 +73,10 @@ def pack(subset_map, probe_map, prefix):
 
 def check(prefix, sample_map):
     lay = {}
-    for r in csv.DictReader(open(prefix + '.layout.tsv'), delimiter='\t'):
+    for r in csv.DictReader(open_table(prefix + '.layout.tsv'), delimiter='\t'):
         lay.setdefault(r['layout'], {})[r['bit']] = (r['part'], int(r['dframe']), int(r['dbdata']), r['polarity'])
     anc = {}
-    for r in csv.DictReader(open(prefix + '.anchors.tsv'), delimiter='\t'):
+    for r in csv.DictReader(open_table(prefix + '.anchors.tsv'), delimiter='\t'):
         anc.setdefault(r['uid'], {})[r['part']] = r
     ok = wrong = missing = 0
     for u, bits in load(sample_map).items():
