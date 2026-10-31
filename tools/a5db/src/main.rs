@@ -10,7 +10,11 @@
 //!   a5db join  <db> <graph>                       how many graph edges resolve to bits
 //!   a5db route <db> <graph> <in.sof> <out.sof> <hmac.key> <routes>
 //!                                                  write the routes' mux bits
+//!   a5db fanout <graph> <name prefix>             edges out of matching nodes
 //!   a5db routed <db> <graph> <in.sof>             edges the image's mux settings select
+//!   a5db net   <db> <graph> <in.sof> <out.sof> <hmac.key> '[clock:]from,from...>to'...
+//!       route nets through free nodes (sources may be busy: they are the
+//!       net's own) and write their bits; a clock: net avoids H/V/LL/LEIM
 //!   a5db routecheck <db> <graph> <in.sof> <routes> [<out.sof> <hmac.key>]
 //!       clear every routing bit of in.sof, set only the routes' bits, and
 //!       compare with in.sof (its routes, e.g. from tools/rgdump/routes.tcl)
@@ -242,6 +246,55 @@ fn main() -> Result<()> {
             set(dbdir, inp, out, key, uid, &args[6..])
         }
         ["join", dbdir, g] => join(dbdir, g),
+        ["fanout", g, prefix] => {
+            let g = graph::Graph::load(std::path::Path::new(g))?;
+            for (n, name) in g.names.iter().enumerate() {
+                if name.starts_with(prefix) {
+                    for e in g.fanout(n as u32) {
+                        println!("{name}\t{}\t{}\t{}", g.names[g.dst[e] as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
+                    }
+                }
+            }
+            Ok(())
+        }
+        ["net", dbdir, g, inp, out, key, nets @ ..] if !nets.is_empty() => {
+            let (mut db, g) = route::open(dbdir, g)?;
+            let mut sof = sof::Sof::read(inp)?;
+            let idx = g.index();
+            let mut j = graph::Join::new(&mut db, &g);
+            let mut busy: std::collections::HashSet<u32> = route::decode(&mut j, &g, sof.image())?.into_iter().map(|e| g.dst[e]).collect();
+            eprintln!("{} nodes driven in {inp}", busy.len());
+            for spec in nets {
+                let (clock, spec) = match spec.strip_prefix("clock:") {
+                    Some(s) => (true, s),
+                    None => (false, &spec[..]),
+                };
+                let (from, to) = spec.split_once('>').with_context(|| format!("{spec}: expected from,...>to"))?;
+                let node = |n: &str| idx.get(n).copied().with_context(|| format!("no node {n}"));
+                let from: Vec<u32> = from.split(',').map(node).collect::<Result<_>>()?;
+                let to = node(to)?;
+                let path = route::find_path(&mut j, &g, &from, to, &busy, clock)?.with_context(|| format!("{spec}: no free path"))?;
+                println!("net {spec}: {} hops", path.len());
+                for &e in &path {
+                    let s = route::edge_src(&g, e);
+                    let w = j.edge(e)?;
+                    let what = match &w {
+                        Some(Ok(_)) => format!("{} {}", g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]),
+                        Some(Err(m)) => format!("({m:?})"),
+                        None => "(hardwired)".into(),
+                    };
+                    println!("  {} -> {}  {what}", g.names[s as usize], g.names[g.dst[e] as usize]);
+                    if let Some(Ok(w)) = w {
+                        for (p, v) in w {
+                            p.set(sof.image_mut(), v);
+                        }
+                    }
+                    busy.insert(g.dst[e]);
+                }
+            }
+            let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
+            sof.write(out, &key)
+        }
         ["routed", dbdir, g, inp] => {
             let (mut db, g) = route::open(dbdir, g)?;
             let sof = sof::Sof::read(inp)?;

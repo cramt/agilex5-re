@@ -158,11 +158,12 @@ pub struct Join<'a> {
     graph: &'a Graph,
     types: HashMap<u32, Option<String>>,
     named: HashMap<(String, u32), std::result::Result<std::rc::Rc<Named>, Miss>>,
+    at: HashMap<(&'static str, u32, u32), Option<(String, String)>>,
 }
 
 impl<'a> Join<'a> {
     pub fn new(db: &'a mut Db, graph: &'a Graph) -> Join<'a> {
-        Join { db, graph, types: HashMap::new(), named: HashMap::new() }
+        Join { db, graph, types: HashMap::new(), named: HashMap::new(), at: HashMap::new() }
     }
 
     pub fn btype(&mut self, uid: u32) -> Option<String> {
@@ -177,7 +178,37 @@ impl<'a> Join<'a> {
     /// Bit writes of edge e, or why it has none; Ok(None) if the edge has no
     /// configuration (hardwired, or no edge API).
     pub fn edge(&mut self, e: usize) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        if self.graph.cfg[e] == 0 {
+            return self.rule_edge(e, false);
+        }
         self.pair(self.graph.uid[e], self.graph.cfg[e])
+    }
+
+    /// Bits of a clock-network edge that has no edge API but does select a
+    /// mux input (`clock_rule`); `idle` gives the muxes' idle state instead.
+    pub fn rule_edge(&mut self, e: usize, idle: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        let Some((family, x, y, choices)) = clock_rule(self.graph, e) else { return Ok(None) };
+        if !self.at.contains_key(&(family, x, y)) {
+            let found = self.db.uid_at(family, x, y);
+            self.at.insert((family, x, y), found);
+        }
+        let Some((uid, btype)) = self.at[&(family, x, y)].clone() else {
+            return Ok(Some(Err(Miss::NoBitMap(format!("{family} at X{x} Y{y}")))));
+        };
+        let named = match self.resolve_choices(&btype, choices)? {
+            Ok(n) => n,
+            Err(m) => return Ok(Some(Err(m))),
+        };
+        let map = self.db.map(&btype);
+        let list = if idle { &named.idle } else { &named.writes };
+        let mut out = Vec::new();
+        for (b, v) in list {
+            match map.pos(&uid, b) {
+                Some(p) => out.push((p, *v)),
+                None => return Ok(Some(Err(Miss::UnmappedBit(format!("{btype} {}", generic(b)))))),
+            }
+        }
+        Ok(Some(Ok(out)))
     }
 
     pub fn pair(&mut self, u: u32, c: u32) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
@@ -221,6 +252,10 @@ impl<'a> Join<'a> {
     fn resolve(&mut self, btype: &str, c: u32) -> Result<std::result::Result<std::rc::Rc<Named>, Miss>> {
         let (top, stages) = parse_config(&self.graph.cfgs[c as usize])?;
         let choices = if stages.is_empty() { vec![top] } else { stages };
+        self.resolve_choices(btype, choices)
+    }
+
+    fn resolve_choices(&mut self, btype: &str, choices: Vec<Choice>) -> Result<std::result::Result<std::rc::Rc<Named>, Miss>> {
         let (mut writes, mut idle) = (Vec::new(), Vec::new());
         for ch in choices {
             let Some(a) = self.db.attribute(btype, &ch.attr) else {
@@ -254,6 +289,66 @@ impl<'a> Join<'a> {
             }
         }
         Ok(Ok(std::rc::Rc::new(Named { writes, idle })))
+    }
+}
+
+/// `TYPE:X..Y..Z..I..` → (type, x, y, z, i).
+pub fn parse_node(n: &str) -> Option<(&str, u32, u32, u32, u32)> {
+    let (t, rest) = n.split_once(':')?;
+    let rest = rest.strip_prefix('X')?;
+    let (x, rest) = rest.split_once('Y')?;
+    let (y, rest) = rest.split_once('Z')?;
+    let (z, i) = rest.split_once('I')?;
+    Some((t, x.parse().ok()?, y.parse().ok()?, z.parse().ok()?, i.parse().ok()?))
+}
+
+/// Clock-network edges with no edge API that still select a mux input
+/// (README (k)): the spine tap's 5:1 mux and a row clock's 32:1 mux and
+/// predrive mux. Returns the block family, its X/Y and the choices.
+pub fn clock_rule(g: &Graph, e: usize) -> Option<(&'static str, u32, u32, Vec<Choice>)> {
+    let src = crate::route::edge_src(g, e);
+    let (st, x, y, sz, si) = parse_node(&g.names[src as usize])?;
+    let (dt, _, _, dz, di) = parse_node(&g.names[g.dst[e] as usize])?;
+    let ch = |attr: String, k: u32| Choice { attr, input: format!("clkin[{k}]") };
+    match (st, dt) {
+        // CE_CC_CLKMUX51 input n of the tap cell that drives spine k.
+        ("CE_CC_CLKMUX51_INPUT", "CE_CC_CLKMUX51_OUTPUT") if sz == dz => {
+            // The tap cell's output reaches SPINE_TAP_RE I<k> through the
+            // cell's own nodes; k is the cell.
+            let mut front = vec![g.dst[e]];
+            for _ in 0..4 {
+                let mut next = Vec::new();
+                for n in front {
+                    for f in g.fanout(n) {
+                        let d = g.dst[f];
+                        match parse_node(&g.names[d as usize]) {
+                            Some(("SPINE_TAP_RE", _, _, _, k)) => {
+                                return Some(("cw_cc_tap_cs_bf", x, y, vec![ch(format!("cell_{k}/mux51_dolsgn_cs_dolsgn_0/sel"), si)]))
+                            }
+                            Some(("CW_CC_TAP_CS_CELL_RE", ..)) => next.push(d),
+                            _ => {}
+                        }
+                    }
+                }
+                front = next;
+            }
+            None
+        }
+        // Spine input k into row clock j's 32:1 mux (output node 44 + 7j):
+        // stage 1 picks k mod 8 in every group, stage 2 the group k / 8.
+        ("SCLKMUX_RE", "SCLKMUX_RE") if si < 32 && di >= 44 && (di - 44) % 7 == 0 && (di - 44) / 7 < 12 => {
+            let j = (di - 44) / 7;
+            let m = format!("xrowclkmux/xrmx{}{}/rmux32to1_dolsgn_rc_dolsgn_0", if j < 6 { 'l' } else { 'r' }, j % 6);
+            Some(("cw_cc_ts_base", x, y, vec![ch(format!("{m}/s1/sel"), si), ch(format!("{m}/s2/sel"), si / 8)]))
+        }
+        // Row clock j's mux output straight into its predrive mux (input 1;
+        // input 0 comes through the delay chain).
+        ("SCLKMUX_RE", "SCLKMUX_RE") if si >= 44 && (si - 44) % 7 == 0 && di == si + 6 && (si - 44) / 7 < 12 => {
+            let j = (si - 44) / 7;
+            let m = format!("xrowclkmux/mux_predrive_{}{}/output_mux_dolsgn_delay_chain_dolsgn_0/sel", if j < 6 { 'l' } else { 'r' }, j % 6);
+            Some(("cw_cc_ts_base", x, y, vec![ch(m, 1)]))
+        }
+        _ => None,
     }
 }
 

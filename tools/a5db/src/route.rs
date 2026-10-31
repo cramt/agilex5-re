@@ -98,6 +98,15 @@ pub fn universe(join: &mut Join, graph: &Graph) -> Result<Universe> {
         }
     }
     let mut u = Universe { bits: FxHashMap::default(), misses: BTreeMap::new(), edges: 0, resolved: 0, pairs: seen.len() };
+    for e in 0..graph.dst.len() {
+        if graph.cfg[e] == 0 {
+            if let Some(Ok(idle)) = join.rule_edge(e, true)? {
+                for (p, v) in idle {
+                    u.bits.entry((p.byte, p.bit)).or_insert((p.equal, v, graph.uid[e], 0));
+                }
+            }
+        }
+    }
     for (&(uid, cfg), &n) in &seen {
         u.edges += n;
         match join.pair(uid, cfg)? {
@@ -185,6 +194,11 @@ pub fn decode(join: &mut Join, graph: &Graph, img: &[u8]) -> Result<Vec<usize>> 
     for e in 0..graph.dst.len() {
         let (u, c) = (graph.uid[e], graph.cfg[e]);
         if c == 0 {
+            if let (Some(Ok(w)), Some(Ok(idle))) = (join.rule_edge(e, false)?, join.rule_edge(e, true)?) {
+                if w.iter().all(|(p, v)| p.get(img) == *v) && w.iter().zip(&idle).any(|(a, b)| a.1 != b.1) {
+                    out.push(e);
+                }
+            }
             continue;
         }
         let on = match active.get(&(u, c)) {
@@ -203,6 +217,76 @@ pub fn decode(join: &mut Join, graph: &Graph, img: &[u8]) -> Result<Vec<usize>> 
         }
     }
     Ok(out)
+}
+
+/// Route one net: a breadth-first search from any of `from` to `to` over
+/// edges that are hardwired, pass-through or resolve to bits, through
+/// nodes nobody else drives. Returns the path's edges.
+pub fn find_path(join: &mut Join, graph: &Graph, from: &[u32], to: u32, busy: &HashSet<u32>, clock: bool) -> Result<Option<Vec<usize>>> {
+    // A clock net stays on the clock network: no general-purpose wires.
+    let general = |n: u32| {
+        let t = graph.names[n as usize].split(':').next().unwrap_or("");
+        t == "LL" || t.starts_with("LEIM") || ((t.starts_with('H') || t.starts_with('V')) && t[1..].parse::<u32>().is_ok())
+    };
+    let mut prev: FxHashMap<u32, usize> = FxHashMap::default();
+    let mut q: std::collections::VecDeque<u32> = from.iter().copied().collect();
+    let start: HashSet<u32> = from.iter().copied().collect();
+    let mut usable: FxHashMap<(u32, u32), bool> = FxHashMap::default();
+    while let Some(n) = q.pop_front() {
+        if n == to {
+            let mut path = Vec::new();
+            let mut cur = to;
+            while !start.contains(&cur) {
+                let e = prev[&cur];
+                path.push(e);
+                cur = edge_src(graph, e);
+            }
+            path.reverse();
+            return Ok(Some(path));
+        }
+        for e in graph.fanout(n) {
+            let d = graph.dst[e];
+            if start.contains(&d) || prev.contains_key(&d) || (busy.contains(&d) && d != to) || (clock && general(d)) {
+                continue;
+            }
+            let (u, c) = (graph.uid[e], graph.cfg[e]);
+            let ok = c == 0
+                || *match usable.get(&(u, c)) {
+                    Some(b) => b,
+                    None => {
+                        let b = match join.pair(u, c)? {
+                            Some(Ok(_)) => true,
+                            Some(Err(m)) => m.is_pass_through(),
+                            None => true,
+                        };
+                        usable.entry((u, c)).or_insert(b)
+                    }
+                };
+            if ok {
+                prev.insert(d, e);
+                q.push_back(d);
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// The source node of edge e (edges are stored by source).
+pub fn edge_src(graph: &Graph, e: usize) -> u32 {
+    let (mut lo, mut hi) = (0usize, graph.names.len());
+    while hi - lo > 1 {
+        let mid = (lo + hi) / 2;
+        if graph.fanout(mid as u32).start <= e {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    // Several gids can share a start when the earlier ones have no edges.
+    while !graph.fanout(lo as u32).contains(&e) {
+        lo -= 1;
+    }
+    lo as u32
 }
 
 pub fn open(dbdir: &str, gdir: &str) -> Result<(Db, Graph)> {

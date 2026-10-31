@@ -319,6 +319,25 @@ impl Db {
         self.map(t).has(uid).then(|| t.to_owned())
     }
 
+    /// The instance of a block family (type-name prefix) at fitter X/Y:
+    /// (uid, type). Some families have several types by row.
+    pub fn uid_at(&mut self, family: &str, x: u32, y: u32) -> Option<(String, String)> {
+        let mut types: Vec<String> = std::fs::read_dir(self.dir.join("bits"))
+            .ok()?
+            .filter_map(|e| e.ok()?.file_name().into_string().ok()?.strip_suffix(".anchors.tsv").map(str::to_owned))
+            .filter(|t| t.starts_with(family))
+            .collect();
+        types.sort();
+        for t in types {
+            let uid = format!("{t}_r{y}_c{x}");
+            self.load(&t).ok()?;
+            if self.map(&t).has(&uid) {
+                return Some((uid, t));
+            }
+        }
+        None
+    }
+
     /// The block type of an instance uid: `<type>_r<y>_c<x>` or a bare name.
     pub fn type_of(&mut self, uid: &str) -> Result<String> {
         let bits = self.dir.join("bits");
