@@ -1,6 +1,8 @@
 // Phase 5 clocks (README (r)): every clock-capable HVIO pin of the DE25-Nano
 // (the four xx4_u2 pins of each of the 8 banks) and CLOCK0_50 (IO96) each clock
-// a 2-bit counter with a clock enable; CLOCK2_50 asks for a regional clock.
+// a 2-bit counter with a clock enable. GLOBAL_SIGNAL "REGIONAL CLOCK" is not
+// valid for Agilex 5 (Warning 125035), so CLOCK2_50 gets a CLOCK_REGION of one
+// sector instead.
 // IO registers: two inputs with FAST_INPUT_REGISTER and one output with
 // FAST_OUTPUT_REGISTER, as the DE25-Nano SDRAM pins use them.
 module ck (
