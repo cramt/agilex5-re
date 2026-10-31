@@ -1009,42 +1009,27 @@ modules from `devices/programmer/firmware/agilex5e.zip`), two codebooks from
     482,784-byte block, the BBM header, the second action page, the
     sector-header stream) is byte-identical to pfg's.
 - **`CORE` is not byte-identical, by construction** [obs]: pfg picks libs and
-  BBM codes (`run_row_target`, `update_with_libs`, `run_combined_target`) and
-  sets the S4 flags, none of which is reimplemented. The writer stores every
-  column literally (code 0), one zero lib per IP id, and S4 pairs as plain
-  `00ab` nibbles. That makes fz0's `CORE` 248 KiB against pfg's 112 KiB
-  (36 frame pages instead of 2), and the random-CRAM one slightly smaller
-  than pfg's. Whether the SDM accepts plain nibbles where pfg would have set
-  the S4 flag is the open question the board test answers [unk].
+  BBM codes (`run_row_target`, `update_with_libs`, `run_combined_target`),
+  which is not reimplemented. The writer stores every column literally
+  (code 0), one zero lib per IP id. That makes fz0's `CORE` 248 KiB against
+  pfg's 112 KiB (36 frame pages instead of 2), and the random-CRAM one
+  slightly smaller than pfg's. Since phase 4 it sets the S4 flags exactly
+  as pfg does (o), so its physical frames equal pfg's.
 
-**The S4 flag rule** (phase 2 [unk], now mostly [obs]):
+**The S4 flag rule** (phase 2 [unk], solved in phase 4, see (o)):
 
-- `BITASM_CRAM_REPAIRER::get_4bit_code(sof, a, b, frame)` (decompiled)
-  builds a pair's nibble as `a·2 + b`. When exactly one of the two is set,
-  it looks up a list for (frame, set bit) (`get_s1_list`). For each entry
-  `S4_SI (frame', bit', flag, value)` whose bit (frame', bit') is set in the
-  image, the code becomes `8 | flag·4 | value`. This is the "flagged
-  nibble".
 - The lists live in `devices/programmer/fm_sector_bnxplv_rif_t{0,1,2}.ddb`
-  (the sector type is shared with Agilex 7). Each holds a table of 1,568
-  frame slots of `S4_SII` → `S4_SII_BIT` (u32 bit) → one `S4_SI`
-  (u32 frame', u32 bit', u8 flag, u8 value). The three files parse
-  completely, with 217,520, 262,400 and 233,920 entries. File t covers
-  frames 1,568·t … 1,568·t + 1,567 (frame' is the slot plus 1,568·t), and
-  bit' always equals the key bit, so an entry's condition is its own bit.
-  Keys are only the low four bits g…g+3 of the 253 `s4` groups, so only
-  the `a` side of a pair (g+2, g+3) can flag. Every flagged nibble in
-  blinky, the tiny design and the random specimen has (a, b) = (1, 0).
-- Not solved [unk]: which slot an image frame uses. The slot pattern isn't
-  the frame index, nor the frame within its 98-frame group with any
-  single row offset. On the random specimen every image frame's flags
-  match some slot's key set exactly, and the slots' empty patterns line up
-  with the image groups (slot rows 0, 2 and 3 have exactly the 25 empty
-  frames of image groups 2–5, slot row 1 is empty like the never-stored
-  group 1). The repairer's `set_labrow_distances` and spare-row shift are
-  the likely missing piece. Until it is solved, an encoder can't place the
-  flags, and a5db writes plain nibbles. Whether the SDM needs the flag
-  (rather than accepting `0010`) is what the board test shows.
+  (the sector type is shared with Agilex 7). Each holds 1,568 frame slots
+  of `S4_SII` → `S4_SII_BIT` (u32 key) → one `S4_SI` (u32 frame', u32
+  bit', u8 flag, u8 value), 217,520, 262,400 and 233,920 entries. File t
+  covers image frames 1,568·t … 1,568·t + 1,567, frame' is always the slot
+  and bit' always the key, so an entry's condition always holds [obs].
+- The slot is the image frame itself, and the keys are bits of a swizzled
+  frame, not dr bits. That is why phase 3's frame and row-offset searches
+  failed: they matched keys against the dr bit `a`. The full rule and its
+  check are in (o) [obs].
+- `BITASM_CRAM_REPAIRER::get_4bit_code` is not on pfg's path for this part
+  (it never runs during `quartus_pfg -c`, by breakpoint) [obs].
 
 Section format, now complete [obs, every item checked on the 60 pairs]:
 
@@ -1150,6 +1135,36 @@ quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
   nowhere. Writing a whole image from defaults needs every block's idle
   values (I/O, HSSI, IO96 included) [unk]. Whether the logic works needs
   the board.
+
+### (o) Phase 4: byte-identical CORE
+
+**S4 flags, by watching pfg** [obs]. `quartus_pfg -c` was run under gdb (an
+`LD_PRELOAD` shim calls `prctl(PR_SET_PTRACER)` and waits, since
+`ptrace_scope` is 1; scripts in `/tmp/a5p4c/gdb`, not committed). The frame
+packets come from `FBGEN_ND_CRAM_FRAME_MGR`, not the `KM` manager or the
+repairer:
+
+- `create_partial_frames(dblock, cfg, 0, 4605)` walks the 4,606 stored frames
+  of a sector. Stream frame k maps to image frame k (k < 98) or k + 98
+  (`m_rbf_to_sof_map`), and that image frame's `S4_SII` list goes to
+  `fill_core_frame_data`. The lists gdb read out of the live process equal
+  the RIF parse, slot for slot.
+- `fill_core_frame_data` builds the 656-byte physical frame nibble by
+  nibble from a 1,312-entry table (dumped from the process): an entry p
+  copies bits p, p−1, p−2, p−3 of pfg's frame; `0xffffffff` is a zero pad;
+  an entry with bit 31 set is an S4 pair at s = (p & 0x7fffffff) ^ 1, read
+  upwards (s, s+1). pfg's frame is the dr with each `s4` group g permuted:
+  its bits g+7 … g hold dr g+5, g+1, g+4, g, g+7, g+3, g+6, g+2. So the
+  pair (g+3, g+7) is pfg's (g+2, g+3) and (g+2, g+6) is (g, g+1).
+- When exactly one bit of a pair is set, its pfg-frame index is the key. If
+  the frame's list holds that key, the nibble is `value·4 | 1 << flag | 1`
+  (bit 0 first); otherwise it is the plain `0 0 a b`.
+- Check: `a5db rbf` with this rule gives physical frames equal to pfg's in
+  all 9,212 stored frames of the all-random specimen, and the Python model of
+  the rule matches all 2,331,755 one-hot pairs there and all 20 in blinky.
+  `a5db` reads the lists from the user's install at run time
+  (`install::rif_lists`): the `S4_SI` records are stored raw, 10 bytes each,
+  one ascending run per slot.
 
 ### quartus_sta fails under chipsmith [obs]
 

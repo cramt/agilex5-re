@@ -1,8 +1,8 @@
 //! The CORE section's data streams, all literal: every 98-frame group of
 //! both sectors stored column by column with BBM code 0, no lib copies or
-//! row prediction, S4 pairs as plain `00ab` nibbles (README (g) "CORE
-//! section: 2D compression", (l)). It decodes to the same CRAM as pfg's
-//! own encoding, but isn't pfg's byte stream.
+//! row prediction (README (g) "CORE section: 2D compression", (l)). S4
+//! pairs carry pfg's flag nibbles (README (o)). It decodes to the same CRAM
+//! as pfg's own encoding, but isn't pfg's byte stream.
 
 use anyhow::{ensure, Result};
 
@@ -27,8 +27,10 @@ const PAD32_AT: usize = 2528;
 #[derive(Clone, Copy)]
 enum Phys {
     Copy(usize),
-    /// An S4 pair (a, b) as a nibble starting at this bit: `0 0 a b`.
-    Nib(usize, usize),
+    /// An S4 pair (a, b) as a nibble starting at this bit: `0 0 a b`, or
+    /// the flag nibble when one side is set and its key is listed. The keys
+    /// are the pair's bits in pfg's swizzled frame order (ka for a, kb for b).
+    Nib { a: usize, b: usize, ka: u16, kb: u16 },
 }
 
 /// Physical bit → dr bit (README (g), "Physical frame ↔ dr").
@@ -51,7 +53,8 @@ impl Layout {
             } else if u >= 7 && groups.contains(&(u - 7)) {
                 let g = u - 7;
                 out.extend([Some(Phys::Copy(g + 5)), Some(Phys::Copy(g + 1)), Some(Phys::Copy(g + 4)), Some(Phys::Copy(g))]);
-                out.extend([Some(Phys::Nib(g + 3, g + 7)), None, None, None, Some(Phys::Nib(g + 2, g + 6)), None, None, None]);
+                let nib = |a, b, ka: usize| Some(Phys::Nib { a, b, ka: ka as u16, kb: ka as u16 + 1 });
+                out.extend([nib(g + 3, g + 7, g + 2), None, None, None, nib(g + 2, g + 6, g), None, None, None]);
                 d = g as i64 - 1;
             } else {
                 out.push(Some(Phys::Copy(u)));
@@ -63,17 +66,24 @@ impl Layout {
         Ok(Layout(out))
     }
 
-    /// dr frame → physical frame, S4 pairs as plain nibbles.
-    pub fn to_phys(&self, dr: &[u8]) -> Vec<u8> {
+    /// dr frame → physical frame; `flags` is the frame's S4 key list.
+    pub fn to_phys(&self, dr: &[u8], flags: &[(u16, u8)]) -> Vec<u8> {
         let bit = |d: usize| (dr[d >> 3] >> (d & 7)) & 1;
         let mut out = vec![0u8; PF];
         let mut set = |pb: usize, v: u8| out[pb >> 3] |= v << (pb & 7);
         for (pb, m) in self.0.iter().enumerate() {
             match *m {
                 Some(Phys::Copy(d)) => set(pb, bit(d)),
-                Some(Phys::Nib(a, b)) => {
-                    set(pb + 2, bit(a));
-                    set(pb + 3, bit(b));
+                Some(Phys::Nib { a, b, ka, kb }) => {
+                    let (va, vb) = (bit(a), bit(b));
+                    let key = if va == vb { None } else { Some(if va == 1 { ka } else { kb }) };
+                    match key.and_then(|k| flags.binary_search_by_key(&k, |&(k, _)| k).ok()) {
+                        Some(i) => (0..4).for_each(|j| set(pb + j, flags[i].1 >> j & 1)),
+                        None => {
+                            set(pb + 2, va);
+                            set(pb + 3, vb);
+                        }
+                    }
                 }
                 None => {}
             }
@@ -84,12 +94,12 @@ impl Layout {
 
 /// One sector's inflated frame stream: every stored frame as a packet of
 /// the 8-byte header and the whole physical frame (all columns literal).
-pub fn frame_stream(lay: &Layout, cram: &[u8]) -> Vec<u8> {
+pub fn frame_stream(lay: &Layout, cram: &[u8], s4_flags: &[Vec<(u16, u8)>]) -> Vec<u8> {
     let mut out = Vec::with_capacity(47 * GROUP * (8 + PF));
     for g in stored_groups() {
         for f in GROUP * g..GROUP * (g + 1) {
             out.extend_from_slice(&HDR);
-            out.extend(lay.to_phys(&cram[f * FB..(f + 1) * FB]));
+            out.extend(lay.to_phys(&cram[f * FB..(f + 1) * FB], &s4_flags[f]));
         }
     }
     out

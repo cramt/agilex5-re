@@ -115,7 +115,7 @@ fn core_section(inst: &Install, img: &[u8], f: &Fields, key: &[u8]) -> Result<Ve
     let mut rest: [Vec<Vec<u8>>; 2] = Default::default();
     let mut frames = [0usize; 2];
     for (s, base) in [(0, s0), (1, s1)] {
-        let fp = section::stream_pages(&deflate::deflate(&core::frame_stream(&lay, &img[base..base + n]))?);
+        let fp = section::stream_pages(&deflate::deflate(&core::frame_stream(&lay, &img[base..base + n], &inst.s4_flags))?);
         frames[s] = fp.len();
         rest[s] = [inst.cb1.clone(), zero[0].clone(), inst.cb2.clone(), core::bbm_page()].into_iter().chain(fp).collect();
     }
