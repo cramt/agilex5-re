@@ -1,5 +1,8 @@
-# Print the container structure of an Agilex 5 .sof or .rbf.
+# Print the container structure of an Agilex 5 .sof or .rbf, or check an
+# .rbf's block CRCs and keyed hashes.
 #   python3 -I tools/bitstream.py design.sof|design.rbf
+#   python3 -I tools/bitstream.py key            # once: derive the HMAC key
+#   python3 -I tools/bitstream.py check design.rbf
 # .sof: gzip of "SOF\0", u32 0, u32 record count, then (u16 tag, u32 len, data).
 # .rbf: 4 KiB-aligned SDM sections, each with header magic 0x97566593 (at
 #       +0x400 in the first, CMF, section; at +0 in the others), u32 size at
@@ -7,11 +10,62 @@
 #       Section Header Block").
 import gzip
 import hashlib
+import hmac
+import os
+import re
 import struct
+import subprocess
 import sys
+import zlib
 
 SECTION_MAGIC = 0x97566593
 RBF_MAGIC = 0x62294895
+BITASM_LIB = '/pool/dev/altera_pro/quartus-pro/26.1.1/quartus/linux64/libpgm_bitasm.so'
+KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'specimens', 'rbf_keyed_hash.key')
+# The keyed hash of a design section: HMAC-SHA256 over [section, +0xBB0),
+# stored at +0xBB0 (BITASM_COMMON::calculate_keyed_hash / verify_keyed_hash).
+KEYED_HASH_AT = 0xBB0
+
+
+def derive_key(lib=BITASM_LIB):
+    """calculate_keyed_hash builds its 32-byte key from two rip-relative
+    16-byte loads; find them in its disassembly."""
+    nm = subprocess.run(['nm', '-D', lib], capture_output=True, text=True).stdout
+    fn = int(re.search(r'^([0-9a-f]+) T _ZN13BITASM_COMMON20calculate_keyed_hashEPKhj$', nm, re.M).group(1), 16)
+    dis = subprocess.run(['objdump', '-d', f'--start-address={fn}', f'--stop-address={fn + 0x40}', lib],
+                         capture_output=True, text=True).stdout
+    addrs = [int(a, 16) for a in re.findall(r'movdqa 0x[0-9a-f]+\(%rip\),%xmm0\s+# ([0-9a-f]+)', dis)]
+    data = open(lib, 'rb').read()
+    return b''.join(data[a:a + 16] for a in addrs[:2])
+
+
+def crc32_bzip2(b):
+    # MSB-first CRC-32 (poly 0x04C11DB7, init/xorout 0xFFFFFFFF) from the
+    # reflected one: bit-reverse input bytes and the result.
+    rev = bytes(int(f'{i:08b}'[::-1], 2) for i in range(256))
+    c = zlib.crc32(b.translate(rev))
+    return int(f'{c:032b}'[::-1], 2)
+
+
+def check(d):
+    """Recompute the per-block CRCs and the design sections' keyed hashes."""
+    key = open(KEY_FILE, 'rb').read()
+    u = lambda o: struct.unpack_from('<I', d, o)[0]
+    base, ok = 0, True
+    while base < len(d):
+        h = base + (0x400 if base == 0 else 0)
+        size, typ = u(h + 8), d[h + 12:h + 16].rstrip(b'\0').decode()
+        for blk in (base, base + 0x1000):
+            good = struct.unpack_from('<I', d, blk + 0xFFC)[0] == crc32_bzip2(d[blk:blk + 0xFFC])
+            ok &= good
+            print(f'  {typ:5s} block {blk:#08x} CRC {"ok" if good else "BAD"}')
+        if typ != 'CMF':
+            want = hmac.new(key, d[base:base + KEYED_HASH_AT], hashlib.sha256).digest()
+            good = d[base + KEYED_HASH_AT:base + KEYED_HASH_AT + 32] == want
+            ok &= good
+            print(f'  {typ:5s} keyed hash {"ok" if good else "BAD"}')
+        base += size
+    return ok
 
 
 def sof(raw):
@@ -49,5 +103,11 @@ def rbf(d):
 
 
 if __name__ == '__main__':
-    raw = open(sys.argv[1], 'rb').read()
-    rbf(raw) if raw[:4] == struct.pack('<I', RBF_MAGIC) else sof(raw)
+    if sys.argv[1] == 'key':
+        os.makedirs(os.path.dirname(KEY_FILE), exist_ok=True)
+        open(KEY_FILE, 'wb').write(derive_key(*sys.argv[2:3]))
+    elif sys.argv[1] == 'check':
+        sys.exit(0 if check(open(sys.argv[2], 'rb').read()) else 1)
+    else:
+        raw = open(sys.argv[1], 'rb').read()
+        rbf(raw) if raw[:4] == struct.pack('<I', RBF_MAGIC) else sof(raw)

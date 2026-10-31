@@ -1,0 +1,7 @@
+uid	layout	object	part	frame	bdata
+pio_0_0	0	io96_0	hdr	0	0
+pio_0_0	0	io96_0	t40	0	0
+pio_0_0	0	io96_0	t41	0	0
+pio_1_0	0	io96_1	hdr	0	0
+pio_1_0	0	io96_1	t40	0	0
+pio_1_0	0	io96_1	t41	0	0

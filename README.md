@@ -297,9 +297,9 @@ are from blinky (`/tmp/agilex5-re/pfg`, not committed).
   | `IO` | 0x06A000 | 413,696 | I/O configuration; "IO hash" from the pfg log sits at +0x348 |
   | `CORE` | 0x0CF000 | 122,880 | fabric; "Design hash" at +0x1E0 |
 
-  Each section's first two 4 KiB blocks end in a CRC-32 (MSB first, poly
-  0x04C11DB7, init and xorout 0xFFFFFFFF, i.e. CRC-32/BZIP2) over
-  `[block, block+0xFFC)`. The pfg log's two "Keyed hash" values are at
+  Each section's first two 4 KiB blocks end in a CRC-32/BZIP2 (MSB-first
+  poly 0x04C11DB7, init and xorout 0xFFFFFFFF) over `[block,
+  block+0xFFC)`, stored as a little-endian word [obs, phase 2]. The pfg log's two "Keyed hash" values are at
   +0xBB0 of `IO` and `CORE`. Which bytes the IO/design hashes cover is
   [unk]: plain SHA-256 of the section, of the `.sof` image and of 4 KiB
   sub-ranges don't match. The 19.75 MB image shrinks to 120 KB of `CORE`,
@@ -315,6 +315,549 @@ are from blinky (`/tmp/agilex5-re/pfg`, not committed).
   on more than the section count is [unk].
 - `-o sign_later=ON` produces a byte-identical `.rbf`: the default
   output already has no owner signature on the design sections [obs].
+
+### (g) Phase 2: `.sof` integrity and the sector image
+
+`tools/sof.py` reads, edits and re-signs a `.sof`; `tools/pbraw.py` dumps
+any protobuf (`sof_meta.pb`, the `.sof` 0x36 record) without a schema.
+
+- **The `.sof` has two integrity values, and `quartus_pfg` checks both**
+  [obs]. Changing one byte anywhere gives `Error (19192): ... The SOF file
+  content is corrupted`.
+  - Record 0x08 is a **CRC-16/X-25** (reflected poly 0x8408, init and
+    xorout 0xFFFF), little endian, over every byte before its own data
+    (`PGM_COMMON::calculate_sof_crc16` in `libpgm_common.so`).
+  - Record 0x41 is 8 zero bytes and an **HMAC-SHA256** over every byte
+    before the HMAC itself (`OSTREAM_HMAC_CRC_TRANSPORT` in
+    `qcore/linux64/libpgm_pof.so`). The key is `HMAC_KEY_1` XOR a 32-byte
+    mask that `HMAC_TRANSPORT`'s constructor stores. It is Altera's, so it
+    isn't committed: `sof.py key` derives it from the local install into
+    `specimens/`.
+  - With both recomputed, `quartus_pfg` turns a hand-edited `.sof` into an
+    `.rbf` in about 20 s. A flipped image bit becomes a changed `.rbf`
+    with no fitter run, so the `.sof` → `.rbf` mapping (Plan step 2) can
+    be measured bit by bit. A re-signed but unedited `.sof` gives a
+    byte-identical `.rbf`, so pfg output is deterministic [obs].
+- **Image layout** [obs, `sof_meta.pb` field 3 against the blinky image]:
+  the 19,754,724-byte image is 7 programming objects in a row, each a
+  header (type 9) followed by data, with sizes from field 9
+  (`pgm_<name>~<n>`, entries `(type, ?, count, width in bits)`):
+
+  | image offset | object | parts |
+  |---|---|---|
+  | 0 | `pgm_perictrl~0` | 902-byte header, type 29: 1,048,576 x 32 bits |
+  | 4,195,206 | `pgm_io96~0` | 5,855-byte header, type 40: 4,096 x 32, type 41: 132,352 x 32 |
+  | 4,746,853 | `pgm_perictrl~2` | as `~0` |
+  | 8,942,059 | `pgm_io96~1` | as `~0` |
+  | 9,493,706 | `pgm_perictrl~1` | 2,658-byte header, type 29 |
+  | 13,690,668 | `pgm_sectorbnxplv~0` | 412-byte header, **type 0 (CRAM): 4,704 frames x 4,320 bits**, type 1: 24,576 x 160 bits |
+  | 16,722,760 | `pgm_sectorbnxplv~1` | 284-byte header, type 0, type 1 |
+
+  So the A5EB013B fabric is **two sectors of type `sectorbnxplv`**, which
+  matches pfg's "Regular SEU info => 2 sector(s)". Each sector's CRAM is
+  4,704 frames of 4,320 bits (540 bytes); `sof_meta.pb` field 4 builds it
+  as `sectorbnxplv_CRAM` = 48 x `_frames` = 48 x 98 x `_dr` (4,320 bits).
+  Which of the two `perictrl`/`io96` copies is which instance is [inf]
+  from the header sizes. Type 1 (160-bit words) is all zero in blinky
+  (memory contents, presumably) [inf].
+- **The CRAM is highly regular** [obs]: sector 0 of blinky has 1,549,318
+  bits set but only 55 distinct frames, 945 of them identical. Set bits
+  repeat every 16 bytes (`ff` at byte 0, 14, 16, 30, …), so most of them
+  are default values, not design bits [inf].
+
+#### CORE section: 2D compression
+
+`python3 -I tools/core_decode.py decode x.rbf out.bin` rebuilds both
+sectors' CRAM (2 x 4,704 x 540 bytes) from the `CORE` section; `verify
+x.rbf x.sof` compares it with the `.sof` image. The encoder is
+`FBGEN_KM_DC_THREAD::compress` and `FBGEN_ND_2D_ENGINE` in
+`quartus/linux64/libpgm_fbgen.so` (decompiled with rz-ghidra);
+`final_2d_compression` in `libpgm_bitasm.so` only decides whether to use it.
+
+- **Pages and streams** [obs]: the per-entry word of the SHA-384 chain
+  tables (g2) is the stream id: 0 = sector 0, 1 = sector 1, 2 and
+  0x80000002 shared pages, 4 = the next chain table, inserted after the
+  78th entry. Pages of the two streams alternate once both are present.
+  Per stream, in page order: lib pages (count in the `0x15 (n, stream, 4)`
+  record of the action list at +0x6000), a 256-entry byte table, a page
+  holding a deflated 482,784-byte block that is all zero in every specimen,
+  a second byte table, the BBM page, then one raw-deflate frame stream
+  (`0x17 (n, 0x810, …)` gives the page count of both). The byte tables
+  and the zero block don't take part in CRAM decoding [obs]; what they are
+  for is [unk].
+- **BBM page** [obs]: 15 words `(id, width/16 bits, 98, 0)`, a u16, then
+  48 rows of `u16 0` and 60 nibbles, low nibble first. Row 0 is the IP id
+  of each of the 60 columns; rows 1..47 hold one code per column for one
+  98-frame group, in the order the groups are stored. Widths: id 1 and 2 =
+  10 bytes, 3 = 24, 4 and 5 = 16, 6 and 15 = 8. The 60 columns add up to
+  a **656-byte physical frame**.
+- **Frame stream** [obs]: one packet per frame, `04 00 a4 00`, 4 zero
+  bytes, then the literal columns (codes 0 and ≥ 8) in column order, each
+  as stored in the physical frame. Groups go 0, 2, 3, …, 47: **group 1
+  (frames 98–195) is never stored**. Randomising it gives a byte-identical
+  frame stream, so pfg drops it.
+- **Codes** [obs from the decompile; each one checked against specimens]:
+  0 literal; 1 all zero; 2..7 copy of lib `code-2` for that id; 8 and 9
+  literal XOR frame `f-18` of the same group, for frames 26..97, on the
+  bytes whose 2-bit class is 1 or 2 (`get_row_history_iprow_data`); 10+k
+  literal XOR lib k. The class bytes, measured on the random specimen:
+  id 1: 8–9 / 6–7, id 2: 0–1 / 2–3, id 3: 10–11 / 12–13, id 4: 4–5 / 6–7.
+  Ids 5, 6 and 15 never got codes 2..15 here, and whether they can is [unk].
+- **Libs** [obs]: only ids 1..4 have them. The `0x1f` action record
+  (`stream, 0x01260000, 0x0372024c, 0x436, …` in blinky) holds each id's
+  lib offset in 8-byte units (0, 0x126, 0x24c, 0x372, end 0x436). Each lib
+  is 98 frames of the id's physical bytes at a stride rounded up to 4
+  (under 12 bytes) or 8: blinky has 2, 2, 1 and 1 libs. The libs are
+  extracted from both sectors together (editing one sector changes both
+  streams) and stored once per stream.
+- **Physical frame ↔ dr** [obs, fitted bit by bit on a random `.sof`,
+  then checked]: read the dr from bit 4,319 down to 0 into physical bits
+  0, 1, … (LSB first). Each of the 253 `s4` groups that `sof_meta.pb`
+  lists at bit g is stored as 12 bits: `g+5, g+1, g+4, g`, then the
+  nibbles of the pairs `(g+3, g+7)` and `(g+2, g+6)`. A nibble is `00ab`,
+  or has its bit 0 set (`1001`, `1101`, `1011`, …) when exactly one of a,
+  b is 1. Seven dr ranges (256–275, 1664–1675, 2080–2099, 2496–2515,
+  3392–3403, 3808–3827, 4192–4215; 128 bits) have no physical bit, and
+  flipping them leaves the stream unchanged. The 4-bit groups at 4264, 3488
+  and 1760 become `pad pad b+2 b+3 pad pad b b+1`. 32 zero bits sit at
+  physical bit 2528 (inside the id 6 column).
+- **The S4 flag is the one gap** [unk]: which bit of the pair a flagged
+  nibble stands for depends on a fixed per-(frame, nibble) polarity table.
+  It is identical in two different random specimens. When the flag fires
+  is [unk] too: it isn't explained by any single dr bit within ±300 frames
+  of either sector (`fill_core_frame_data` takes it from `S4_SII_BIT`
+  lists, which `BITASM_CRAM_REPAIRER` supplies). The decoder reads a
+  flagged nibble as (1, 0) unless it is `1100`/`1110` (bits 0, 1
+  [, 2] set), and that is right for 97% of the flagged nibbles in the
+  random specimen.
+- **Verification** [obs] (group 1 and the 128 dropped bits excluded):
+  blinky decodes exactly, including 6 flagged nibbles. So do a frame of
+  `0x5a` in sector 0 and one in sector 1. 300 random bit flips per sector
+  leave 1 frame with 2 wrong bits, and 40 random frames plus 100 flips per
+  sector leave 3 frames wrong. Both residues are flagged nibbles of the
+  other polarity. An all-random `.sof` leaves 165 frames per sector wrong,
+  all in flagged nibbles; every other physical bit matches.
+  `core_decode.py reencode` rebuilds pfg's inflated packet streams
+  byte for byte from the decoded physical frames, BBM and libs.
+- **Not yet an encoder** [unk]: the deflate itself is solved [obs]:
+  `zlib.compressobj(9, DEFLATED, -13, 8, Z_FIXED)` recompresses blinky's two
+  CORE frame streams byte for byte (found by the IO work; without `Z_FIXED`
+  no zlib setting matches). The encoder's lib and code choice
+  (`run_row_target`, `update_with_libs`, `run_combined_target`) isn't
+  reimplemented. Whether the SDM accepts an all-literal stream (every code
+  0, plain `00ab` nibbles) is the obvious first board test.
+
+#### IO section
+
+`python3 -I tools/io_decode.py decode x.rbf out.pkl` rebuilds the periphery
+parts of the image (perictrl headers and data, io96 headers, t40, t41) from
+the `IO` section, with a mask of the bits it carries. `verify x.rbf x.sof`
+compares them with the `.sof`. `encode x.sof ref.rbf [x.rbf]` goes the other
+way: it builds the six design streams from the `.sof` image and checks them,
+inflated and deflated, against `x.rbf`. `layout x.rbf` prints the page map.
+Specimens: blinky, fz0, a pattern `.sof` (every data word = part tag and word
+index), 25 `.sof` files with random headers, and one with every IO part
+random (`/tmp/a5p2/io-re/`, not committed).
+
+- **Pages** [obs]: the chain tables (g2) hash 73 pages in blinky. The
+  section is, in page order: header, signature block, chain table; the
+  `enable_pm.fw` module header; `cssm.fw`; an action page; the three
+  perictrl streams; `cssm_reset_release.fw`; `cssm_ux_phy.fw`;
+  `io_config.fw`; an action page; the three io96 streams. Each `.fw` comes
+  from `devices/programmer/firmware/agilex5e.zip:sm4revb/SHA_384/`, copied
+  page for page without its last page (an `MFST` manifest). The module
+  header page is hashed (flag 0x80000002) and the module body is not. The
+  module bodies hold their own deflate streams, which are the same for every
+  design. They are the +0x5000, +0x13000 and +0x25000 streams found
+  earlier. Only the six design streams and the two action pages change with
+  the design. A design that needs more pages gets more chain tables (flag
+  4) inside the t41 stream, as in `CORE`.
+- **Deflate** [obs]: each design stream is a run of flag-0 pages holding one
+  raw-deflate stream. `zlib.compressobj(9, DEFLATED, -13, 8, Z_FIXED)`
+  (level 9, 8 KiB window, fixed Huffman codes) reproduces every one byte for
+  byte in all 29 specimens. The same setting also reproduces both `CORE`
+  frame streams of blinky, so the "not zlib" note in the CORE subsection
+  only applies to the default strategies.
+- **Action pages** [obs]: one `0x17` record per stream. Its word 0 is the
+  stream's page count, and it lists the send targets as 6-word entries
+  with CNOC addresses (perictrl 0x300000 and 0x10300000; io96 0x200000 and
+  0xc200000). Nothing else changes between blinky and the all-random
+  specimen, except that the t41 record grows by 7 zero words when that
+  stream has chain tables inside it [unk].
+- **Commands** [obs]: an inflated stream is a list of 8-byte aligned
+  commands. A word with low byte 0x0c or 0x0d is a control pair
+  (`0x0400000d 0`, `0x3c00000c 0`, `0x00c8000c 0`); what they do is [unk],
+  delays or barriers [inf]. Every other command is a send: `u32 target |
+  flag << 8 | n << 16`, `u32 0`, n words, zero-padded to 8 bytes (one pad
+  word when n is odd). The target is an index into the action record's
+  target list. A send is at most 2,048 bytes.
+- **Packets** [obs]: `[u32 total][u32 0x20][u32 0][u32 count][4 x u32 0]`,
+  then `count` records `[u32 length][u32 index][length - 8 bytes]`.
+- **Streams**, in chain order [obs]:
+
+  | # | content | layout |
+  |---|---|---|
+  | 0 | perictrl0 data | packets `[u32 1][u32 4n]` + `(byte address, byte length, data)` records, each packet followed by `0x0400000d 0 0x3c00000c 0`. A record is cut to fill a packet; a packet closes when fewer than 12 bytes are left |
+  | 1 | perictrl2 header (target 0), perictrl1 header (target 1) | one packet per header, with one record; cut into sends that each start with the byte offset they carry; flag 1 on the last send |
+  | 2 | perictrl0 header | as stream 1 |
+  | 3 | io96_0 and io96_1 headers | one packet per field kind (D, C, B, A) and io96, 10 records each; `0x00c8000c 0` after each |
+  | 4 | t41, both io96 | `[u32 address][data]` sends, io96_0 then io96_1 per block; flag 1 on the last block |
+  | 5 | t40, both io96 | as stream 4 |
+
+- **perictrl headers** [obs]: the record payload is 8 zero bytes, header
+  bytes `[0, len - 24)` in reverse order with each byte bit-reversed, then 2
+  zero bytes. The last 24 bytes of each header (perictrl0/2: 878..901,
+  perictrl1: 2634..2657) are not sent. This mirrored layout is why the
+  first flip experiment looked like "byte x → x + 72": byte x lands at
+  937 − x.
+- **io96 headers** [obs, bit-signature map over 24 random specimens, every
+  bit accounted for]: a header is 10 blocks. Each block starts on a byte
+  and holds bit fields A (800 bits), B (1,472), C (1,472 in blocks 0–7, then
+  744 and 202) and D (1,401; 1,467 in blocks 1 and 5; none in blocks 8 and
+  9). Field k of a kind becomes record k. It is split into 32-bit
+  little-endian words, which go out last word first behind zero padding,
+  in 192-byte payloads (108 for A). The 58 padding bits between blocks are
+  not sent. The 10-block structure suggests 8 byte lanes plus 2 other
+  units [inf].
+- **t40/t41** [obs]: t40 goes to 0x47b000 + offset. t41 `[0, 1024)` goes to
+  address 0 and `[1024, 0x7b400)` to 0x400000 + offset − 1024. The last
+  4 KiB, `[0x80400, 0x81400)`, go to 0x47f000. **t41 `[0x7b400, 0x80400)` is
+  never sent**: t40 covers 0x47b000..0x47efff in its place. Blocks are 2 KiB
+  and are sent even when they're zero.
+- **Not carried at all** [obs, pattern specimen]: perictrl1 and perictrl2
+  data (2 x 4 MiB). Of perictrl0 data, only a fixed list of 521 byte ranges
+  (29,544 bytes, all below 0x210000) is sent. The list is the same for
+  every specimen, and blinky has 11 set bytes outside it. Where the list
+  comes from is [unk]: it isn't in `sof_meta.pb` or stored plainly in the
+  install. For now `encode` reads it from any pfg `.rbf` (`ref.rbf`). Since
+  pfg ignores these bits, they don't matter to the device unless another
+  section carries them [inf].
+- **Verification** [obs]: `verify` finds 0 differing bits on all 29
+  specimens. `encode` rebuilds all six streams, inflated and deflated,
+  byte for byte on all 29. So the IO design streams can be written from a
+  `.sof` image. To assemble a full section, the writer also needs the
+  copied firmware pages, the two action pages (copied, with the page counts
+  patched), and the chain tables, header and hashes from (g2). That
+  assembly isn't written yet.
+- **[unk]**: the source of the perictrl0 register list; the control pairs;
+  why only the perictrl header and t40/t41 sends set flag 1; what the 24
+  dropped perictrl header bytes, the io96 header padding and t41
+  `[0x7b400, 0x80400)` hold, if anything; the t41 action record's extra
+  words.
+
+### (g2) Phase 2: every `.rbf` integrity value is reproducible (Plan step 1)
+
+`python3 -I tools/bitstream.py check x.rbf` recomputes them all; it passes
+on blinky and on pfg's output for edited `.sof` files [obs]. Per design
+section (`IO`, `CORE`), in 4 KiB blocks:
+
+| where | what |
+|---|---|
+| block 0 (+0x000) | section header (TRM table 35); at +0xC0 the SHA-384 of the descriptor block |
+| block 0 +0xBB0 | **keyed hash**: HMAC-SHA256 over `[section, +0xBB0)`. The key is a 32-byte constant in `libpgm_bitasm.so` (`BITASM_COMMON::calculate_keyed_hash`); `bitstream.py key` derives it from the install into `specimens/`, and it isn't committed |
+| block 1 (+0x1000) | SHA-384 of block 0 at +0; the place a signature goes [inf] |
+| block 2 (+0x2000) | descriptor: `u32 1, u32 0x488, u32 count (22 in CORE)`, then per data block `u32 flags/route` + SHA-384 of the 4 KiB block |
+| end of blocks 0 and 1 | CRC-32/BZIP2, see (f) |
+
+- The "IO hash" (`IO` +0x348, `CORE` +0x234) and "Design hash" (`CORE`
+  +0x1E0) are **not computed by pfg**: they come from the assembler's
+  `.sof`, the IO hash as a hex string in the OPTIONS record (field 1.20)
+  and the design hash in record 0x36 field 2.10 [obs]. The IO hash in
+  `CORE` equalling the one in `IO` presumably ties a core image to its
+  periphery image [inf]. Whether the SDM checks either against the data
+  is [unk], and needs the board.
+- So an open writer can produce every hash and CRC itself. Only the
+  descriptor's per-entry flag word (0, 1, 0x80000002, …) is [unk] as to
+  meaning; it can be copied by position for now.
+
+### (h) Phase 2: Quartus's own configuration model is scriptable
+
+These remove most of the need for fit-based fuzzing. Commands and argument
+forms were recovered from the binaries, since `-help` prints nothing.
+
+- **`asm2`, the assembler's Tcl package** [obs]. Run `quartus_asm -t
+  script.tcl` (not `quartus_sh`: under `quartus_sh`, `load_devices`
+  fails), then `load_package asm2; load_devices`. No licence is needed.
+  - `open_sof f.sof` returns a handle; `write_sof $h out.sof` writes it
+    back in about 1.2 s. An unmodified round trip has a byte-identical
+    image.
+  - `get_block_types sm4revb` lists 26 block types.
+  - `get_uids sm4revb <type>` lists instances, 11,549 in all: 2,392
+    `cw_la_lab`, 2,392 `cw_ml_mlab`, 366 `cw_mm_m20k`, 192 `cw_dssm`,
+    4,992 `cw_rt_lab_base`, 768 `cw_rt_m20k_dsp_base`, 104 + 104
+    `cw_rt_vio_{lab,mlab}_base`, 96 `cw_rt_hiol_base`, 5 `hviowr`,
+    2 `io96`, and clock blocks (`cw_cc_*`). Instance names are
+    `<type>_r<row>_c<col>`.
+  - Each block type has a fixed list of named configuration bits
+    (`get_bit_names sm4revb <type>`; 1,165 for `cw_la_lab`) and attributes
+    (`get_attribute_names`; 1,085), with `get_attribute_values` and
+    `get_bit_names_for_attribute`. A LAB is 10 ALMs
+    (`x{top,bot}half/xale0..4`); `lut_mask` is `rb1lut[]` there.
+  - `get_bit $h <uid> <bit>` and `set_bit $h <uid> <bit> <0|1>` read and
+    write single named bits, and `get_attribute`/`set_attribute` do the
+    same for attributes. So **set a named bit, `write_sof`, diff the
+    image** maps it to a CRAM address with no fitter run. Example:
+    `cw_la_lab_r50_c62 xtophalf/xale0/xcw_la_le_lut/rb1lut[0]` is sector 1,
+    frame 4605, byte 14, bit 7.
+  - `get_max_cram_badd 0` / `get_max_cram_bdata 0` = 4704 / 4320, which
+    matches the `.sof` sector geometry.
+  - `get_cram_bitname_by_address sm4revb 0 <0|1> <a> <b>` names a CRAM bit,
+    e.g. `0 0 7 2208` is `xtophalf/xale4/xcw_ml_le_lut/rb1lut[16]`. But
+    `<a>`/`<b>` are not plain (frame, bit): frame 4605 fails `data <
+    data_width`. Its axes are [unk].
+  - `set_bit_routing`/`get_bit_routing $h <re_uid> <signal>` set routing
+    by routing-element id. `dump_re_network` needs an open project
+    (`hdb_mgr`). Both are untested [unk].
+- **`Bcm_device`, the block configuration model** [obs]. `load
+  quartus/linux64/libddb_dbcm_tcl.so Bcm_device` in `quartus_sh`, then
+  `read_bcm_device -device sm4revb; create_bcm_chip`. This is the
+  decrypted content of `bcm2bits_db`, one level up: block intents
+  (`cw_la_lab` → `cw_la_halflab` → `cw_la_ale` → `cw_la_le_lut`, …),
+  attributes with type and legal settings (`lut_mask` DIRECT, size 64;
+  `hipi_clken` CUSTOM {TIE_OFF REG_PATH COMB_PATH}), and setting → named
+  bit values (`get_setting_bit_values -bcm ce_la_lcb_adder -attribute
+  hipi_clken -setting REG_PATH` = `0 1` for bits `rclken rntot`). Routing
+  tiles (`cw_rt_lab_base`) carry mux attributes such as
+  `ifdim_col/xfdim_ale0/xfdim_0/sel` ∈ {MUXIN0_ … MUXIN7_, STITCH,
+  MUX_DIS}. Which wire drives each MUXIN is the routing graph, still [unk].
+- **Floorplan** [obs]: `dump_uid_floorplan -device sm4revb -output_file f`
+  (Bcm_device) gives every instance its fitter coordinates, saved as
+  [`db/sm4revb/floorplan.tsv`](db/sm4revb/floorplan.tsv) (11,408
+  instances). `<type>_r<y>_c<x>` is X/Y in fitter terms: `cw_la_lab_r48_c120`
+  is `LAB_X120_Y48`, where `designs/fz` put its LUTs. There are 52 LAB
+  columns, each with an MLAB column at X+1, and 2,340 non-spare LABs and
+  MLABs.
+- **Database files** (committed, derived from the dumps below):
+  `db/sm4revb/bcm_types.json` (671 BCM types: children by instance name,
+  CUSTOM attribute names, DIRECT attribute widths) and
+  `db/sm4revb/bcm_settings.tsv` (21,346 `intent, attribute, setting, bits,
+  values` rows: every CUSTOM setting that drives bits).
+- **Every CUSTOM attribute's setting → bit values** [obs]:
+  `tools/bcm/settings.tcl` walks all 670 BCM intents and writes 196,315
+  `(intent, attribute, setting, bits, values)` rows. Routing and clock
+  muxes are one-hot plus an enable bit; for example `ce_rt_edim_clkmux sel
+  = CLK_IN3_` is `cram_off_hg=1, cram_hg[3]=1`, other `cram_hg` 0, and
+  `MUX_DIS` is all zero. DIRECT attributes (`lut_mask`, memory-controller
+  fields) are plain bit vectors.
+- **Named bit → CRAM address maps, from Quartus's own assembler** [obs].
+  `tools/bitmap/run.sh <base.sof> <outdir> <type…>` runs
+  `bitmap.tcl` under `quartus_asm`. It gives every (instance, bit) pair an
+  id, writes 2 × ⌈log2 ids⌉ `.sof` files, each flipping the pairs whose id
+  has bit k set (or clear), and `bitmap.py` reads every changed image bit's
+  id back. A CRAM bit hit by more than one pair is reported as a clash.
+  `pack.py` stores one relative layout plus a per-instance anchor for each
+  image part the instance touches in
+  [`db/sm4revb/bits/`](db/sm4revb/bits/) (format:
+  [docs/db-format.md](docs/db-format.md)). **Every block type has
+  exactly one layout.
+
+  | type | instances | bits/instance | mapped | layouts | where |
+  |---|---|---|---|---|---|
+  | `cw_la_lab` | 2,340 (spare rows skipped) | 1,165 | 1,140 (2,667,600 pairs; 7,020 clash bits) | **1** | CRAM, 94 frames x 16 bdata |
+  | `cw_ml_mlab` | 2,340 | 1,206 | 1,148 (2,686,320 pairs; 14,040 clash bits) | **1** | CRAM, 94 x 16, same row frames as LABs |
+  | `hviowr` | 5 | 5,927 | 4,748 | 1 | `perictrl{0,1,2}` object headers |
+  | `cw_rt_lab_base` (routing tile) | 4,888 | 4,398 | 4,394, by extrapolation from rows 5, 6, 7, 27, 28, 50, 51 (728 instances, 3,201,744 pairs) | **1** | CRAM, 94 x 48 |
+  | clock network (`cw_cc_*`, 13 types), `cw_vr_leaf_ctrl_c_bf` | 2–84 each | 25–480 | all | 1–4 per type | CRAM |
+  | `cw_rt_vio_{lab,mlab}_base` | 104 each | 142 | 142 | 1 | CRAM |
+  | `cw_rt_m20k_dsp_base` (M20K/DSP routing) | 752 | 5,831 | all, extrapolated from rows 5, 6, 27, 51 | 1 | CRAM, 94 x 64 |
+  | `cw_dssm` (DSP) | 188 | 521 | all | 1 | CRAM |
+  | `sm_hssi_top` | 1 | 186,662 | all | 1 | `perictrl0` data region |
+  | `cw_mm_m20k` (M20K) | 358 | 20,588 | all, extrapolated from rows 5, 6, 27, 43, 51 | 1 | configuration in CRAM, 20,480 content bits in the sector's `ram` part |
+  | `io96` | 2 | 4,312,033 | 4,303,895 (`pio_0_0` brute-forced; `pio_1_0` placed by probe and checked on 2,000 random bits, 0 wrong) | 1 | `io96_*` `hdr`/`t40`/`t41` (PHY, hard memory controller, IOSSM memory init) |
+
+  The LAB anchors decompose exactly [obs]: frame = 200 + 98·(Y − 6),
+  so one LAB row per 98-frame group (`sof_meta`'s `_frames` unit), and
+  bdata depends only on X, at 64 bdata per column. Sector 0 holds X ≤ 59 with
+  bdata growing toward X = 1 (4176); sector 1 holds X ≥ 62 mirrored (X =
+  62 → 112, X = 120 → 4176). The two sectors are mirror images about the
+  centre seam, but the LAB's internal layout is the same in both.
+- **Extrapolation, validated** [obs]: brute force costs about 1 s per
+  million `set_bit` calls per image, so a 21.5 M-pair type (`cw_rt_lab_base`)
+  would take 5 h. `extrapolate.py` takes the layouts from a fully mapped
+  subset of rows. A probe maps 4 reference bits for every instance
+  (`bitmap.tcl … - bits.txt`, under 3 min). Each instance gets the layout
+  whose reference offsets match after a single shift. Checked on LABs: 3
+  rows (156 instances) plus the probe predict **all 2,667,600 LAB bit
+  positions of the full map exactly, 0 wrong**.
+- **Routing tiles** [obs]: the extrapolated `cw_rt_lab_base` map predicts
+  **all 659,100 bit positions of 150 random tiles outside the subset rows**
+  (brute-forced independently), 0 wrong. Tile row Y = 5 sits in 98-frame
+  group 0 (frame 4) and Y = 6..51 in groups 2..47 (frame 200 + 98·(Y − 6),
+  as for LABs). Group 1 holds no routing tiles, consistent with pfg never
+  storing it. With LAB, MLAB and routing tiles, **99.87 % of the set CRAM
+  bits in the fz0 image are named bits** (1,547,304 of 1,549,318 in
+  sector 0). The remaining 38–44 set bits per row group are [unk] until the
+  M20K/DSP types are mapped.
+- **Aliased bits** [obs]: some named bits share one image bit with others
+  (MLAB `r_nram`, `r_n32mode`, `rmdl_init`, all `remulation` bits), so the
+  binary code drops them as clashes. `single.tcl`/`single.py` flip them one
+  at a time on one instance, and `aliases.py` adds them to the layout,
+  checked on a second instance in the other sector. MLAB 58 → 6 physical
+  bits, LAB 25, routing tiles 4, `cw_cc_ts_base*` 18 each: all at the
+  predicted offsets on the second instance.
+- **Coverage** [obs]: `tools/bitmap/coverage.py` marks every named bit
+  position in the image. On fz0, **every set bit in both sectors' CRAM and
+  headers is a named bit** (1,549,318 + 1,549,288). On blinky 4 set bits
+  were left, all MLAB RAM-mode aliases that are now mapped.
+- **Cross-checked against the fitter** [obs]: the 256 CRAM bits that the
+  ECO runs changed (fz's four LUT masks, all-0 against all-1) are, by the
+  asm2 map, exactly `cw_la_lab_r48_c120` `xtophalf/xale{0..3}/xcw_la_le_lut`
+  `rb{0,1}lut[*]`, polarity "equal". So `rb*lut` holds the inverted LUT mask,
+  and the fitter's `LABCELL_X120_Y48_N0/6/12/18` are ALMs 0–3 of the top
+  half.
+- **LUT mask bit order, through the fitter** [obs, ECO `-mask` convention]: six more ECO runs gave
+  all four LUTs mask `Σ{2^i : bit k of i}` (k = 0..5). Each changed CRAM
+  bit's on/off pattern over the runs is its mask index. In all four ALMs,
+  **`lut_mask[i]` is `rb{i >> 5}lut[31 − (i & 31)]`, stored inverted**. So
+  index 0 is `rb0lut[31]`, 31 is `rb0lut[0]`, 32 is `rb1lut[31]` and 63 is
+  `rb1lut[0]`. asm2's `get_bit_names_for_attribute … lut_mask` lists
+  `rb1lut[31..0], rb0lut[31..0]`, which is mask bits 32..63 then 0..31 in
+  that order. The fitter could permute LUT inputs, but these four
+  identically connected LUTs all came out with the same identity-like map
+  [inf: no permutation here].
+- **Attribute decode from the database alone agrees with Quartus's reader**
+  [obs]. `tools/bitmap/attrs.py` reads an instance's named bits from a
+  `.sof` through `db/sm4revb/bits` and picks the matching setting from the
+  BCM settings dump. For `cw_la_lab_r48_c120` (used by fz) and
+  `cw_la_lab_r10_c1` (unused) in fz0, **all 315 decodable CUSTOM attributes
+  equal asm2's `get_attribute`**. Another 83 are `<VIRTUAL>` in Quartus, and
+  25 DFT/emulation attributes can't be decoded because their bits are among
+  the 25 unmapped ones. Asm2's DIRECT `lut_mask` is the raw bits,
+  `lut_mask[j] = rb{j>>5}lut[j & 31]` (10/10 ALMs). So the WYSIWYG/ECO mask
+  is `W[i] = ¬BCM[i XOR 31]`: inputs A–E are inverted in silicon, and the
+  stored value too [inf]. fz0's original LUTs don't decode to their
+  WYSIWYG masks (fitter input permutation [inf]); the ECO `-mask` values
+  land as given.
+  On blinky, a different fit, the database finds exactly the instances the
+  design uses: `cw_la_lab_r48_c109` plus MLABs `r47_c108` and `r48_c108`,
+  the only ones differing from the unused state. Decoded attributes equal
+  Quartus's on all 315 decodable for the LAB and all 318 for MLAB
+  `r47_c108` [obs]. The third instance's query hit an asm2 internal error
+  (`asm2_state.cpp:347`), so it is unchecked.
+- **`tools/a5db` (Rust): read and write attributes without Quartus**
+  [obs]. `a5db attrs|bits <db> <sof> <uid>` decodes; `a5db set <db> in.sof
+  out.sof <hmac.key> <uid> attr=value…` writes CUSTOM settings and DIRECT
+  bit strings (`db/sm4revb/direct.tsv`; LAB/MLAB `lut_mask` so far) and
+  re-signs the `.sof`.
+  - Decode: on fz0's `cw_la_lab_r48_c120`, 325 attributes equal asm2's
+    `get_attribute` (315 CUSTOM, 10 `lut_mask`) and none differ, in 0.8 s.
+  - Encode: setting a 64-bit `lut_mask` plus `register_comb=REGIN`,
+    `reg_input=LUTOUT_6LUT`, `ce_sel=CE` and `hipi_clken=REG_PATH` on
+    `cw_la_lab_r10_c1` gives **an image byte-identical to the one asm2's own
+    `set_attribute` + `write_sof` produces** (13 bytes changed in both).
+    asm2 reads all five values back, and pfg turns it into an `.rbf` that
+    `bitstream.py check` passes.
+- **Quartus Pro ECO works for fuzzing** [obs]. `quartus_fit <rev> --eco
+  eco.tcl` loads the post-fit snapshot (about 4 min) and runs ECO commands
+  (`modify_lutmask`, `place_node`, `make_connection`,
+  `get_node_location`). It commits with "Successfully committed final
+  database", then `quartus_asm` runs (`tools/eco.sh`). On `designs/fz`
+  (HVIO pins only: fit 20 min, compared with 74 min for blinky with its
+  IO96 pin), the four WYSIWYG LUTs sit at
+  `LABCELL_X120_Y48_N0/N6/N12/N18`. Their all-zero and all-one masks
+  differ in exactly 256 CRAM bits (sector 1, frames 4374–4409, bdata
+  4176–4183), and **LUT mask bits are stored inverted** (a mask of all
+  ones gives all zeros) [obs].
+
+### (i) Phase 2: routing graph
+
+`tools/rgdump` gets sm4revb's routing graph from Quartus's own API, so there
+is no udm decoder to write. `librgdump.so` (C++, built against the install
+by `build.sh`) is loaded into `quartus_fit -t` with Tcl `load`. It walks the
+graph that DYGR builds from `sm4revb.udm` and asks the assembler's edge API
+how each edge is configured.
+
+- **Entry point** [obs]: `load_package advanced_device; load_device -part
+  A5EB013BB23BE4SCS; load_die_info` loads the route info. No project or
+  licence is needed, and it runs under `quartus_fit` only (`quartus_sh` lacks
+  the package). The shim then calls exported C++ functions:
+  - `DMGR_UTILITY::get_current_device()->get_die_info()` gives the
+    `DYGR_DIE_INFO`.
+  - `DYGR_ROUTE_INFO::gids()` iterates every routing node. Router gids are
+    `0x80000000 + n` (`DYGR_DIE_INFO_BODY::is_router_id`), and gids below
+    that are placement sites. The iterator is a pimpl whose vtable slots
+    are `[2]` deref, `[3]` `operator!=`, `[4]` `++` and `[6]` `set_to_end`.
+  - `get_fanout`/`get_fanin` return edges, and
+    `get_element_string_name` returns the node name (`H0:X120Y48Z0I27`).
+  - `DYGR_QDL::EMULATOR::obtain(dev)->get_edge_api(src, dst)` gives the
+    block uid (`get_uid`) and `get_mux_config` gives the mux instance and
+    input, e.g. `cw_rt_lab_base_r48_c120`, `ileim_col/xleim_ale0/xleim_4`,
+    `muxin[6]`. `CONFIG_DATA` starts with `{u64, std::string mux,
+    std::string input}`; the rest is [unk]. The uid is `NULL` until
+    `Bcm_device`'s `read_bcm_device -device sm4revb; create_bcm_chip` has
+    run in the same process.
+- **Size** [obs]: **7,616,798 nodes and 26,327,684 edges**, in 1,066
+  element types. The dump takes 13 min (2 min without the edge
+  configurations) and two dumps are byte-identical. 22,718,018 edges carry
+  a mux setting: 12,849 distinct (mux, input) pairs over 6,186 blocks.
+  - Every edge into a fabric wire carries a setting: H0–H12, V1–V8, LL,
+    LEIM and LEIM_WB, 21.2 M edges.
+  - 3,609,666 edges have no edge API: all 568,516 LEIM → LAB_RE pin edges
+    (hardwired, single fanin) and the internals of DFT, HSSI, HVIO and IO
+    blocks.
+  - Most nodes are not fabric routing: DFT scan chains, IJTAG, HSSI and
+    PCIe internals, IO96 (types `SM_HSSI_*`, `IJTAG_*`, `HVIOWR_*`, …).
+- **Against the fitter's resource count** [obs]: 33 of the 34 classes in
+  fz0's "Routing Usage Summary" have a DYGR type of the same count:
+  - R0/R1/R2/R4/R6/R12 = H0/H1/H2/H4/H6/H12 (401,380 / 229,360 / 115,620 /
+    117,500 / 118,440 / 34,404).
+  - C1/C4/C8 = V1/V4/V8 (234,240 / 229,360 / 22,936).
+  - Block input muxes = LEIM (500,456), block input mux wrapbacks = LEIM_WB
+    (43,616), block interconnects = LL (526,400).
+  - HIO/VIO buffers = HIOB/VIOB, programmable inverts = RPI/RPII (57,078),
+    redundancy muxes = REDMUX, row clock tap-offs = ROWCLK_TAPOFF, and the
+    small `DCM_mux`, `DELAY_CHAIN`, `Switchbox_clock_mux`,
+    `Vertical_seam_tap_mux`, `IO75XDDRFMXCKTREE_*` and `IOFBRADAPT_*_BUF_*`
+    classes.
+
+  These 33 add up to 2,766,802. The remaining 526,400 is exactly "Direct
+  links", which has no DYGR type of its own (LL already accounts for
+  block interconnects).
+- **Names** [obs]: the fitter's `R0_X120_Y48_N0_I27` is DYGR's
+  `H0:X120Y48Z0I27`. Rn = Hn, Cn = Vn, `LOCAL_INTERCONNECT` = LL,
+  `BLOCK_INPUT_MUX_PASSTHROUGH` = LEIM, and `LAB_RE` is the same in both.
+- **Against Quartus's own route** [obs]: `report_routing -to l[k].lut
+  -to_port DATAA..DATAF` (ports are upper case) in `quartus_fit fz --eco`
+  on a copy of fz0 prints the six LUT input routes of `l[0]`. All 22 hops
+  are edges of the graph (`rgcheck.py`). Each of the 16 configured hops
+  predicts `<uid> <mux>/sel`, and fz0's `.sof` has exactly that value in
+  all 16 (asm2 `get_attribute`, `rtattrs.tcl`), for example
+  `ibdim_col/xbdim_ale3/xbdim_8/sel = MUXIN3_` for `LAB_RE I103 → R0 I27`.
+  Of the 68 `sel` attributes the `.sof` sets in `cw_rt_lab_base_r48_c120`
+  (not `MUX_DIS`), 60 are the setting of some graph edge (`rgcover.py`).
+  The other 8 are clock gates tied to `VCC` and two `REGSCAN` reset
+  selections, which are not edge choices [inf].
+- **Setting rule** [obs on 60 settings in one tile, inf in general]:
+  input `name[k]` sets `sel = NAMEk_` (`muxin[6]` → `MUXIN6_`, `clk_in[2]`
+  → `CLK_IN2_`), and `stitch` sets `STITCH`. **The fanin order is not the
+  MUXIN index**: `LEIM I4`'s second fanin `LL I1` is `muxin[6]`. So the
+  edge API is needed and the fanin position can't stand in for it. 768
+  configurations name sub-muxes too (`…;s2 clkin[0];s1 clk[0]`, clock
+  muxes); how they map to attributes is not checked.
+
+Regenerate (outputs go to `specimens/rg/`, which is git-ignored):
+
+```
+tools/rgdump/rgdump.sh                    # -> specimens/rg/full: nodes.tsv, edges.bin, uids.txt, configs.txt, types.tsv
+# the fz0 routes: copy specimens/runs/fz0, then quartus_fit fz --eco with
+#   report_routing -to {l[0].lut} -to_port DATAA   (route printed as Info lines)
+quartus_asm -t tools/rgdump/rtattrs.tcl fz.sof cw_rt_lab_base_r48_c120 > attrs.txt
+python3 tools/rgdump/rgcheck.py specimens/rg/full eco.log attrs.txt
+python3 tools/rgdump/rgcover.py specimens/rg/full attrs.txt cw_rt_lab_base_r48_c120
+```
+
+`edges.bin` holds, per node, `u32 src, u32 n` and then `n` times `u32 dst,
+u32 uid id, u32 config id`, with gids minus `0x80000000`. Line k of
+`uids.txt`/`configs.txt` is id k, and id 0 means none.
+
+[unk]:
+- Which resource "Direct links" (526,400) is.
+- Edge delays and timing (`DYGR_ROUTE_TIMING_INFO`, not dumped).
+- The meaning of `CONFIG_DATA`'s first word and tail.
+- The attribute mapping of sub-mux configurations.
+- Only one tile and one design were checked against a bitstream; checking
+  V/H wires that cross tiles and other tile types (`cw_rt_m20k_dsp_base`,
+  `cw_rt_hiol_base`, `cw_rt_vio_*`) needs a design that routes through them.
 
 ### quartus_sta fails under chipsmith [obs]
 
@@ -345,6 +888,31 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 2 status** (branch `phase2`):
+
+- Step 1 (container hashes): **done** (g2).
+- Step 2 (design-section payload): `CORE` 2D compression decoded
+  (`tools/core_decode.py`; blinky exact, random images off only in S4-flagged
+  nibbles [unk]); `IO` section decoded and re-encoded byte for byte
+  (`tools/io_decode.py`). Deflate is zlib level 9, window 13, `Z_FIXED`. Still
+  missing: a CORE encoder (lib/code choice, or an all-literal stream the SDM
+  may accept), and assembling a full IO section.
+- Step 3 (routing graph): **done** through Quartus's DYGR API (i): 7.6 M
+  nodes, 26.3 M edges, 22.7 M with their mux setting; checked on fz0's route
+  and `.sof`.
+- Step 4 (config bits): **done** (h): bit maps for all 26 block types in
+  `db/sm4revb/bits` (one layout each, aliases resolved), CUSTOM settings and
+  the BCM type tree in `db/sm4revb`, and `tools/a5db` reads and writes
+  attributes (encode byte-identical to asm2's `set_attribute`). Every set
+  CRAM bit in fz0 is a named bit.
+- Step 5 (fuzzing): replaced by asm2 `set_bit`/`write_sof` diffs; ECO runs
+  through the fitter used as an independent check (LUT bits, mask order).
+
+Next: join the graph's edge settings to the bit maps in `a5db` (route a
+net → bits); a CORE encoder; a full `.rbf` writer (step 6); then nextpnr
+(step 7). Board tests (does the SDM accept an all-literal CORE, do the
+IO/design hashes matter) need the user.
 
 Done in phase 1: licence and first `.sof`/`.rbf`; the v25 reader with
 trace-verified `pkg`, `pad`, `hdr` and `place` schemas; the DE25-Nano pin
