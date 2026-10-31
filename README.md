@@ -602,6 +602,106 @@ forms were recovered from the binaries, since `-help` prints nothing.
   4176–4183), and **LUT mask bits are stored inverted** (a mask of all
   ones gives all zeros) [obs].
 
+### (i) Phase 2: routing graph
+
+`tools/rgdump` gets sm4revb's routing graph from Quartus's own API, so there
+is no udm decoder to write. `librgdump.so` (C++, built against the install
+by `build.sh`) is loaded into `quartus_fit -t` with Tcl `load`. It walks the
+graph that DYGR builds from `sm4revb.udm` and asks the assembler's edge API
+how each edge is configured.
+
+- **Entry point** [obs]: `load_package advanced_device; load_device -part
+  A5EB013BB23BE4SCS; load_die_info` loads the route info. No project or
+  licence is needed, and it runs under `quartus_fit` only (`quartus_sh` lacks
+  the package). The shim then calls exported C++ functions:
+  - `DMGR_UTILITY::get_current_device()->get_die_info()` gives the
+    `DYGR_DIE_INFO`.
+  - `DYGR_ROUTE_INFO::gids()` iterates every routing node. Router gids are
+    `0x80000000 + n` (`DYGR_DIE_INFO_BODY::is_router_id`), and gids below
+    that are placement sites. The iterator is a pimpl whose vtable slots
+    are `[2]` deref, `[3]` `operator!=`, `[4]` `++` and `[6]` `set_to_end`.
+  - `get_fanout`/`get_fanin` return edges, and
+    `get_element_string_name` returns the node name (`H0:X120Y48Z0I27`).
+  - `DYGR_QDL::EMULATOR::obtain(dev)->get_edge_api(src, dst)` gives the
+    block uid (`get_uid`) and `get_mux_config` gives the mux instance and
+    input, e.g. `cw_rt_lab_base_r48_c120`, `ileim_col/xleim_ale0/xleim_4`,
+    `muxin[6]`. `CONFIG_DATA` starts with `{u64, std::string mux,
+    std::string input}`; the rest is [unk]. The uid is `NULL` until
+    `Bcm_device`'s `read_bcm_device -device sm4revb; create_bcm_chip` has
+    run in the same process.
+- **Size** [obs]: **7,616,798 nodes and 26,327,684 edges**, in 1,066
+  element types. The dump takes 13 min (2 min without the edge
+  configurations) and two dumps are byte-identical. 22,718,018 edges carry
+  a mux setting: 12,849 distinct (mux, input) pairs over 6,186 blocks.
+  - Every edge into a fabric wire carries a setting: H0–H12, V1–V8, LL,
+    LEIM and LEIM_WB, 21.2 M edges.
+  - 3,609,666 edges have no edge API: all 568,516 LEIM → LAB_RE pin edges
+    (hardwired, single fanin) and the internals of DFT, HSSI, HVIO and IO
+    blocks.
+  - Most nodes are not fabric routing: DFT scan chains, IJTAG, HSSI and
+    PCIe internals, IO96 (types `SM_HSSI_*`, `IJTAG_*`, `HVIOWR_*`, …).
+- **Against the fitter's resource count** [obs]: 33 of the 34 classes in
+  fz0's "Routing Usage Summary" have a DYGR type of the same count:
+  - R0/R1/R2/R4/R6/R12 = H0/H1/H2/H4/H6/H12 (401,380 / 229,360 / 115,620 /
+    117,500 / 118,440 / 34,404).
+  - C1/C4/C8 = V1/V4/V8 (234,240 / 229,360 / 22,936).
+  - Block input muxes = LEIM (500,456), block input mux wrapbacks = LEIM_WB
+    (43,616), block interconnects = LL (526,400).
+  - HIO/VIO buffers = HIOB/VIOB, programmable inverts = RPI/RPII (57,078),
+    redundancy muxes = REDMUX, row clock tap-offs = ROWCLK_TAPOFF, and the
+    small `DCM_mux`, `DELAY_CHAIN`, `Switchbox_clock_mux`,
+    `Vertical_seam_tap_mux`, `IO75XDDRFMXCKTREE_*` and `IOFBRADAPT_*_BUF_*`
+    classes.
+
+  These 33 add up to 2,766,802. The remaining 526,400 is exactly "Direct
+  links", which has no DYGR type of its own (LL already accounts for
+  block interconnects).
+- **Names** [obs]: the fitter's `R0_X120_Y48_N0_I27` is DYGR's
+  `H0:X120Y48Z0I27`. Rn = Hn, Cn = Vn, `LOCAL_INTERCONNECT` = LL,
+  `BLOCK_INPUT_MUX_PASSTHROUGH` = LEIM, and `LAB_RE` is the same in both.
+- **Against Quartus's own route** [obs]: `report_routing -to l[k].lut
+  -to_port DATAA..DATAF` (ports are upper case) in `quartus_fit fz --eco`
+  on a copy of fz0 prints the six LUT input routes of `l[0]`. All 22 hops
+  are edges of the graph (`rgcheck.py`). Each of the 16 configured hops
+  predicts `<uid> <mux>/sel`, and fz0's `.sof` has exactly that value in
+  all 16 (asm2 `get_attribute`, `rtattrs.tcl`), for example
+  `ibdim_col/xbdim_ale3/xbdim_8/sel = MUXIN3_` for `LAB_RE I103 → R0 I27`.
+  Of the 68 `sel` attributes the `.sof` sets in `cw_rt_lab_base_r48_c120`
+  (not `MUX_DIS`), 60 are the setting of some graph edge (`rgcover.py`).
+  The other 8 are clock gates tied to `VCC` and two `REGSCAN` reset
+  selections, which are not edge choices [inf].
+- **Setting rule** [obs on 60 settings in one tile, inf in general]:
+  input `name[k]` sets `sel = NAMEk_` (`muxin[6]` → `MUXIN6_`, `clk_in[2]`
+  → `CLK_IN2_`), and `stitch` sets `STITCH`. **The fanin order is not the
+  MUXIN index**: `LEIM I4`'s second fanin `LL I1` is `muxin[6]`. So the
+  edge API is needed and the fanin position can't stand in for it. 768
+  configurations name sub-muxes too (`…;s2 clkin[0];s1 clk[0]`, clock
+  muxes); how they map to attributes is not checked.
+
+Regenerate (outputs go to `specimens/rg/`, which is git-ignored):
+
+```
+tools/rgdump/rgdump.sh                    # -> specimens/rg/full: nodes.tsv, edges.bin, uids.txt, configs.txt, types.tsv
+# the fz0 routes: copy specimens/runs/fz0, then quartus_fit fz --eco with
+#   report_routing -to {l[0].lut} -to_port DATAA   (route printed as Info lines)
+quartus_asm -t tools/rgdump/rtattrs.tcl fz.sof cw_rt_lab_base_r48_c120 > attrs.txt
+python3 tools/rgdump/rgcheck.py specimens/rg/full eco.log attrs.txt
+python3 tools/rgdump/rgcover.py specimens/rg/full attrs.txt cw_rt_lab_base_r48_c120
+```
+
+`edges.bin` holds, per node, `u32 src, u32 n` and then `n` times `u32 dst,
+u32 uid id, u32 config id`, with gids minus `0x80000000`. Line k of
+`uids.txt`/`configs.txt` is id k, and id 0 means none.
+
+[unk]:
+- Which resource "Direct links" (526,400) is.
+- Edge delays and timing (`DYGR_ROUTE_TIMING_INFO`, not dumped).
+- The meaning of `CONFIG_DATA`'s first word and tail.
+- The attribute mapping of sub-mux configurations.
+- Only one tile and one design were checked against a bitstream; checking
+  V/H wires that cross tiles and other tile types (`cw_rt_m20k_dsp_base`,
+  `cw_rt_hiol_base`, `cw_rt_vio_*`) needs a design that routes through them.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
