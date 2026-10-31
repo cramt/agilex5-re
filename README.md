@@ -1510,6 +1510,25 @@ critical warning, which a real design should follow.
 - Step 4 (board test): files and steps for the from-scratch blinky ready
   ("Board test"); needs the board.
 
+Open after phase 4 [unk]:
+
+- On the board: whether the from-scratch image configures and blinks, and
+  whether the SDM checks the IO and design hashes ("Board test").
+- Spare-row and redundancy tiles still have no bit maps. They are zero in
+  every image here, so they only matter for a design that uses them.
+- The other 30 DCM P2C muxes follow the rule only by inference. IO96
+  outputs on other lanes, IO96 inputs, HVIO outputs and other I/O
+  standards have no table yet: only V16 in, DF35 and DJ32 out.
+- What the 8 perictrl0 words pfg skips, the sector-header forced bits and
+  record 0x13 mean; OPTIONS is one constant for the default device
+  options.
+- Where Quartus' design hash comes from (a5db uses its own, which pfg
+  accepts).
+
+Next: the board test; pin tables generated from the lane/pin template
+rather than captured one by one; then nextpnr (Plan step 7) writing through
+`a5db blank`, `apply`, `set`, `net` and `rbf`.
+
 **Phase 3 status** (branch `phase3`):
 
 - Step 1 (big tables compressed): **done** (j). `io96` and `sm_hssi_top`
