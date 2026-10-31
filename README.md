@@ -560,6 +560,16 @@ forms were recovered from the binaries, since `-help` prints nothing.
   `rb{0,1}lut[*]`, polarity "equal". So `rb*lut` holds the inverted LUT mask,
   and the fitter's `LABCELL_X120_Y48_N0/6/12/18` are ALMs 0–3 of the top
   half.
+- **LUT mask bit order, through the fitter** [obs]: six more ECO runs gave
+  all four LUTs mask `Σ{2^i : bit k of i}` (k = 0..5). Each changed CRAM
+  bit's on/off pattern over the runs is its mask index. In all four ALMs,
+  **`lut_mask[i]` is `rb{i >> 5}lut[31 − (i & 31)]`, stored inverted**. So
+  index 0 is `rb0lut[31]`, 31 is `rb0lut[0]`, 32 is `rb1lut[31]` and 63 is
+  `rb1lut[0]`. asm2's `get_bit_names_for_attribute … lut_mask` lists
+  `rb1lut[31..0], rb0lut[31..0]`, which is mask bits 32..63 then 0..31 in
+  that order. The fitter could permute LUT inputs, but these four
+  identically connected LUTs all came out with the same identity-like map
+  [inf: no permutation here].
 - **Quartus Pro ECO works for fuzzing** [obs]. `quartus_fit <rev> --eco
   eco.tcl` loads the post-fit snapshot (about 4 min) and runs ECO commands
   (`modify_lutmask`, `place_node`, `make_connection`,
