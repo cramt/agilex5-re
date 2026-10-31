@@ -445,6 +445,104 @@ x.rbf x.sof` compares it with the `.sof` image. The encoder is
   reimplemented. Whether the SDM accepts an all-literal stream (every code
   0, plain `00ab` nibbles) is the obvious first board test.
 
+#### IO section
+
+`python3 -I tools/io_decode.py decode x.rbf out.pkl` rebuilds the periphery
+parts of the image (perictrl headers and data, io96 headers, t40, t41) from
+the `IO` section, with a mask of the bits it carries. `verify x.rbf x.sof`
+compares them with the `.sof`. `encode x.sof ref.rbf [x.rbf]` goes the other
+way: it builds the six design streams from the `.sof` image and checks them,
+inflated and deflated, against `x.rbf`. `layout x.rbf` prints the page map.
+Specimens: blinky, fz0, a pattern `.sof` (every data word = part tag and word
+index), 25 `.sof` files with random headers, and one with every IO part
+random (`/tmp/a5p2/io-re/`, not committed).
+
+- **Pages** [obs]: the chain tables (g2) hash 73 pages in blinky. The
+  section is, in page order: header, signature block, chain table; the
+  `enable_pm.fw` module header; `cssm.fw`; an action page; the three
+  perictrl streams; `cssm_reset_release.fw`; `cssm_ux_phy.fw`;
+  `io_config.fw`; an action page; the three io96 streams. Each `.fw` comes
+  from `devices/programmer/firmware/agilex5e.zip:sm4revb/SHA_384/`, copied
+  page for page without its last page (an `MFST` manifest). The module
+  header page is hashed (flag 0x80000002) and the module body is not. The
+  module bodies hold their own deflate streams, which are the same for every
+  design. They are the +0x5000, +0x13000 and +0x25000 streams found
+  earlier. Only the six design streams and the two action pages change with
+  the design. A design that needs more pages gets more chain tables (flag
+  4) inside the t41 stream, as in `CORE`.
+- **Deflate** [obs]: each design stream is a run of flag-0 pages holding one
+  raw-deflate stream. `zlib.compressobj(9, DEFLATED, -13, 8, Z_FIXED)`
+  (level 9, 8 KiB window, fixed Huffman codes) reproduces every one byte for
+  byte in all 29 specimens. The same setting also reproduces both `CORE`
+  frame streams of blinky, so the "not zlib" note in the CORE subsection
+  only applies to the default strategies.
+- **Action pages** [obs]: one `0x17` record per stream. Its word 0 is the
+  stream's page count, and it lists the send targets as 6-word entries
+  with CNOC addresses (perictrl 0x300000 and 0x10300000; io96 0x200000 and
+  0xc200000). Nothing else changes between blinky and the all-random
+  specimen, except that the t41 record grows by 7 zero words when that
+  stream has chain tables inside it [unk].
+- **Commands** [obs]: an inflated stream is a list of 8-byte aligned
+  commands. A word with low byte 0x0c or 0x0d is a control pair
+  (`0x0400000d 0`, `0x3c00000c 0`, `0x00c8000c 0`); what they do is [unk],
+  delays or barriers [inf]. Every other command is a send: `u32 target |
+  flag << 8 | n << 16`, `u32 0`, n words, zero-padded to 8 bytes (one pad
+  word when n is odd). The target is an index into the action record's
+  target list. A send is at most 2,048 bytes.
+- **Packets** [obs]: `[u32 total][u32 0x20][u32 0][u32 count][4 x u32 0]`,
+  then `count` records `[u32 length][u32 index][length - 8 bytes]`.
+- **Streams**, in chain order [obs]:
+
+  | # | content | layout |
+  |---|---|---|
+  | 0 | perictrl0 data | packets `[u32 1][u32 4n]` + `(byte address, byte length, data)` records, each packet followed by `0x0400000d 0 0x3c00000c 0`. A record is cut to fill a packet; a packet closes when fewer than 12 bytes are left |
+  | 1 | perictrl2 header (target 0), perictrl1 header (target 1) | one packet per header, with one record; cut into sends that each start with the byte offset they carry; flag 1 on the last send |
+  | 2 | perictrl0 header | as stream 1 |
+  | 3 | io96_0 and io96_1 headers | one packet per field kind (D, C, B, A) and io96, 10 records each; `0x00c8000c 0` after each |
+  | 4 | t41, both io96 | `[u32 address][data]` sends, io96_0 then io96_1 per block; flag 1 on the last block |
+  | 5 | t40, both io96 | as stream 4 |
+
+- **perictrl headers** [obs]: the record payload is 8 zero bytes, header
+  bytes `[0, len - 24)` in reverse order with each byte bit-reversed, then 2
+  zero bytes. The last 24 bytes of each header (perictrl0/2: 878..901,
+  perictrl1: 2634..2657) are not sent. This mirrored layout is why the
+  first flip experiment looked like "byte x → x + 72": byte x lands at
+  937 − x.
+- **io96 headers** [obs, bit-signature map over 24 random specimens, every
+  bit accounted for]: a header is 10 blocks. Each block starts on a byte
+  and holds bit fields A (800 bits), B (1,472), C (1,472 in blocks 0–7, then
+  744 and 202) and D (1,401; 1,467 in blocks 1 and 5; none in blocks 8 and
+  9). Field k of a kind becomes record k. It is split into 32-bit
+  little-endian words, which go out last word first behind zero padding,
+  in 192-byte payloads (108 for A). The 58 padding bits between blocks are
+  not sent. The 10-block structure suggests 8 byte lanes plus 2 other
+  units [inf].
+- **t40/t41** [obs]: t40 goes to 0x47b000 + offset. t41 `[0, 1024)` goes to
+  address 0 and `[1024, 0x7b400)` to 0x400000 + offset − 1024. The last
+  4 KiB, `[0x80400, 0x81400)`, go to 0x47f000. **t41 `[0x7b400, 0x80400)` is
+  never sent**: t40 covers 0x47b000..0x47efff in its place. Blocks are 2 KiB
+  and are sent even when they're zero.
+- **Not carried at all** [obs, pattern specimen]: perictrl1 and perictrl2
+  data (2 x 4 MiB). Of perictrl0 data, only a fixed list of 521 byte ranges
+  (29,544 bytes, all below 0x210000) is sent. The list is the same for
+  every specimen, and blinky has 11 set bytes outside it. Where the list
+  comes from is [unk]: it isn't in `sof_meta.pb` or stored plainly in the
+  install. For now `encode` reads it from any pfg `.rbf` (`ref.rbf`). Since
+  pfg ignores these bits, they don't matter to the device unless another
+  section carries them [inf].
+- **Verification** [obs]: `verify` finds 0 differing bits on all 29
+  specimens. `encode` rebuilds all six streams, inflated and deflated,
+  byte for byte on all 29. So the IO design streams can be written from a
+  `.sof` image. To assemble a full section, the writer also needs the
+  copied firmware pages, the two action pages (copied, with the page counts
+  patched), and the chain tables, header and hashes from (g2). That
+  assembly isn't written yet.
+- **[unk]**: the source of the perictrl0 register list; the control pairs;
+  why only the perictrl header and t40/t41 sends set flag 1; what the 24
+  dropped perictrl header bytes, the io96 header padding and t41
+  `[0x7b400, 0x80400)` hold, if anything; the t41 action record's extra
+  words.
+
 ### (g2) Phase 2: every `.rbf` integrity value is reproducible (Plan step 1)
 
 `python3 -I tools/bitstream.py check x.rbf` recomputes them all; it passes
