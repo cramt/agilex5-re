@@ -10,6 +10,7 @@
 //!   a5db join  <db> <graph>                       how many graph edges resolve to bits
 //!   a5db route <db> <graph> <in.sof> <out.sof> <hmac.key> <routes>
 //!                                                  write the routes' mux bits
+//!   a5db routed <db> <graph> <in.sof>             edges the image's mux settings select
 //!   a5db routecheck <db> <graph> <in.sof> <routes> [<out.sof> <hmac.key>]
 //!       clear every routing bit of in.sof, set only the routes' bits, and
 //!       compare with in.sof (its routes, e.g. from tools/rgdump/routes.tcl)
@@ -196,6 +197,28 @@ fn route_cmd(dbdir: &str, gdir: &str, inp: &str, routes: &str, out: Option<(&str
         for (k, (q, p)) in &by {
             println!("  differs: {k}: {q} set only by Quartus, {p} only by the join");
         }
+        if !diff.is_empty() {
+            // Which decoded edges of the Quartus image account for the rest.
+            let edges = route::decode(&mut j, &g, &orig)?;
+            let mut left = diff.clone();
+            let mut used = Vec::new();
+            for &e in &edges {
+                if let Some(Ok(w)) = j.edge(e)? {
+                    let hit: Vec<_> = w.iter().map(|(p, _)| (p.byte, p.bit)).filter(|b| left.contains(b)).collect();
+                    if !hit.is_empty() {
+                        hit.iter().for_each(|b| {
+                            left.remove(b);
+                        });
+                        used.push(e);
+                    }
+                }
+            }
+            println!("decoded from the Quartus image: {} active edges; {} of the {} differing bits are theirs:", edges.len(), diff.len() - left.len(), diff.len());
+            for e in used {
+                let src = (0..g.names.len()).find(|&s| g.fanout(s as u32).contains(&e)).unwrap_or(0);
+                println!("  edge {} -> {} ({} {})", g.names[src], g.names[g.dst[e] as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
+            }
+        }
         let other = orig.iter().zip(img).filter(|(a, b)| a != b).count();
         println!("image bytes differing from {inp}: {other}");
         bad |= !diff.is_empty();
@@ -219,6 +242,22 @@ fn main() -> Result<()> {
             set(dbdir, inp, out, key, uid, &args[6..])
         }
         ["join", dbdir, g] => join(dbdir, g),
+        ["routed", dbdir, g, inp] => {
+            let (mut db, g) = route::open(dbdir, g)?;
+            let sof = sof::Sof::read(inp)?;
+            let mut j = graph::Join::new(&mut db, &g);
+            let edges = route::decode(&mut j, &g, sof.image())?;
+            let mut src = vec![0u32; g.dst.len()];
+            for s in 0..g.names.len() as u32 {
+                for e in g.fanout(s) {
+                    src[e] = s;
+                }
+            }
+            for e in edges {
+                println!("{}\t{}\t{}\t{}", g.names[src[e] as usize], g.names[g.dst[e] as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
+            }
+            Ok(())
+        }
         ["rbf", dbdir, inp, out, root, key] => {
             let mut db = Db::open(dbdir)?;
             let inst = rbf::install::Install::open(std::path::Path::new(root))?;

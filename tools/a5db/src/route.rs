@@ -39,6 +39,8 @@ pub fn dygr_name(fit: &str, aliases: &HashMap<String, String>) -> String {
             "LOCAL_INTERCONNECT" => "LL".to_owned(),
             "BLOCK_INPUT_MUX_PASSTHROUGH" => "LEIM".to_owned(),
             "BLOCK_INPUT_MUX_PASSTHROUGH_WB" => "LEIM_WB".to_owned(),
+            "HIO_BUFFER" => "HIOB".to_owned(),
+            "VIO_BUFFER" => "VIOB".to_owned(),
             _ => match (t.as_bytes()[0], t[1..].parse::<u32>()) {
                 (b'R', Ok(k)) => format!("H{k}"),
                 (b'C', Ok(k)) => format!("V{k}"),
@@ -69,7 +71,7 @@ pub fn read_routes(path: &str, aliases: &HashMap<String, String>) -> Result<Vec<
             }
         } else if l == "E" {
             out.extend(cur.take());
-        } else if !l.starts_with("X ") && !l.starts_with("A ") && !l.trim().is_empty() && cur.is_none() {
+        } else if !["X ", "A ", "D "].iter().any(|p| l.starts_with(p)) && !l.trim().is_empty() && cur.is_none() {
             out.push(l.split_whitespace().map(|n| dygr_name(n, aliases)).collect());
         }
     }
@@ -172,6 +174,35 @@ pub fn clear(u: &Universe, img: &mut [u8]) {
 pub fn bit_name(u: &Universe, graph: &Graph, at: (usize, u8)) -> String {
     let (_, _, uid, cfg) = u.bits[&at];
     format!("{} {}", graph.uids[uid as usize], graph.cfgs[cfg as usize].split(' ').next().unwrap_or(""))
+}
+
+/// Edges whose mux setting the image holds (every written bit matches and
+/// the setting isn't the mux's idle state): the routing read back from a
+/// bitstream. Returns edge indices.
+pub fn decode(join: &mut Join, graph: &Graph, img: &[u8]) -> Result<Vec<usize>> {
+    let mut active: FxHashMap<(u32, u32), bool> = FxHashMap::default();
+    let mut out = Vec::new();
+    for e in 0..graph.dst.len() {
+        let (u, c) = (graph.uid[e], graph.cfg[e]);
+        if c == 0 {
+            continue;
+        }
+        let on = match active.get(&(u, c)) {
+            Some(&on) => on,
+            None => {
+                let on = match (join.pair(u, c)?, join.pair_idle(u, c)?) {
+                    (Some(Ok(w)), Some(Ok(idle))) => w.iter().all(|(p, v)| p.get(img) == *v) && w.iter().zip(&idle).any(|(a, b)| a.1 != b.1),
+                    _ => false,
+                };
+                active.insert((u, c), on);
+                on
+            }
+        };
+        if on {
+            out.push(e);
+        }
+    }
+    Ok(out)
 }
 
 pub fn open(dbdir: &str, gdir: &str) -> Result<(Db, Graph)> {

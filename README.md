@@ -871,6 +871,94 @@ on fz0 (io96 `pio_0_0`, `hssi_mono_0_0`, `hvio_3_1`, a LAB) and
 `coverage.py`'s output are byte-identical before and after [obs]. The old
 plain files stay in history.
 
+### (k) Phase 3: routing graph joined to the bit maps (Plan step 3 → 4)
+
+`a5db` joins every graph edge's mux setting to the named bits it writes
+(`tools/a5db/src/graph.rs`, `route.rs`), so a routed net, as a list of
+graph edges, becomes CRAM bits:
+
+- `a5db join <db> <graph>` resolves all 22.7 M configured edges and prints
+  why the rest have no bits;
+- `a5db route <db> <graph> in.sof out.sof <hmac.key> <routes>` writes a
+  set of routes into a `.sof`;
+- `a5db routed <db> <graph> in.sof` reads routing back: every edge whose
+  setting the image holds;
+- `a5db routecheck <db> <graph> in.sof <routes> [out.sof key]` puts every
+  routing mux of `in.sof` in its idle state, writes only the routes' bits
+  and compares the result with `in.sof`.
+
+`<graph>` is a `tools/rgdump` directory (git-ignored, about 13 min to
+regenerate). Routes come from `tools/rgdump/routes.tcl`, run in
+`quartus_fit <rev> --eco` on a copy of a compiled run: `report_routing` for
+every connected input of every atom (`report_connections` crashes the
+fitter, so the ports come from `read_atom_netlist`).
+
+- **The join rule**: an edge's `mux input[k]` selects the setting of
+  `<mux>/sel` that holds `INPUTk` between `_` boundaries: `muxin[6]` →
+  `MUXIN6_`, `clk_in[0]` → `CLK_IN0_`, `stitch` → `STITCH` [obs, every
+  configured edge of the two designs below]. A configuration with stages
+  (`mux in;stage in…`) sets `<mux>/<stage>/sel` per stage, and the top
+  `sel` drives no bits. The vertical-seam form `…clk_32_l_0… clkin1;xclkmux21
+  clk1` is used by rt0's clock and checks out [obs]. The 768 DCM forms
+  `mux clk[0];s2 clkin[0];s1 clk[0]` would set `<mux>/s2/sel = CLKIN0_` and
+  `<mux>/s1/sel = CLK24_CLK16_CLK8_CLK0_` (the stage-1 setting whose name
+  contains `CLK0`), but neither design uses one [inf]. A programmable
+  inverter's `rpi_in` is `NON_INV` [inf].
+- **Every configured edge is classified** [obs, `a5db join`]: 19,746,758 of
+  the 22,718,018 resolve to bits (23,318,498 distinct routing bits). The
+  rest:
+  - pass-throughs with nothing to set: 18,664 through plain buffers with
+    no BCM model (`ilaboutb_buf`, `i_mux`), 48,356 through inverters and
+    delay chains whose leaf has no `sel` (`*_rpi`, `*_delay_chain`), and
+    1,565,476 into `ce_rt_xleim_inv`, whose `sel` drives no bits;
+  - 1,316,752 hyper-register clock inputs (`clk`, `clk_delayed`, `nclk`),
+    which `flop_mode` sets, not `sel`;
+  - 22,012 into blocks without a bit map: redundancy tiles
+    (`cw_rd_redtl_bf`, `cw_cc_vseam_*_redt_bf`, 17,132) and spare-row
+    tiles (`*_rsp*`, 4,880) [unk].
+- **The idle state of a routing mux is `VCC` where it has that setting,
+  else `MUX_DIS`** [obs]: Quartus ties every unused HIOL clock mux
+  (`iclkmux*`, 16 per tile, 94 tiles) to `VCC`; all others idle at 0.
+- **Checked against Quartus-routed designs** [obs]. fz0 (four LUTs, a shift
+  register) and `designs/rt` (a 32-bit LFSR and a CRC-32 in two place
+  regions at X8–14 Y6–10 and X104–114 Y42–48, so nets cross both sectors
+  on H0–H12 and V1–V8 wires; clock from `CLOCK1_50` through the DCM,
+  switchbox, seam, spine and row-clock muxes):
+
+  | | fz0 | rt0 |
+  |---|---|---|
+  | routed connections (`report_routing`) | 48 | 723 |
+  | hops, all of them graph edges | 1,710 | 17,528 |
+  | configured edges written by the join | 65 | 3,151 |
+  | routing bits Quartus set | 1,614 | 6,325 |
+  | of them, set by the join from the routes | 1,606 | 6,220 |
+  | set by the join but not by Quartus | 0 | 0 |
+  | left: LL → LEIM edges into FF data inputs | 8 | 105 |
+
+  The bits left over are exactly the decoded settings of LL → LEIM edges
+  into `xleim_1`/`xleim_6`, the FF data-input muxes. Those connections (FF
+  `D` fed by a LUT) are the ones `report_routing` crashes the fitter on, so
+  the dump skips them. `a5db routed` on the Quartus image finds 73 and
+  3,256 active edges: exactly the routes' configured edges plus those.
+- **"Direct links" resolved** [obs]: a direct link is an LL node driven
+  straight from a LAB_RE (a block output fed back into a block's local
+  interconnect), one per LL node, hence 526,400. rt0's fit report counts 548
+  block interconnects and 67 direct links; its routes use 548 distinct LL
+  nodes, 67 of them reached straight from a LAB_RE.
+- Fitter names map to DYGR names as before, and the fitter drops DYGR's
+  underscores in periphery types (`HVIOWRX1RGMIIWRCONNRE` is
+  `HVIOWR_X1_RGMII_WR_CONN_RE`); `HIO_BUFFER` is `HIOB` and
+  `BLOCK_INPUT_MUX_PASSTHROUGH_WB` is `LEIM_WB`.
+
+Reproduce (graph and routes are Quartus output, so git-ignored):
+
+```
+tools/rgdump/rgdump.sh                                 # specimens/rg/full
+tools/flow.sh designs/rt specimens/runs/rt0 --wait     # ~25 min
+cp -r specimens/runs/rt0 /tmp/rt0r && cd /tmp/rt0r && tools/quartus.sh quartus_fit rt --eco <repo>/tools/rgdump/routes.tcl
+a5db routecheck db/sm4revb specimens/rg/full specimens/runs/rt0/output_files/rt.sof /tmp/rt0r/routes.txt
+```
+
 ### (l) Phase 3: the `.rbf` writer (Plan step 6)
 
 `a5db rbf <db> <in.sof> <out.rbf> <quartus root> <keyed-hash.key>` writes the

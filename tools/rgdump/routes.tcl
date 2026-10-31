@@ -22,9 +22,16 @@ foreach_in_collection a [get_atom_nodes] {
         if {[catch {get_atom_port_info -node $a -port_id $p -type iport -key FANIN} src] || $src eq "" || $src < 0} {
             continue
         }
-        # An FF's D from its own ALM's LUT has no route, and report_routing
-        # crashes on it; FF D inputs from routing are lost with it [unk].
-        if {$type eq "FF" && $ptype eq "D"} { continue }
+        # report_routing crashes on an FF's D fed by its own ALM's LUT (no
+        # route). Route D only from another FF or an input buffer; a LUT
+        # source is logged and skipped.
+        if {$type eq "FF" && $ptype eq "D"} {
+            set stype ?
+            catch {set stype [get_atom_node_info -node [lindex $src 0] -key TYPE]}
+            puts $out "D $name src {$src} $stype"
+            flush $out
+            if {$stype ne "FF" && $stype ne "IO_IBUF"} { continue }
+        }
         puts $out "C $name $ptype"
         flush $out
         if {[catch {report_routing -to $name -to_port $ptype -return_result} r]} {
