@@ -740,12 +740,23 @@ critical warning, which a real design should follow.
 
 ## Plan
 
-**Phase 2 status** (branch `phase2`): step 1 done (g2): every `.rbf` hash
-and CRC is reproducible. `.sof` re-signing works (g). Quartus's
-own assembler and configuration-model Tcl APIs are open (h), so step 4
-(config bits) becomes a dump rather than a fuzz. The `CORE` 2D compression
-(step 2) is being decoded separately. Next: a full bit map from asm2, then
-the routing graph.
+**Phase 2 status** (branch `phase2`):
+
+- Step 1 (container hashes): **done** (g2). Every `.rbf` CRC, SHA-384
+  and keyed HMAC is reproducible; IO/design hashes come from the `.sof`.
+- Step 2 (design-section payload): `CORE` 2D compression decoded (blinky
+  exact; one S4-flag polarity residue [unk]), and an encoder is not done yet.
+  `IO` section in progress.
+- Step 3 (routing graph): dumped through Quartus's own DYGR API
+  (`tools/rgdump`, 7.6 M nodes, 26.3 M edges, edges tied to mux settings);
+  write-up in progress.
+- Step 4 (config bits): **Quartus's assembler and BCM model are
+  scriptable** (h). The named bit → CRAM maps for LAB and MLAB are done (one
+  layout each), checked against ECO fits and against asm2's attribute
+  reader. The routing tiles and the remaining block types are being mapped
+  by subset + probe extrapolation (validated exactly on LABs).
+- Step 5 (fuzzing): mostly replaced by asm2 `set_bit` → `write_sof`
+  diffs (no fitter). ECO runs serve as an independent oracle.
 
 Done in phase 1: licence and first `.sof`/`.rbf`; the v25 reader with
 trace-verified `pkg`, `pad`, `hdr` and `place` schemas; the DE25-Nano pin
