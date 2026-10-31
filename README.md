@@ -1017,6 +1017,35 @@ modules from `devices/programmer/firmware/agilex5e.zip`), two codebooks from
   than pfg's. Whether the SDM accepts plain nibbles where pfg would have set
   the S4 flag is the open question the board test answers [unk].
 
+**The S4 flag rule** (phase 2 [unk], now mostly [obs]):
+
+- `BITASM_CRAM_REPAIRER::get_4bit_code(sof, a, b, frame)` (decompiled)
+  builds a pair's nibble as `a·2 + b`. When exactly one of the two is set,
+  it looks up a list for (frame, set bit) (`get_s1_list`). For each entry
+  `S4_SI (frame', bit', flag, value)` whose bit (frame', bit') is set in the
+  image, the code becomes `8 | flag·4 | value`. This is the "flagged
+  nibble".
+- The lists live in `devices/programmer/fm_sector_bnxplv_rif_t{0,1,2}.ddb`
+  (the sector type is shared with Agilex 7). Each holds a table of 1,568
+  frame slots of `S4_SII` → `S4_SII_BIT` (u32 bit) → one `S4_SI`
+  (u32 frame', u32 bit', u8 flag, u8 value). The three files parse
+  completely, with 217,520, 262,400 and 233,920 entries. File t covers
+  frames 1,568·t … 1,568·t + 1,567 (frame' is the slot plus 1,568·t), and
+  bit' always equals the key bit, so an entry's condition is its own bit.
+  Keys are only the low four bits g…g+3 of the 253 `s4` groups, so only
+  the `a` side of a pair (g+2, g+3) can flag. Every flagged nibble in
+  blinky, the tiny design and the random specimen has (a, b) = (1, 0).
+- Not solved [unk]: which slot an image frame uses. The slot pattern isn't
+  the frame index, nor the frame within its 98-frame group with any
+  single row offset. On the random specimen every image frame's flags
+  match some slot's key set exactly, and the slots' empty patterns line up
+  with the image groups (slot rows 0, 2 and 3 have exactly the 25 empty
+  frames of image groups 2–5, slot row 1 is empty like the never-stored
+  group 1). The repairer's `set_labrow_distances` and spare-row shift are
+  the likely missing piece. Until it is solved, an encoder can't place the
+  flags, and a5db writes plain nibbles. Whether the SDM needs the flag
+  (rather than accepting `0010`) is what the board test shows.
+
 Section format, now complete [obs, every item checked on the 60 pairs]:
 
 - **Header block** (+0): constants (the same in every specimen; the writer
