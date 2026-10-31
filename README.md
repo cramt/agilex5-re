@@ -439,8 +439,10 @@ x.rbf x.sof` compares it with the `.sof` image. The encoder is
   all in flagged nibbles; every other physical bit matches.
   `core_decode.py reencode` rebuilds pfg's inflated packet streams
   byte for byte from the decoded physical frames, BBM and libs.
-- **Not yet an encoder** [unk]: pfg's raw deflate isn't zlib's at any
-  level, memLevel or strategy. The encoder's lib and code choice
+- **Not yet an encoder** [unk]: the deflate itself is solved [obs]:
+  `zlib.compressobj(9, DEFLATED, -13, 8, Z_FIXED)` recompresses blinky's two
+  CORE frame streams byte for byte (found by the IO work; without `Z_FIXED`
+  no zlib setting matches). The encoder's lib and code choice
   (`run_row_target`, `update_with_libs`, `run_combined_target`) isn't
   reimplemented. Whether the SDM accepts an all-literal stream (every code
   0, plain `00ab` nibbles) is the obvious first board test.
@@ -889,21 +891,28 @@ critical warning, which a real design should follow.
 
 **Phase 2 status** (branch `phase2`):
 
-- Step 1 (container hashes): **done** (g2). Every `.rbf` CRC, SHA-384
-  and keyed HMAC is reproducible; IO/design hashes come from the `.sof`.
-- Step 2 (design-section payload): `CORE` 2D compression decoded (blinky
-  exact; one S4-flag polarity residue [unk]), and an encoder is not done yet.
-  `IO` section in progress.
-- Step 3 (routing graph): dumped through Quartus's own DYGR API
-  (`tools/rgdump`, 7.6 M nodes, 26.3 M edges, edges tied to mux settings);
-  write-up in progress.
-- Step 4 (config bits): **Quartus's assembler and BCM model are
-  scriptable** (h). The named bit → CRAM maps for LAB and MLAB are done (one
-  layout each), checked against ECO fits and against asm2's attribute
-  reader. The routing tiles and the remaining block types are being mapped
-  by subset + probe extrapolation (validated exactly on LABs).
-- Step 5 (fuzzing): mostly replaced by asm2 `set_bit` → `write_sof`
-  diffs (no fitter). ECO runs serve as an independent oracle.
+- Step 1 (container hashes): **done** (g2).
+- Step 2 (design-section payload): `CORE` 2D compression decoded
+  (`tools/core_decode.py`; blinky exact, random images off only in S4-flagged
+  nibbles [unk]); `IO` section decoded and re-encoded byte for byte
+  (`tools/io_decode.py`). Deflate is zlib level 9, window 13, `Z_FIXED`. Still
+  missing: a CORE encoder (lib/code choice, or an all-literal stream the SDM
+  may accept), and assembling a full IO section.
+- Step 3 (routing graph): **done** through Quartus's DYGR API (i): 7.6 M
+  nodes, 26.3 M edges, 22.7 M with their mux setting; checked on fz0's route
+  and `.sof`.
+- Step 4 (config bits): **done** (h): bit maps for all 26 block types in
+  `db/sm4revb/bits` (one layout each, aliases resolved), CUSTOM settings and
+  the BCM type tree in `db/sm4revb`, and `tools/a5db` reads and writes
+  attributes (encode byte-identical to asm2's `set_attribute`). Every set
+  CRAM bit in fz0 is a named bit.
+- Step 5 (fuzzing): replaced by asm2 `set_bit`/`write_sof` diffs; ECO runs
+  through the fitter used as an independent check (LUT bits, mask order).
+
+Next: join the graph's edge settings to the bit maps in `a5db` (route a
+net → bits); a CORE encoder; a full `.rbf` writer (step 6); then nextpnr
+(step 7). Board tests (does the SDM accept an all-literal CORE, do the
+IO/design hashes matter) need the user.
 
 Done in phase 1: licence and first `.sof`/`.rbf`; the v25 reader with
 trace-verified `pkg`, `pad`, `hdr` and `place` schemas; the DE25-Nano pin
