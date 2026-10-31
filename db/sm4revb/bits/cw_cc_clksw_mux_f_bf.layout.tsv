@@ -1,1441 +1,481 @@
-layout	bit	dframe	dbdata	polarity
-0	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	1	1	1
-0	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	1	2	1
-0	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	1	3	1
-0	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	0	0	1
-0	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	0	1	1
-0	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	0	2	1
-0	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	0	6	1
-0	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	0	7	1
-0	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	1	0	1
-0	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	0	3	1
-0	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	0	4	1
-0	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	0	5	1
-0	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	1	4	1
-0	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	1	5	1
-0	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	1	6	1
-0	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	3	0	1
-0	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	3	1	1
-0	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	3	2	1
-0	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	1	7	1
-0	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	2	0	1
-0	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	2	1	1
-0	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	2	5	1
-0	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	2	6	1
-0	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	2	7	1
-0	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	2	2	1
-0	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	2	3	1
-0	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	2	4	1
-0	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	3	3	1
-0	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	3	4	1
-0	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	3	5	1
-0	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	19	7	1
-0	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	20	0	1
-0	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	20	1	1
-0	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	18	6	1
-0	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	18	7	1
-0	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	19	0	1
-0	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	19	4	1
-0	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	19	5	1
-0	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	19	6	1
-0	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	19	1	1
-0	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	19	2	1
-0	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	19	3	1
-0	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	20	2	1
-0	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	20	3	1
-0	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	20	4	1
-0	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	21	6	1
-0	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	21	7	1
-0	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	22	0	1
-0	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	20	5	1
-0	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	20	6	1
-0	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	20	7	1
-0	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	21	3	1
-0	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	21	4	1
-0	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	21	5	1
-0	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	21	0	1
-0	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	21	1	1
-0	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	21	2	1
-0	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	22	1	1
-0	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	22	2	1
-0	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	22	3	1
-0	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	23	5	1
-0	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	23	6	1
-0	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	23	7	1
-0	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	22	4	1
-0	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	22	5	1
-0	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	22	6	1
-0	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	23	2	1
-0	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	23	3	1
-0	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	23	4	1
-0	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	22	7	1
-0	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	23	0	1
-0	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	23	1	1
-0	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	24	0	1
-0	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	24	1	1
-0	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	24	2	1
-0	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	25	4	1
-0	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	25	5	1
-0	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	25	6	1
-0	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	24	3	1
-0	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	24	4	1
-0	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	24	5	1
-0	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	25	1	1
-0	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	25	2	1
-0	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	25	3	1
-0	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	24	6	1
-0	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	24	7	1
-0	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	25	0	1
-0	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	25	7	1
-0	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	26	0	1
-0	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	26	1	1
-0	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	27	3	1
-0	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	27	4	1
-0	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	27	5	1
-0	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	26	2	1
-0	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	26	3	1
-0	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	26	4	1
-0	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	27	0	1
-0	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	27	1	1
-0	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	27	2	1
-0	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	26	5	1
-0	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	26	6	1
-0	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	26	7	1
-0	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	27	6	1
-0	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	27	7	1
-0	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	28	0	1
-0	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	29	2	1
-0	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	29	3	1
-0	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	29	4	1
-0	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	28	1	1
-0	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	28	2	1
-0	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	28	3	1
-0	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	28	7	1
-0	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	29	0	1
-0	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	29	1	1
-0	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	28	4	1
-0	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	28	5	1
-0	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	28	6	1
-0	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	29	5	1
-0	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	29	6	1
-0	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	29	7	1
-0	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	31	1	1
-0	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	31	2	1
-0	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	31	3	1
-0	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	30	0	1
-0	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	30	1	1
-0	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	30	2	1
-0	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	30	6	1
-0	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	30	7	1
-0	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	31	0	1
-0	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	30	3	1
-0	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	30	4	1
-0	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	30	5	1
-0	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	31	4	1
-0	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	31	5	1
-0	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	31	6	1
-0	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	33	0	1
-0	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	33	1	1
-0	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	33	2	1
-0	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	31	7	1
-0	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	32	0	1
-0	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	32	1	1
-0	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	32	5	1
-0	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	32	6	1
-0	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	32	7	1
-0	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	32	2	1
-0	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	32	3	1
-0	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	32	4	1
-0	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	33	3	1
-0	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	33	4	1
-0	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	33	5	1
-0	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	34	7	1
-0	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	35	0	1
-0	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	35	1	1
-0	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	33	6	1
-0	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	33	7	1
-0	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	34	0	1
-0	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	34	4	1
-0	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	34	5	1
-0	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	34	6	1
-0	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	34	1	1
-0	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	34	2	1
-0	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	34	3	1
-0	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	35	2	1
-0	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	35	3	1
-0	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	35	4	1
-0	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	36	6	1
-0	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	36	7	1
-0	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	37	0	1
-0	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	35	5	1
-0	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	35	6	1
-0	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	35	7	1
-0	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	36	3	1
-0	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	36	4	1
-0	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	36	5	1
-0	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	36	0	1
-0	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	36	1	1
-0	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	36	2	1
-0	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	37	1	1
-0	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	37	2	1
-0	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	37	3	1
-0	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	4	7	1
-0	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	5	0	1
-0	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	5	1	1
-0	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	3	6	1
-0	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	3	7	1
-0	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	4	0	1
-0	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	4	4	1
-0	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	4	5	1
-0	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	4	6	1
-0	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	4	1	1
-0	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	4	2	1
-0	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	4	3	1
-0	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	5	2	1
-0	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	5	3	1
-0	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	5	4	1
-0	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	38	5	1
-0	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	38	6	1
-0	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	38	7	1
-0	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	37	4	1
-0	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	37	5	1
-0	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	37	6	1
-0	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	38	2	1
-0	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	38	3	1
-0	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	38	4	1
-0	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	37	7	1
-0	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	38	0	1
-0	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	38	1	1
-0	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	39	0	1
-0	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	39	1	1
-0	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	39	2	1
-0	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	40	4	1
-0	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	40	5	1
-0	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	40	6	1
-0	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	39	3	1
-0	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	39	4	1
-0	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	39	5	1
-0	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	40	1	1
-0	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	40	2	1
-0	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	40	3	1
-0	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	39	6	1
-0	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	39	7	1
-0	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	40	0	1
-0	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	40	7	1
-0	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	41	0	1
-0	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	41	1	1
-0	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	42	3	1
-0	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	42	4	1
-0	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	42	5	1
-0	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	41	2	1
-0	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	41	3	1
-0	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	41	4	1
-0	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	42	0	1
-0	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	42	1	1
-0	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	42	2	1
-0	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	41	5	1
-0	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	41	6	1
-0	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	41	7	1
-0	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	42	6	1
-0	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	42	7	1
-0	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	43	0	1
-0	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	44	2	1
-0	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	44	3	1
-0	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	44	4	1
-0	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	43	1	1
-0	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	43	2	1
-0	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	43	3	1
-0	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	43	7	1
-0	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	44	0	1
-0	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	44	1	1
-0	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	43	4	1
-0	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	43	5	1
-0	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	43	6	1
-0	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	44	5	1
-0	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	44	6	1
-0	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	44	7	1
-0	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	46	1	1
-0	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	46	2	1
-0	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	46	3	1
-0	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	45	0	1
-0	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	45	1	1
-0	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	45	2	1
-0	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	45	6	1
-0	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	45	7	1
-0	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	46	0	1
-0	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	45	3	1
-0	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	45	4	1
-0	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	45	5	1
-0	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	46	4	1
-0	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	46	5	1
-0	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	46	6	1
-0	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	48	0	1
-0	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	48	1	1
-0	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	48	2	1
-0	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	46	7	1
-0	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	47	0	1
-0	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	47	1	1
-0	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	47	5	1
-0	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	47	6	1
-0	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	47	7	1
-0	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	47	2	1
-0	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	47	3	1
-0	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	47	4	1
-0	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	48	3	1
-0	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	48	4	1
-0	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	48	5	1
-0	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	49	7	1
-0	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	50	0	1
-0	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	50	1	1
-0	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	48	6	1
-0	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	48	7	1
-0	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	49	0	1
-0	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	49	4	1
-0	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	49	5	1
-0	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	49	6	1
-0	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	49	1	1
-0	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	49	2	1
-0	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	49	3	1
-0	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	50	2	1
-0	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	50	3	1
-0	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	50	4	1
-0	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	51	6	1
-0	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	51	7	1
-0	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	52	0	1
-0	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	50	5	1
-0	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	50	6	1
-0	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	50	7	1
-0	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	51	3	1
-0	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	51	4	1
-0	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	51	5	1
-0	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	51	0	1
-0	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	51	1	1
-0	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	51	2	1
-0	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	52	1	1
-0	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	52	2	1
-0	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	52	3	1
-0	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	53	5	1
-0	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	53	6	1
-0	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	53	7	1
-0	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	52	4	1
-0	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	52	5	1
-0	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	52	6	1
-0	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	53	2	1
-0	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	53	3	1
-0	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	53	4	1
-0	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	52	7	1
-0	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	53	0	1
-0	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	53	1	1
-0	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	54	0	1
-0	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	54	1	1
-0	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	54	2	1
-0	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	55	4	1
-0	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	55	5	1
-0	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	55	6	1
-0	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	54	3	1
-0	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	54	4	1
-0	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	54	5	1
-0	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	55	1	1
-0	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	55	2	1
-0	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	55	3	1
-0	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	54	6	1
-0	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	54	7	1
-0	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	55	0	1
-0	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	55	7	1
-0	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	56	0	1
-0	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	56	1	1
-0	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	6	6	1
-0	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	6	7	1
-0	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	7	0	1
-0	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	5	5	1
-0	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	5	6	1
-0	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	5	7	1
-0	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	6	3	1
-0	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	6	4	1
-0	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	6	5	1
-0	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	6	0	1
-0	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	6	1	1
-0	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	6	2	1
-0	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	7	1	1
-0	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	7	2	1
-0	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	7	3	1
-0	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	57	3	1
-0	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	57	4	1
-0	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	57	5	1
-0	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	56	2	1
-0	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	56	3	1
-0	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	56	4	1
-0	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	57	0	1
-0	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	57	1	1
-0	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	57	2	1
-0	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	56	5	1
-0	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	56	6	1
-0	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	56	7	1
-0	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	57	6	1
-0	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	57	7	1
-0	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	58	0	1
-0	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	59	2	1
-0	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	59	3	1
-0	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	59	4	1
-0	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	58	1	1
-0	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	58	2	1
-0	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	58	3	1
-0	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	58	7	1
-0	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	59	0	1
-0	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	59	1	1
-0	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	58	4	1
-0	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	58	5	1
-0	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	58	6	1
-0	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	59	5	1
-0	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	59	6	1
-0	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	59	7	1
-0	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	8	5	1
-0	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	8	6	1
-0	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	8	7	1
-0	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	7	4	1
-0	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	7	5	1
-0	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	7	6	1
-0	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	8	2	1
-0	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	8	3	1
-0	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	8	4	1
-0	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	7	7	1
-0	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	8	0	1
-0	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	8	1	1
-0	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	9	0	1
-0	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	9	1	1
-0	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	9	2	1
-0	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	10	4	1
-0	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	10	5	1
-0	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	10	6	1
-0	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	9	3	1
-0	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	9	4	1
-0	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	9	5	1
-0	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	10	1	1
-0	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	10	2	1
-0	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	10	3	1
-0	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	9	6	1
-0	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	9	7	1
-0	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	10	0	1
-0	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	10	7	1
-0	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	11	0	1
-0	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	11	1	1
-0	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	12	3	1
-0	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	12	4	1
-0	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	12	5	1
-0	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	11	2	1
-0	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	11	3	1
-0	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	11	4	1
-0	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	12	0	1
-0	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	12	1	1
-0	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	12	2	1
-0	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	11	5	1
-0	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	11	6	1
-0	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	11	7	1
-0	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	12	6	1
-0	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	12	7	1
-0	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	13	0	1
-0	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	14	2	1
-0	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	14	3	1
-0	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	14	4	1
-0	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	13	1	1
-0	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	13	2	1
-0	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	13	3	1
-0	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	13	7	1
-0	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	14	0	1
-0	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	14	1	1
-0	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	13	4	1
-0	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	13	5	1
-0	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	13	6	1
-0	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	14	5	1
-0	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	14	6	1
-0	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	14	7	1
-0	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	16	1	1
-0	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	16	2	1
-0	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	16	3	1
-0	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	15	0	1
-0	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	15	1	1
-0	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	15	2	1
-0	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	15	6	1
-0	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	15	7	1
-0	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	16	0	1
-0	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	15	3	1
-0	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	15	4	1
-0	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	15	5	1
-0	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	16	4	1
-0	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	16	5	1
-0	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	16	6	1
-0	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	18	0	1
-0	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	18	1	1
-0	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	18	2	1
-0	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	16	7	1
-0	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	17	0	1
-0	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	17	1	1
-0	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	17	5	1
-0	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	17	6	1
-0	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	17	7	1
-0	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	17	2	1
-0	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	17	3	1
-0	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	17	4	1
-0	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	18	3	1
-0	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	18	4	1
-0	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	18	5	1
-1	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	1	2	1
-1	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	1	3	1
-1	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	1	4	1
-1	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	0	1	1
-1	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	0	2	1
-1	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	0	3	1
-1	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	0	7	1
-1	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	1	0	1
-1	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	1	1	1
-1	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	0	4	1
-1	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	0	5	1
-1	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	0	6	1
-1	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	1	5	1
-1	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	1	6	1
-1	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	1	7	1
-1	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	3	1	1
-1	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	3	2	1
-1	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	3	3	1
-1	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	2	0	1
-1	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	2	1	1
-1	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	2	2	1
-1	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	2	6	1
-1	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	2	7	1
-1	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	3	0	1
-1	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	2	3	1
-1	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	2	4	1
-1	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	2	5	1
-1	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	3	4	1
-1	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	3	5	1
-1	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	3	6	1
-1	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	20	0	1
-1	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	20	1	1
-1	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	20	2	1
-1	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	18	7	1
-1	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	19	0	1
-1	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	19	1	1
-1	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	19	5	1
-1	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	19	6	1
-1	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	19	7	1
-1	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	19	2	1
-1	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	19	3	1
-1	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	19	4	1
-1	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	20	3	1
-1	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	20	4	1
-1	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	20	5	1
-1	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	21	7	1
-1	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	22	0	1
-1	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	22	1	1
-1	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	20	6	1
-1	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	20	7	1
-1	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	21	0	1
-1	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	21	4	1
-1	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	21	5	1
-1	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	21	6	1
-1	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	21	1	1
-1	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	21	2	1
-1	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	21	3	1
-1	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	22	2	1
-1	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	22	3	1
-1	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	22	4	1
-1	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	23	6	1
-1	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	23	7	1
-1	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	24	0	1
-1	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	22	5	1
-1	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	22	6	1
-1	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	22	7	1
-1	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	23	3	1
-1	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	23	4	1
-1	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	23	5	1
-1	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	23	0	1
-1	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	23	1	1
-1	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	23	2	1
-1	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	24	1	1
-1	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	24	2	1
-1	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	24	3	1
-1	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	25	5	1
-1	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	25	6	1
-1	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	25	7	1
-1	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	24	4	1
-1	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	24	5	1
-1	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	24	6	1
-1	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	25	2	1
-1	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	25	3	1
-1	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	25	4	1
-1	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	24	7	1
-1	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	25	0	1
-1	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	25	1	1
-1	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	26	0	1
-1	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	26	1	1
-1	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	26	2	1
-1	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	27	4	1
-1	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	27	5	1
-1	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	27	6	1
-1	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	26	3	1
-1	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	26	4	1
-1	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	26	5	1
-1	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	27	1	1
-1	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	27	2	1
-1	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	27	3	1
-1	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	26	6	1
-1	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	26	7	1
-1	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	27	0	1
-1	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	27	7	1
-1	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	28	0	1
-1	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	28	1	1
-1	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	29	3	1
-1	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	29	4	1
-1	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	29	5	1
-1	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	28	2	1
-1	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	28	3	1
-1	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	28	4	1
-1	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	29	0	1
-1	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	29	1	1
-1	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	29	2	1
-1	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	28	5	1
-1	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	28	6	1
-1	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	28	7	1
-1	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	29	6	1
-1	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	29	7	1
-1	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	30	0	1
-1	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	31	2	1
-1	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	31	3	1
-1	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	31	4	1
-1	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	30	1	1
-1	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	30	2	1
-1	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	30	3	1
-1	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	30	7	1
-1	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	31	0	1
-1	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	31	1	1
-1	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	30	4	1
-1	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	30	5	1
-1	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	30	6	1
-1	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	31	5	1
-1	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	31	6	1
-1	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	31	7	1
-1	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	33	1	1
-1	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	33	2	1
-1	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	33	3	1
-1	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	32	0	1
-1	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	32	1	1
-1	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	32	2	1
-1	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	32	6	1
-1	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	32	7	1
-1	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	33	0	1
-1	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	32	3	1
-1	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	32	4	1
-1	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	32	5	1
-1	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	33	4	1
-1	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	33	5	1
-1	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	33	6	1
-1	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	35	0	1
-1	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	35	1	1
-1	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	35	2	1
-1	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	33	7	1
-1	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	34	0	1
-1	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	34	1	1
-1	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	34	5	1
-1	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	34	6	1
-1	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	34	7	1
-1	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	34	2	1
-1	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	34	3	1
-1	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	34	4	1
-1	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	35	3	1
-1	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	35	4	1
-1	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	35	5	1
-1	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	36	7	1
-1	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	37	0	1
-1	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	37	1	1
-1	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	35	6	1
-1	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	35	7	1
-1	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	36	0	1
-1	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	36	4	1
-1	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	36	5	1
-1	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	36	6	1
-1	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	36	1	1
-1	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	36	2	1
-1	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	36	3	1
-1	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	37	2	1
-1	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	37	3	1
-1	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	37	4	1
-1	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	5	0	1
-1	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	5	1	1
-1	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	5	2	1
-1	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	3	7	1
-1	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	4	0	1
-1	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	4	1	1
-1	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	4	5	1
-1	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	4	6	1
-1	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	4	7	1
-1	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	4	2	1
-1	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	4	3	1
-1	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	4	4	1
-1	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	5	3	1
-1	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	5	4	1
-1	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	5	5	1
-1	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	38	6	1
-1	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	38	7	1
-1	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	39	0	1
-1	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	37	5	1
-1	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	37	6	1
-1	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	37	7	1
-1	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	38	3	1
-1	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	38	4	1
-1	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	38	5	1
-1	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	38	0	1
-1	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	38	1	1
-1	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	38	2	1
-1	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	39	1	1
-1	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	39	2	1
-1	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	39	3	1
-1	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	40	5	1
-1	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	40	6	1
-1	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	40	7	1
-1	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	39	4	1
-1	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	39	5	1
-1	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	39	6	1
-1	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	40	2	1
-1	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	40	3	1
-1	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	40	4	1
-1	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	39	7	1
-1	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	40	0	1
-1	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	40	1	1
-1	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	41	0	1
-1	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	41	1	1
-1	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	41	2	1
-1	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	42	4	1
-1	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	42	5	1
-1	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	42	6	1
-1	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	41	3	1
-1	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	41	4	1
-1	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	41	5	1
-1	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	42	1	1
-1	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	42	2	1
-1	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	42	3	1
-1	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	41	6	1
-1	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	41	7	1
-1	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	42	0	1
-1	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	42	7	1
-1	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	43	0	1
-1	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	43	1	1
-1	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	44	3	1
-1	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	44	4	1
-1	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	44	5	1
-1	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	43	2	1
-1	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	43	3	1
-1	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	43	4	1
-1	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	44	0	1
-1	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	44	1	1
-1	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	44	2	1
-1	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	43	5	1
-1	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	43	6	1
-1	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	43	7	1
-1	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	44	6	1
-1	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	44	7	1
-1	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	45	0	1
-1	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	46	2	1
-1	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	46	3	1
-1	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	46	4	1
-1	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	45	1	1
-1	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	45	2	1
-1	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	45	3	1
-1	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	45	7	1
-1	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	46	0	1
-1	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	46	1	1
-1	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	45	4	1
-1	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	45	5	1
-1	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	45	6	1
-1	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	46	5	1
-1	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	46	6	1
-1	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	46	7	1
-1	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	48	1	1
-1	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	48	2	1
-1	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	48	3	1
-1	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	47	0	1
-1	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	47	1	1
-1	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	47	2	1
-1	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	47	6	1
-1	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	47	7	1
-1	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	48	0	1
-1	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	47	3	1
-1	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	47	4	1
-1	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	47	5	1
-1	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	48	4	1
-1	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	48	5	1
-1	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	48	6	1
-1	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	50	0	1
-1	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	50	1	1
-1	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	50	2	1
-1	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	48	7	1
-1	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	49	0	1
-1	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	49	1	1
-1	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	49	5	1
-1	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	49	6	1
-1	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	49	7	1
-1	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	49	2	1
-1	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	49	3	1
-1	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	49	4	1
-1	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	50	3	1
-1	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	50	4	1
-1	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	50	5	1
-1	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	51	7	1
-1	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	52	0	1
-1	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	52	1	1
-1	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	50	6	1
-1	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	50	7	1
-1	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	51	0	1
-1	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	51	4	1
-1	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	51	5	1
-1	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	51	6	1
-1	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	51	1	1
-1	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	51	2	1
-1	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	51	3	1
-1	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	52	2	1
-1	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	52	3	1
-1	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	52	4	1
-1	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	53	6	1
-1	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	53	7	1
-1	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	54	0	1
-1	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	52	5	1
-1	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	52	6	1
-1	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	52	7	1
-1	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	53	3	1
-1	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	53	4	1
-1	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	53	5	1
-1	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	53	0	1
-1	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	53	1	1
-1	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	53	2	1
-1	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	54	1	1
-1	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	54	2	1
-1	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	54	3	1
-1	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	55	5	1
-1	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	55	6	1
-1	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	55	7	1
-1	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	54	4	1
-1	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	54	5	1
-1	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	54	6	1
-1	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	55	2	1
-1	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	55	3	1
-1	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	55	4	1
-1	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	54	7	1
-1	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	55	0	1
-1	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	55	1	1
-1	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	56	0	1
-1	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	56	1	1
-1	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	56	2	1
-1	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	6	7	1
-1	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	7	0	1
-1	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	7	1	1
-1	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	5	6	1
-1	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	5	7	1
-1	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	6	0	1
-1	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	6	4	1
-1	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	6	5	1
-1	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	6	6	1
-1	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	6	1	1
-1	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	6	2	1
-1	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	6	3	1
-1	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	7	2	1
-1	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	7	3	1
-1	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	7	4	1
-1	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	57	4	1
-1	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	57	5	1
-1	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	57	6	1
-1	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	56	3	1
-1	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	56	4	1
-1	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	56	5	1
-1	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	57	1	1
-1	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	57	2	1
-1	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	57	3	1
-1	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	56	6	1
-1	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	56	7	1
-1	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	57	0	1
-1	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	57	7	1
-1	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	58	0	1
-1	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	58	1	1
-1	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	59	3	1
-1	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	59	4	1
-1	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	59	5	1
-1	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	58	2	1
-1	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	58	3	1
-1	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	58	4	1
-1	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	59	0	1
-1	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	59	1	1
-1	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	59	2	1
-1	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	58	5	1
-1	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	58	6	1
-1	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	58	7	1
-1	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	59	6	1
-1	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	59	7	1
-1	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	60	0	1
-1	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	8	6	1
-1	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	8	7	1
-1	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	9	0	1
-1	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	7	5	1
-1	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	7	6	1
-1	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	7	7	1
-1	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	8	3	1
-1	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	8	4	1
-1	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	8	5	1
-1	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	8	0	1
-1	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	8	1	1
-1	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	8	2	1
-1	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	9	1	1
-1	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	9	2	1
-1	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	9	3	1
-1	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	10	5	1
-1	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	10	6	1
-1	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	10	7	1
-1	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	9	4	1
-1	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	9	5	1
-1	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	9	6	1
-1	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	10	2	1
-1	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	10	3	1
-1	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	10	4	1
-1	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	9	7	1
-1	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	10	0	1
-1	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	10	1	1
-1	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	11	0	1
-1	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	11	1	1
-1	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	11	2	1
-1	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	12	4	1
-1	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	12	5	1
-1	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	12	6	1
-1	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	11	3	1
-1	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	11	4	1
-1	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	11	5	1
-1	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	12	1	1
-1	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	12	2	1
-1	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	12	3	1
-1	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	11	6	1
-1	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	11	7	1
-1	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	12	0	1
-1	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	12	7	1
-1	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	13	0	1
-1	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	13	1	1
-1	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	14	3	1
-1	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	14	4	1
-1	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	14	5	1
-1	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	13	2	1
-1	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	13	3	1
-1	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	13	4	1
-1	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	14	0	1
-1	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	14	1	1
-1	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	14	2	1
-1	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	13	5	1
-1	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	13	6	1
-1	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	13	7	1
-1	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	14	6	1
-1	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	14	7	1
-1	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	15	0	1
-1	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	16	2	1
-1	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	16	3	1
-1	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	16	4	1
-1	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	15	1	1
-1	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	15	2	1
-1	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	15	3	1
-1	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	15	7	1
-1	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	16	0	1
-1	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	16	1	1
-1	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	15	4	1
-1	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	15	5	1
-1	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	15	6	1
-1	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	16	5	1
-1	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	16	6	1
-1	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	16	7	1
-1	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	18	1	1
-1	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	18	2	1
-1	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	18	3	1
-1	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	17	0	1
-1	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	17	1	1
-1	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	17	2	1
-1	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	17	6	1
-1	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	17	7	1
-1	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	18	0	1
-1	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	17	3	1
-1	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	17	4	1
-1	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	17	5	1
-1	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	18	4	1
-1	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	18	5	1
-1	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	18	6	1
-2	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	1	3	1
-2	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	1	4	1
-2	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	1	5	1
-2	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	0	2	1
-2	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	0	3	1
-2	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	0	4	1
-2	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	1	0	1
-2	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	1	1	1
-2	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	1	2	1
-2	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	0	5	1
-2	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	0	6	1
-2	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	0	7	1
-2	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	1	6	1
-2	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	1	7	1
-2	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	2	0	1
-2	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	3	2	1
-2	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	3	3	1
-2	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	3	4	1
-2	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	2	1	1
-2	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	2	2	1
-2	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	2	3	1
-2	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	2	7	1
-2	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	3	0	1
-2	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	3	1	1
-2	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	2	4	1
-2	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	2	5	1
-2	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	2	6	1
-2	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	3	5	1
-2	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	3	6	1
-2	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	3	7	1
-2	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	20	1	1
-2	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	20	2	1
-2	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	20	3	1
-2	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	19	0	1
-2	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	19	1	1
-2	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	19	2	1
-2	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	19	6	1
-2	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	19	7	1
-2	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	20	0	1
-2	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	19	3	1
-2	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	19	4	1
-2	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	19	5	1
-2	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	20	4	1
-2	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	20	5	1
-2	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	20	6	1
-2	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	22	0	1
-2	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	22	1	1
-2	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	22	2	1
-2	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	20	7	1
-2	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	21	0	1
-2	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	21	1	1
-2	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	21	5	1
-2	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	21	6	1
-2	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	21	7	1
-2	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	21	2	1
-2	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	21	3	1
-2	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	21	4	1
-2	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	22	3	1
-2	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	22	4	1
-2	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	22	5	1
-2	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	23	7	1
-2	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	24	0	1
-2	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	24	1	1
-2	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	22	6	1
-2	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	22	7	1
-2	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	23	0	1
-2	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	23	4	1
-2	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	23	5	1
-2	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	23	6	1
-2	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	23	1	1
-2	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	23	2	1
-2	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	23	3	1
-2	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	24	2	1
-2	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	24	3	1
-2	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	24	4	1
-2	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	25	6	1
-2	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	25	7	1
-2	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	26	0	1
-2	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	24	5	1
-2	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	24	6	1
-2	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	24	7	1
-2	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	25	3	1
-2	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	25	4	1
-2	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	25	5	1
-2	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	25	0	1
-2	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	25	1	1
-2	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	25	2	1
-2	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	26	1	1
-2	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	26	2	1
-2	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	26	3	1
-2	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	27	5	1
-2	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	27	6	1
-2	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	27	7	1
-2	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	26	4	1
-2	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	26	5	1
-2	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	26	6	1
-2	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	27	2	1
-2	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	27	3	1
-2	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	27	4	1
-2	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	26	7	1
-2	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	27	0	1
-2	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	27	1	1
-2	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	28	0	1
-2	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	28	1	1
-2	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	28	2	1
-2	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	29	4	1
-2	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	29	5	1
-2	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	29	6	1
-2	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	28	3	1
-2	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	28	4	1
-2	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	28	5	1
-2	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	29	1	1
-2	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	29	2	1
-2	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	29	3	1
-2	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	28	6	1
-2	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	28	7	1
-2	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	29	0	1
-2	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	29	7	1
-2	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	30	0	1
-2	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	30	1	1
-2	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	31	3	1
-2	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	31	4	1
-2	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	31	5	1
-2	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	30	2	1
-2	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	30	3	1
-2	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	30	4	1
-2	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	31	0	1
-2	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	31	1	1
-2	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	31	2	1
-2	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	30	5	1
-2	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	30	6	1
-2	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	30	7	1
-2	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	31	6	1
-2	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	31	7	1
-2	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	32	0	1
-2	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	33	2	1
-2	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	33	3	1
-2	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	33	4	1
-2	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	32	1	1
-2	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	32	2	1
-2	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	32	3	1
-2	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	32	7	1
-2	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	33	0	1
-2	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	33	1	1
-2	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	32	4	1
-2	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	32	5	1
-2	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	32	6	1
-2	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	33	5	1
-2	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	33	6	1
-2	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	33	7	1
-2	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	35	1	1
-2	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	35	2	1
-2	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	35	3	1
-2	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	34	0	1
-2	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	34	1	1
-2	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	34	2	1
-2	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	34	6	1
-2	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	34	7	1
-2	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	35	0	1
-2	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	34	3	1
-2	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	34	4	1
-2	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	34	5	1
-2	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	35	4	1
-2	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	35	5	1
-2	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	35	6	1
-2	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	37	0	1
-2	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	37	1	1
-2	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	37	2	1
-2	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	35	7	1
-2	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	36	0	1
-2	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	36	1	1
-2	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	36	5	1
-2	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	36	6	1
-2	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	36	7	1
-2	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	36	2	1
-2	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	36	3	1
-2	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	36	4	1
-2	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	37	3	1
-2	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	37	4	1
-2	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	37	5	1
-2	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	5	1	1
-2	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	5	2	1
-2	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	5	3	1
-2	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	4	0	1
-2	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	4	1	1
-2	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	4	2	1
-2	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	4	6	1
-2	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	4	7	1
-2	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	5	0	1
-2	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	4	3	1
-2	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	4	4	1
-2	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	4	5	1
-2	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	5	4	1
-2	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	5	5	1
-2	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	5	6	1
-2	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	38	7	1
-2	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	39	0	1
-2	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	39	1	1
-2	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	37	6	1
-2	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	37	7	1
-2	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	38	0	1
-2	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	38	4	1
-2	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	38	5	1
-2	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	38	6	1
-2	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	38	1	1
-2	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	38	2	1
-2	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	38	3	1
-2	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	39	2	1
-2	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	39	3	1
-2	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	39	4	1
-2	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	40	6	1
-2	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	40	7	1
-2	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	41	0	1
-2	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	39	5	1
-2	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	39	6	1
-2	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	39	7	1
-2	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	40	3	1
-2	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	40	4	1
-2	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	40	5	1
-2	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	40	0	1
-2	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	40	1	1
-2	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	40	2	1
-2	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	41	1	1
-2	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	41	2	1
-2	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	41	3	1
-2	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	42	5	1
-2	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	42	6	1
-2	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	42	7	1
-2	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	41	4	1
-2	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	41	5	1
-2	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	41	6	1
-2	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	42	2	1
-2	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	42	3	1
-2	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	42	4	1
-2	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	41	7	1
-2	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	42	0	1
-2	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	42	1	1
-2	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	43	0	1
-2	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	43	1	1
-2	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	43	2	1
-2	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	44	4	1
-2	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	44	5	1
-2	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	44	6	1
-2	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	43	3	1
-2	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	43	4	1
-2	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	43	5	1
-2	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	44	1	1
-2	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	44	2	1
-2	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	44	3	1
-2	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	43	6	1
-2	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	43	7	1
-2	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	44	0	1
-2	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	44	7	1
-2	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	45	0	1
-2	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	45	1	1
-2	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	46	3	1
-2	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	46	4	1
-2	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	46	5	1
-2	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	45	2	1
-2	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	45	3	1
-2	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	45	4	1
-2	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	46	0	1
-2	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	46	1	1
-2	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	46	2	1
-2	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	45	5	1
-2	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	45	6	1
-2	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	45	7	1
-2	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	46	6	1
-2	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	46	7	1
-2	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	47	0	1
-2	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	48	2	1
-2	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	48	3	1
-2	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	48	4	1
-2	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	47	1	1
-2	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	47	2	1
-2	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	47	3	1
-2	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	47	7	1
-2	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	48	0	1
-2	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	48	1	1
-2	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	47	4	1
-2	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	47	5	1
-2	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	47	6	1
-2	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	48	5	1
-2	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	48	6	1
-2	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	48	7	1
-2	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	50	1	1
-2	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	50	2	1
-2	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	50	3	1
-2	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	49	0	1
-2	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	49	1	1
-2	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	49	2	1
-2	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	49	6	1
-2	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	49	7	1
-2	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	50	0	1
-2	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	49	3	1
-2	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	49	4	1
-2	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	49	5	1
-2	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	50	4	1
-2	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	50	5	1
-2	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	50	6	1
-2	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	52	0	1
-2	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	52	1	1
-2	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	52	2	1
-2	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	50	7	1
-2	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	51	0	1
-2	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	51	1	1
-2	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	51	5	1
-2	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	51	6	1
-2	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	51	7	1
-2	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	51	2	1
-2	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	51	3	1
-2	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	51	4	1
-2	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	52	3	1
-2	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	52	4	1
-2	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	52	5	1
-2	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	53	7	1
-2	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	54	0	1
-2	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	54	1	1
-2	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	52	6	1
-2	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	52	7	1
-2	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	53	0	1
-2	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	53	4	1
-2	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	53	5	1
-2	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	53	6	1
-2	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	53	1	1
-2	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	53	2	1
-2	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	53	3	1
-2	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	54	2	1
-2	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	54	3	1
-2	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	54	4	1
-2	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	55	6	1
-2	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	55	7	1
-2	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	56	0	1
-2	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	54	5	1
-2	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	54	6	1
-2	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	54	7	1
-2	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	55	3	1
-2	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	55	4	1
-2	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	55	5	1
-2	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	55	0	1
-2	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	55	1	1
-2	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	55	2	1
-2	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	56	1	1
-2	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	56	2	1
-2	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	56	3	1
-2	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	7	0	1
-2	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	7	1	1
-2	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	7	2	1
-2	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	5	7	1
-2	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	6	0	1
-2	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	6	1	1
-2	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	6	5	1
-2	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	6	6	1
-2	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	6	7	1
-2	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	6	2	1
-2	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	6	3	1
-2	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	6	4	1
-2	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	7	3	1
-2	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	7	4	1
-2	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	7	5	1
-2	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	57	5	1
-2	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	57	6	1
-2	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	57	7	1
-2	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	56	4	1
-2	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	56	5	1
-2	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	56	6	1
-2	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	57	2	1
-2	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	57	3	1
-2	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	57	4	1
-2	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	56	7	1
-2	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	57	0	1
-2	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	57	1	1
-2	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	58	0	1
-2	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	58	1	1
-2	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	58	2	1
-2	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	59	4	1
-2	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	59	5	1
-2	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	59	6	1
-2	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	58	3	1
-2	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	58	4	1
-2	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	58	5	1
-2	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	59	1	1
-2	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	59	2	1
-2	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	59	3	1
-2	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	58	6	1
-2	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	58	7	1
-2	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	59	0	1
-2	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	59	7	1
-2	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	60	0	1
-2	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	60	1	1
-2	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	8	7	1
-2	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	9	0	1
-2	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	9	1	1
-2	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	7	6	1
-2	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	7	7	1
-2	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	8	0	1
-2	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	8	4	1
-2	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	8	5	1
-2	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	8	6	1
-2	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	8	1	1
-2	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	8	2	1
-2	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	8	3	1
-2	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	9	2	1
-2	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	9	3	1
-2	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	9	4	1
-2	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	10	6	1
-2	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	10	7	1
-2	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	11	0	1
-2	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	9	5	1
-2	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	9	6	1
-2	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	9	7	1
-2	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	10	3	1
-2	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	10	4	1
-2	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	10	5	1
-2	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	10	0	1
-2	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	10	1	1
-2	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	10	2	1
-2	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	11	1	1
-2	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	11	2	1
-2	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	11	3	1
-2	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	12	5	1
-2	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	12	6	1
-2	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	12	7	1
-2	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	11	4	1
-2	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	11	5	1
-2	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	11	6	1
-2	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	12	2	1
-2	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	12	3	1
-2	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	12	4	1
-2	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	11	7	1
-2	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	12	0	1
-2	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	12	1	1
-2	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	13	0	1
-2	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	13	1	1
-2	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	13	2	1
-2	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	14	4	1
-2	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	14	5	1
-2	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	14	6	1
-2	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	13	3	1
-2	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	13	4	1
-2	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	13	5	1
-2	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	14	1	1
-2	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	14	2	1
-2	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	14	3	1
-2	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	13	6	1
-2	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	13	7	1
-2	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	14	0	1
-2	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	14	7	1
-2	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	15	0	1
-2	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	15	1	1
-2	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	16	3	1
-2	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	16	4	1
-2	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	16	5	1
-2	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	15	2	1
-2	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	15	3	1
-2	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	15	4	1
-2	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	16	0	1
-2	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	16	1	1
-2	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	16	2	1
-2	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	15	5	1
-2	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	15	6	1
-2	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	15	7	1
-2	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	16	6	1
-2	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	16	7	1
-2	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	17	0	1
-2	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	18	2	1
-2	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	18	3	1
-2	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	18	4	1
-2	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	17	1	1
-2	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	17	2	1
-2	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	17	3	1
-2	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	17	7	1
-2	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	18	0	1
-2	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	18	1	1
-2	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	17	4	1
-2	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	17	5	1
-2	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	17	6	1
-2	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	18	5	1
-2	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	18	6	1
-2	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	18	7	1
+layout	bit	part	dframe	dbdata	polarity
+0	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	9	0	1
+0	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	10	0	1
+0	cell_0/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	11	0	1
+0	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	0	0	1
+0	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	1	0	1
+0	cell_0/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	2	0	1
+0	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	6	0	1
+0	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	7	0	1
+0	cell_0/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	8	0	1
+0	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	3	0	1
+0	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	4	0	1
+0	cell_0/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	5	0	1
+0	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	12	0	1
+0	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	13	0	1
+0	cell_0/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	14	0	1
+0	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	24	0	1
+0	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	25	0	1
+0	cell_1/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	26	0	1
+0	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	15	0	1
+0	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	16	0	1
+0	cell_1/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	17	0	1
+0	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	21	0	1
+0	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	22	0	1
+0	cell_1/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	23	0	1
+0	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	18	0	1
+0	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	19	0	1
+0	cell_1/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	20	0	1
+0	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	27	0	1
+0	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	28	0	1
+0	cell_1/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	29	0	1
+0	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	159	0	1
+0	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	160	0	1
+0	cell_10/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	161	0	1
+0	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	150	0	1
+0	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	151	0	1
+0	cell_10/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	152	0	1
+0	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	156	0	1
+0	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	157	0	1
+0	cell_10/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	158	0	1
+0	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	153	0	1
+0	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	154	0	1
+0	cell_10/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	155	0	1
+0	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	162	0	1
+0	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	163	0	1
+0	cell_10/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	164	0	1
+0	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	174	0	1
+0	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	175	0	1
+0	cell_11/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	176	0	1
+0	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	165	0	1
+0	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	166	0	1
+0	cell_11/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	167	0	1
+0	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	171	0	1
+0	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	172	0	1
+0	cell_11/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	173	0	1
+0	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	168	0	1
+0	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	169	0	1
+0	cell_11/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	170	0	1
+0	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	177	0	1
+0	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	178	0	1
+0	cell_11/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	179	0	1
+0	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	189	0	1
+0	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	190	0	1
+0	cell_12/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	191	0	1
+0	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	180	0	1
+0	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	181	0	1
+0	cell_12/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	182	0	1
+0	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	186	0	1
+0	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	187	0	1
+0	cell_12/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	188	0	1
+0	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	183	0	1
+0	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	184	0	1
+0	cell_12/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	185	0	1
+0	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	192	0	1
+0	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	193	0	1
+0	cell_12/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	194	0	1
+0	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	204	0	1
+0	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	205	0	1
+0	cell_13/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	206	0	1
+0	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	195	0	1
+0	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	196	0	1
+0	cell_13/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	197	0	1
+0	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	201	0	1
+0	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	202	0	1
+0	cell_13/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	203	0	1
+0	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	198	0	1
+0	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	199	0	1
+0	cell_13/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	200	0	1
+0	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	207	0	1
+0	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	208	0	1
+0	cell_13/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	209	0	1
+0	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	219	0	1
+0	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	220	0	1
+0	cell_14/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	221	0	1
+0	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	210	0	1
+0	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	211	0	1
+0	cell_14/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	212	0	1
+0	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	216	0	1
+0	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	217	0	1
+0	cell_14/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	218	0	1
+0	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	213	0	1
+0	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	214	0	1
+0	cell_14/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	215	0	1
+0	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	222	0	1
+0	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	223	0	1
+0	cell_14/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	224	0	1
+0	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	234	0	1
+0	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	235	0	1
+0	cell_15/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	236	0	1
+0	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	225	0	1
+0	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	226	0	1
+0	cell_15/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	227	0	1
+0	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	231	0	1
+0	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	232	0	1
+0	cell_15/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	233	0	1
+0	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	228	0	1
+0	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	229	0	1
+0	cell_15/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	230	0	1
+0	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	237	0	1
+0	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	238	0	1
+0	cell_15/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	239	0	1
+0	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	249	0	1
+0	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	250	0	1
+0	cell_16/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	251	0	1
+0	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	240	0	1
+0	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	241	0	1
+0	cell_16/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	242	0	1
+0	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	246	0	1
+0	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	247	0	1
+0	cell_16/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	248	0	1
+0	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	243	0	1
+0	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	244	0	1
+0	cell_16/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	245	0	1
+0	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	252	0	1
+0	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	253	0	1
+0	cell_16/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	254	0	1
+0	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	264	0	1
+0	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	265	0	1
+0	cell_17/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	266	0	1
+0	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	255	0	1
+0	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	256	0	1
+0	cell_17/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	257	0	1
+0	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	261	0	1
+0	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	262	0	1
+0	cell_17/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	263	0	1
+0	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	258	0	1
+0	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	259	0	1
+0	cell_17/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	260	0	1
+0	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	267	0	1
+0	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	268	0	1
+0	cell_17/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	269	0	1
+0	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	279	0	1
+0	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	280	0	1
+0	cell_18/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	281	0	1
+0	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	270	0	1
+0	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	271	0	1
+0	cell_18/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	272	0	1
+0	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	276	0	1
+0	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	277	0	1
+0	cell_18/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	278	0	1
+0	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	273	0	1
+0	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	274	0	1
+0	cell_18/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	275	0	1
+0	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	282	0	1
+0	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	283	0	1
+0	cell_18/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	284	0	1
+0	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	294	0	1
+0	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	295	0	1
+0	cell_19/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	296	0	1
+0	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	285	0	1
+0	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	286	0	1
+0	cell_19/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	287	0	1
+0	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	291	0	1
+0	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	292	0	1
+0	cell_19/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	293	0	1
+0	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	288	0	1
+0	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	289	0	1
+0	cell_19/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	290	0	1
+0	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	297	0	1
+0	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	298	0	1
+0	cell_19/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	299	0	1
+0	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	39	0	1
+0	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	40	0	1
+0	cell_2/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	41	0	1
+0	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	30	0	1
+0	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	31	0	1
+0	cell_2/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	32	0	1
+0	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	36	0	1
+0	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	37	0	1
+0	cell_2/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	38	0	1
+0	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	33	0	1
+0	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	34	0	1
+0	cell_2/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	35	0	1
+0	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	42	0	1
+0	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	43	0	1
+0	cell_2/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	44	0	1
+0	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	309	0	1
+0	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	310	0	1
+0	cell_20/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	311	0	1
+0	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	300	0	1
+0	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	301	0	1
+0	cell_20/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	302	0	1
+0	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	306	0	1
+0	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	307	0	1
+0	cell_20/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	308	0	1
+0	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	303	0	1
+0	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	304	0	1
+0	cell_20/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	305	0	1
+0	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	312	0	1
+0	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	313	0	1
+0	cell_20/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	314	0	1
+0	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	324	0	1
+0	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	325	0	1
+0	cell_21/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	326	0	1
+0	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	315	0	1
+0	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	316	0	1
+0	cell_21/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	317	0	1
+0	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	321	0	1
+0	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	322	0	1
+0	cell_21/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	323	0	1
+0	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	318	0	1
+0	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	319	0	1
+0	cell_21/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	320	0	1
+0	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	327	0	1
+0	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	328	0	1
+0	cell_21/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	329	0	1
+0	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	339	0	1
+0	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	340	0	1
+0	cell_22/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	341	0	1
+0	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	330	0	1
+0	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	331	0	1
+0	cell_22/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	332	0	1
+0	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	336	0	1
+0	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	337	0	1
+0	cell_22/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	338	0	1
+0	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	333	0	1
+0	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	334	0	1
+0	cell_22/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	335	0	1
+0	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	342	0	1
+0	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	343	0	1
+0	cell_22/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	344	0	1
+0	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	354	0	1
+0	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	355	0	1
+0	cell_23/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	356	0	1
+0	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	345	0	1
+0	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	346	0	1
+0	cell_23/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	347	0	1
+0	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	351	0	1
+0	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	352	0	1
+0	cell_23/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	353	0	1
+0	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	348	0	1
+0	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	349	0	1
+0	cell_23/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	350	0	1
+0	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	357	0	1
+0	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	358	0	1
+0	cell_23/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	359	0	1
+0	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	369	0	1
+0	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	370	0	1
+0	cell_24/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	371	0	1
+0	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	360	0	1
+0	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	361	0	1
+0	cell_24/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	362	0	1
+0	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	366	0	1
+0	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	367	0	1
+0	cell_24/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	368	0	1
+0	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	363	0	1
+0	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	364	0	1
+0	cell_24/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	365	0	1
+0	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	372	0	1
+0	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	373	0	1
+0	cell_24/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	374	0	1
+0	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	384	0	1
+0	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	385	0	1
+0	cell_25/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	386	0	1
+0	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	375	0	1
+0	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	376	0	1
+0	cell_25/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	377	0	1
+0	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	381	0	1
+0	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	382	0	1
+0	cell_25/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	383	0	1
+0	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	378	0	1
+0	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	379	0	1
+0	cell_25/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	380	0	1
+0	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	387	0	1
+0	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	388	0	1
+0	cell_25/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	389	0	1
+0	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	399	0	1
+0	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	400	0	1
+0	cell_26/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	401	0	1
+0	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	390	0	1
+0	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	391	0	1
+0	cell_26/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	392	0	1
+0	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	396	0	1
+0	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	397	0	1
+0	cell_26/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	398	0	1
+0	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	393	0	1
+0	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	394	0	1
+0	cell_26/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	395	0	1
+0	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	402	0	1
+0	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	403	0	1
+0	cell_26/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	404	0	1
+0	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	414	0	1
+0	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	415	0	1
+0	cell_27/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	416	0	1
+0	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	405	0	1
+0	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	406	0	1
+0	cell_27/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	407	0	1
+0	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	411	0	1
+0	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	412	0	1
+0	cell_27/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	413	0	1
+0	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	408	0	1
+0	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	409	0	1
+0	cell_27/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	410	0	1
+0	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	417	0	1
+0	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	418	0	1
+0	cell_27/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	419	0	1
+0	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	429	0	1
+0	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	430	0	1
+0	cell_28/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	431	0	1
+0	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	420	0	1
+0	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	421	0	1
+0	cell_28/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	422	0	1
+0	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	426	0	1
+0	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	427	0	1
+0	cell_28/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	428	0	1
+0	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	423	0	1
+0	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	424	0	1
+0	cell_28/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	425	0	1
+0	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	432	0	1
+0	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	433	0	1
+0	cell_28/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	434	0	1
+0	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	444	0	1
+0	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	445	0	1
+0	cell_29/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	446	0	1
+0	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	435	0	1
+0	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	436	0	1
+0	cell_29/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	437	0	1
+0	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	441	0	1
+0	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	442	0	1
+0	cell_29/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	443	0	1
+0	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	438	0	1
+0	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	439	0	1
+0	cell_29/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	440	0	1
+0	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	447	0	1
+0	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	448	0	1
+0	cell_29/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	449	0	1
+0	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	54	0	1
+0	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	55	0	1
+0	cell_3/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	56	0	1
+0	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	45	0	1
+0	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	46	0	1
+0	cell_3/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	47	0	1
+0	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	51	0	1
+0	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	52	0	1
+0	cell_3/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	53	0	1
+0	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	48	0	1
+0	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	49	0	1
+0	cell_3/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	50	0	1
+0	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	57	0	1
+0	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	58	0	1
+0	cell_3/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	59	0	1
+0	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	459	0	1
+0	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	460	0	1
+0	cell_30/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	461	0	1
+0	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	450	0	1
+0	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	451	0	1
+0	cell_30/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	452	0	1
+0	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	456	0	1
+0	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	457	0	1
+0	cell_30/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	458	0	1
+0	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	453	0	1
+0	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	454	0	1
+0	cell_30/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	455	0	1
+0	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	462	0	1
+0	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	463	0	1
+0	cell_30/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	464	0	1
+0	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	474	0	1
+0	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	475	0	1
+0	cell_31/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	476	0	1
+0	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	465	0	1
+0	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	466	0	1
+0	cell_31/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	467	0	1
+0	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	471	0	1
+0	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	472	0	1
+0	cell_31/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	473	0	1
+0	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	468	0	1
+0	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	469	0	1
+0	cell_31/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	470	0	1
+0	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	477	0	1
+0	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	478	0	1
+0	cell_31/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	479	0	1
+0	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	69	0	1
+0	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	70	0	1
+0	cell_4/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	71	0	1
+0	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	60	0	1
+0	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	61	0	1
+0	cell_4/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	62	0	1
+0	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	66	0	1
+0	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	67	0	1
+0	cell_4/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	68	0	1
+0	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	63	0	1
+0	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	64	0	1
+0	cell_4/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	65	0	1
+0	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	72	0	1
+0	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	73	0	1
+0	cell_4/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	74	0	1
+0	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	84	0	1
+0	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	85	0	1
+0	cell_5/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	86	0	1
+0	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	75	0	1
+0	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	76	0	1
+0	cell_5/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	77	0	1
+0	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	81	0	1
+0	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	82	0	1
+0	cell_5/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	83	0	1
+0	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	78	0	1
+0	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	79	0	1
+0	cell_5/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	80	0	1
+0	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	87	0	1
+0	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	88	0	1
+0	cell_5/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	89	0	1
+0	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	99	0	1
+0	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	100	0	1
+0	cell_6/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	101	0	1
+0	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	90	0	1
+0	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	91	0	1
+0	cell_6/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	92	0	1
+0	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	96	0	1
+0	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	97	0	1
+0	cell_6/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	98	0	1
+0	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	93	0	1
+0	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	94	0	1
+0	cell_6/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	95	0	1
+0	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	102	0	1
+0	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	103	0	1
+0	cell_6/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	104	0	1
+0	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	114	0	1
+0	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	115	0	1
+0	cell_7/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	116	0	1
+0	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	105	0	1
+0	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	106	0	1
+0	cell_7/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	107	0	1
+0	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	111	0	1
+0	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	112	0	1
+0	cell_7/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	113	0	1
+0	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	108	0	1
+0	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	109	0	1
+0	cell_7/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	110	0	1
+0	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	117	0	1
+0	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	118	0	1
+0	cell_7/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	119	0	1
+0	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	129	0	1
+0	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	130	0	1
+0	cell_8/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	131	0	1
+0	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	120	0	1
+0	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	121	0	1
+0	cell_8/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	122	0	1
+0	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	126	0	1
+0	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	127	0	1
+0	cell_8/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	128	0	1
+0	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	123	0	1
+0	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	124	0	1
+0	cell_8/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	125	0	1
+0	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	132	0	1
+0	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	133	0	1
+0	cell_8/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	134	0	1
+0	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	144	0	1
+0	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	145	0	1
+0	cell_9/clkmux_4to1b_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	146	0	1
+0	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	135	0	1
+0	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	136	0	1
+0	cell_9/clkmux_4to1l_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	137	0	1
+0	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	141	0	1
+0	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	142	0	1
+0	cell_9/clkmux_4to1r_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	143	0	1
+0	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[0]	hdr	138	0	1
+0	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[1]	hdr	139	0	1
+0	cell_9/clkmux_4to1t_sbmux_sp/clkmux_dolsgn_sbmux_sp_dolsgn_0/bead_val[2]	hdr	140	0	1
+0	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[0]	hdr	147	0	1
+0	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[1]	hdr	148	0	1
+0	cell_9/clkmux_5to1_dolsgn_sbmux_np_dolsgn_0/bead_val[2]	hdr	149	0	1

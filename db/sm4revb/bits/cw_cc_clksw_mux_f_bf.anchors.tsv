@@ -1,7 +1,7 @@
 uid	layout	object	part	frame	bdata
-cw_cc_clksw_mux_f_bf_r4_c0	0	sector0	hdr	313	0
-cw_cc_clksw_mux_f_bf_r4_c121	0	sector1	hdr	185	0
-cw_cc_clksw_mux_f_bf_r4_c60	1	sector0	hdr	71	0
-cw_cc_clksw_mux_f_bf_r51_c0	2	sector0	hdr	158	0
-cw_cc_clksw_mux_f_bf_r51_c121	1	sector1	hdr	19	0
-cw_cc_clksw_mux_f_bf_r51_c60	1	sector0	hdr	11	0
+cw_cc_clksw_mux_f_bf_r4_c0	0	sector0	hdr	2504	0
+cw_cc_clksw_mux_f_bf_r4_c121	0	sector1	hdr	1480	0
+cw_cc_clksw_mux_f_bf_r4_c60	0	sector0	hdr	569	0
+cw_cc_clksw_mux_f_bf_r51_c0	0	sector0	hdr	1266	0
+cw_cc_clksw_mux_f_bf_r51_c121	0	sector1	hdr	153	0
+cw_cc_clksw_mux_f_bf_r51_c60	0	sector0	hdr	89	0

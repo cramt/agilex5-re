@@ -26,13 +26,17 @@ half (X ≤ 60) and sector 1 the right half, mirrored.
 
 - `floorplan.tsv`: every block instance (`uid`) with its BCM type, fitter
   element and X/Y/Z. `<type>_r<y>_c<x>` uids are at fitter X/Y.
-- `bits/<type>.layout.tsv`: `layout, bit, dframe, dbdata, polarity`. The
-  block's named configuration bits relative to an anchor. Polarity 1 means
-  the image bit equals the named bit; 0 means the image holds its inverse.
+- `bits/<type>.layout.tsv`: `layout, bit, part, dframe, dbdata, polarity`.
+  The block's named configuration bits, each relative to the anchor of the
+  image part it lives in. Polarity 1 means the image bit equals the named
+  bit; 0 means the image holds its inverse.
 - `bits/<type>.anchors.tsv`: `uid, layout, object, part, frame, bdata`, one
-  row per instance. For CRAM the bit is at `(frame + dframe, bdata +
-  dbdata)` of that sector; for other parts, `frame` and `dframe` are a byte
-  offset into the part and `bdata` / `dbdata` a bit.
+  row per instance and image part (an M20K has a `cram` row for its
+  configuration and a `ram` row for its contents). For CRAM the bit is at
+  `(frame + dframe, bdata + dbdata)` of that object's sector. For any other
+  part, `frame + dframe` is a bit offset into the part (byte = offset / 8,
+  bit = offset % 8) and `bdata` / `dbdata` are 0.
+- Every block type has exactly one layout.
 - `bcm_types.json`: the BCM type tree. For each type, `children`
   (instance name → type), `custom` (CUSTOM attribute names) and `direct`
   (DIRECT attribute widths). A block attribute path is the instance names

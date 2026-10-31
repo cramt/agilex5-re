@@ -54,17 +54,23 @@ impl BitPos {
     }
 }
 
+/// One image part of an instance: CRAM is addressed by (frame, bdata),
+/// anything else by a bit offset in `frame` (README, docs/db-format.md).
 struct Anchor {
-    layout: usize,
     start: usize,
     cram: bool,
     frame: i64,
     bdata: i64,
 }
 
+struct Placed {
+    layout: usize,
+    parts: HashMap<String, Anchor>,
+}
+
 pub struct BlockMap {
-    layouts: Vec<HashMap<String, (i64, i64, bool)>>,
-    anchors: HashMap<String, Anchor>,
+    layouts: Vec<HashMap<String, (String, i64, i64, bool)>>,
+    anchors: HashMap<String, Placed>,
 }
 
 fn tsv(path: &Path) -> Result<Vec<Vec<String>>> {
@@ -74,23 +80,26 @@ fn tsv(path: &Path) -> Result<Vec<Vec<String>>> {
 
 impl BlockMap {
     pub fn load(prefix: &Path) -> Result<BlockMap> {
-        let mut layouts: Vec<HashMap<String, (i64, i64, bool)>> = Vec::new();
+        let mut layouts: Vec<HashMap<String, (String, i64, i64, bool)>> = Vec::new();
         for r in tsv(&prefix.with_extension("layout.tsv"))? {
             let id: usize = r[0].parse()?;
             if layouts.len() <= id {
                 layouts.resize_with(id + 1, HashMap::new);
             }
-            layouts[id].insert(r[1].clone(), (r[2].parse()?, r[3].parse()?, r[4] == "1"));
+            layouts[id].insert(r[1].clone(), (r[2].clone(), r[3].parse()?, r[4].parse()?, r[5] == "1"));
         }
-        let mut anchors = HashMap::new();
+        let mut anchors: HashMap<String, Placed> = HashMap::new();
         for r in tsv(&prefix.with_extension("anchors.tsv"))? {
             let (_, _, start, _) = PARTS
                 .iter()
                 .find(|(o, p, _, _)| *o == r[2] && *p == r[3])
                 .with_context(|| format!("unknown image part {}/{}", r[2], r[3]))?;
-            anchors.insert(
-                r[0].clone(),
-                Anchor { layout: r[1].parse()?, start: *start, cram: r[3] == "cram", frame: r[4].parse()?, bdata: r[5].parse()? },
+            let placed = anchors
+                .entry(r[0].clone())
+                .or_insert_with(|| Placed { layout: r[1].parse().unwrap_or(0), parts: HashMap::new() });
+            placed.parts.insert(
+                r[3].clone(),
+                Anchor { start: *start, cram: r[3] == "cram", frame: r[4].parse()?, bdata: r[5].parse()? },
             );
         }
         Ok(BlockMap { layouts, anchors })
@@ -101,13 +110,14 @@ impl BlockMap {
     }
 
     pub fn pos(&self, uid: &str, bit: &str) -> Option<BitPos> {
-        let a = self.anchors.get(uid)?;
-        let &(df, dd, equal) = self.layouts[a.layout].get(bit)?;
+        let placed = self.anchors.get(uid)?;
+        let (part, df, dd, equal) = self.layouts[placed.layout].get(bit)?;
+        let a = placed.parts.get(part)?;
         let (f, d) = ((a.frame + df) as usize, (a.bdata + dd) as usize);
         Some(if a.cram {
-            BitPos { byte: a.start + f * FRAME_BYTES + d / 8, bit: (d % 8) as u8, equal }
+            BitPos { byte: a.start + f * FRAME_BYTES + d / 8, bit: (d % 8) as u8, equal: *equal }
         } else {
-            BitPos { byte: a.start + f, bit: d as u8, equal }
+            BitPos { byte: a.start + f / 8, bit: (f % 8) as u8, equal: *equal }
         })
     }
 }

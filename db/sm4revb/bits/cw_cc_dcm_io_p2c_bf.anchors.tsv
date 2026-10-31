@@ -1,5 +1,5 @@
 uid	layout	object	part	frame	bdata
-cw_cc_dcm_io_p2c_bf_r4_c121	0	sector1	hdr	173	0
-cw_cc_dcm_io_p2c_bf_r4_c60	1	sector0	hdr	131	0
-cw_cc_dcm_io_p2c_bf_r51_c121	2	sector1	hdr	8	0
-cw_cc_dcm_io_p2c_bf_r51_c60	2	sector0	hdr	0	0
+cw_cc_dcm_io_p2c_bf_r4_c121	0	sector1	hdr	1391	0
+cw_cc_dcm_io_p2c_bf_r4_c60	0	sector0	hdr	1049	0
+cw_cc_dcm_io_p2c_bf_r51_c121	0	sector1	hdr	64	0
+cw_cc_dcm_io_p2c_bf_r51_c60	0	sector0	hdr	0	0

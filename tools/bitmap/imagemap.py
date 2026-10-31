@@ -14,7 +14,8 @@ FRAME_BYTES = 540
 
 
 def addr(off, k):
-    """(object, part, a, b): CRAM is (frame, bdata); anything else (byte, bit)."""
+    """(object, part, a, b): CRAM is (frame, bdata); anything else (byte,
+    bit), which layout.load turns into a bit offset."""
     for obj, part, start, size in PARTS:
         r = off - start
         if 0 <= r < size:

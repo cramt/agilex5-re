@@ -643,8 +643,11 @@ forms were recovered from the binaries, since `-help` prints nothing.
   id, writes 2 × ⌈log2 ids⌉ `.sof` files, each flipping the pairs whose id
   has bit k set (or clear), and `bitmap.py` reads every changed image bit's
   id back. A CRAM bit hit by more than one pair is reported as a clash.
-  `pack.py` stores one relative layout plus a per-instance anchor in
-  [`db/sm4revb/bits/`](db/sm4revb/bits/).
+  `pack.py` stores one relative layout plus a per-instance anchor for each
+  image part the instance touches in
+  [`db/sm4revb/bits/`](db/sm4revb/bits/) (format:
+  [docs/db-format.md](docs/db-format.md)). **Every block type has
+  exactly one layout.
 
   | type | instances | bits/instance | mapped | layouts | where |
   |---|---|---|---|---|---|
@@ -657,6 +660,7 @@ forms were recovered from the binaries, since `-help` prints nothing.
   | `cw_rt_m20k_dsp_base` (M20K/DSP routing) | 752 | 5,831 | all, extrapolated from rows 5, 6, 27, 51 | 1 | CRAM, 94 x 64 |
   | `cw_dssm` (DSP) | 188 | 521 | all | 1 | CRAM |
   | `sm_hssi_top` | 1 | 186,662 | all | 1 | `perictrl0` data region |
+  | `cw_mm_m20k` (M20K) | 358 | 20,588 | all, extrapolated from rows 5, 6, 27, 43, 51 | 1 | configuration in CRAM, 20,480 content bits in the sector's `ram` part |
 
   The LAB anchors decompose exactly [obs]: frame = 200 + 98·(Y − 6),
   so one LAB row per 98-frame group (`sof_meta`'s `_frames` unit), and

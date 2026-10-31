@@ -1,193 +1,65 @@
-layout	bit	dframe	dbdata	polarity
-0	mc2p_mux15to8/clock_int0/bead_val[0]	2	0	1
-0	mc2p_mux15to8/clock_int0/bead_val[1]	2	1	1
-0	mc2p_mux15to8/clock_int1/bead_val[0]	2	2	1
-0	mc2p_mux15to8/clock_int1/bead_val[1]	2	3	1
-0	mc2p_mux15to8/clock_int2/bead_val[0]	2	4	1
-0	mc2p_mux15to8/clock_int2/bead_val[1]	2	5	1
-0	mc2p_mux15to8/clock_int3/bead_val[0]	2	6	1
-0	mc2p_mux15to8/clock_int3/bead_val[1]	2	7	1
-0	mc2p_mux15to8/clock_int4/bead_val[0]	3	0	1
-0	mc2p_mux15to8/clock_int4/bead_val[1]	3	1	1
-0	mc2p_mux15to8/clock_int5/bead_val[0]	3	2	1
-0	mc2p_mux15to8/clock_int5/bead_val[1]	3	3	1
-0	mc2p_mux15to8/clock_int6/bead_val[0]	3	4	1
-0	mc2p_mux15to8/clock_int6/bead_val[1]	3	5	1
-0	mc2p_mux15to8/clock_int7/bead_val[0]	3	6	1
-0	mc2p_mux15to8/clock_int7/bead_val[1]	3	7	1
-0	mc2p_mux23to16/clock_int0/bead_val[0]	4	0	1
-0	mc2p_mux23to16/clock_int0/bead_val[1]	4	1	1
-0	mc2p_mux23to16/clock_int1/bead_val[0]	4	2	1
-0	mc2p_mux23to16/clock_int1/bead_val[1]	4	3	1
-0	mc2p_mux23to16/clock_int2/bead_val[0]	4	4	1
-0	mc2p_mux23to16/clock_int2/bead_val[1]	4	5	1
-0	mc2p_mux23to16/clock_int3/bead_val[0]	4	6	1
-0	mc2p_mux23to16/clock_int3/bead_val[1]	4	7	1
-0	mc2p_mux23to16/clock_int4/bead_val[0]	5	0	1
-0	mc2p_mux23to16/clock_int4/bead_val[1]	5	1	1
-0	mc2p_mux23to16/clock_int5/bead_val[0]	5	2	1
-0	mc2p_mux23to16/clock_int5/bead_val[1]	5	3	1
-0	mc2p_mux23to16/clock_int6/bead_val[0]	5	4	1
-0	mc2p_mux23to16/clock_int6/bead_val[1]	5	5	1
-0	mc2p_mux23to16/clock_int7/bead_val[0]	5	6	1
-0	mc2p_mux23to16/clock_int7/bead_val[1]	5	7	1
-0	mc2p_mux31to24/clock_int0/bead_val[0]	6	0	1
-0	mc2p_mux31to24/clock_int0/bead_val[1]	6	1	1
-0	mc2p_mux31to24/clock_int1/bead_val[0]	6	2	1
-0	mc2p_mux31to24/clock_int1/bead_val[1]	6	3	1
-0	mc2p_mux31to24/clock_int2/bead_val[0]	6	4	1
-0	mc2p_mux31to24/clock_int2/bead_val[1]	6	5	1
-0	mc2p_mux31to24/clock_int3/bead_val[0]	6	6	1
-0	mc2p_mux31to24/clock_int3/bead_val[1]	6	7	1
-0	mc2p_mux31to24/clock_int4/bead_val[0]	7	0	1
-0	mc2p_mux31to24/clock_int4/bead_val[1]	7	1	1
-0	mc2p_mux31to24/clock_int5/bead_val[0]	7	2	1
-0	mc2p_mux31to24/clock_int5/bead_val[1]	7	3	1
-0	mc2p_mux31to24/clock_int6/bead_val[0]	7	4	1
-0	mc2p_mux31to24/clock_int6/bead_val[1]	7	5	1
-0	mc2p_mux31to24/clock_int7/bead_val[0]	7	6	1
-0	mc2p_mux31to24/clock_int7/bead_val[1]	7	7	1
-0	mc2p_mux7to0/clock_int0/bead_val[0]	0	0	1
-0	mc2p_mux7to0/clock_int0/bead_val[1]	0	1	1
-0	mc2p_mux7to0/clock_int1/bead_val[0]	0	2	1
-0	mc2p_mux7to0/clock_int1/bead_val[1]	0	3	1
-0	mc2p_mux7to0/clock_int2/bead_val[0]	0	4	1
-0	mc2p_mux7to0/clock_int2/bead_val[1]	0	5	1
-0	mc2p_mux7to0/clock_int3/bead_val[0]	0	6	1
-0	mc2p_mux7to0/clock_int3/bead_val[1]	0	7	1
-0	mc2p_mux7to0/clock_int4/bead_val[0]	1	0	1
-0	mc2p_mux7to0/clock_int4/bead_val[1]	1	1	1
-0	mc2p_mux7to0/clock_int5/bead_val[0]	1	2	1
-0	mc2p_mux7to0/clock_int5/bead_val[1]	1	3	1
-0	mc2p_mux7to0/clock_int6/bead_val[0]	1	4	1
-0	mc2p_mux7to0/clock_int6/bead_val[1]	1	5	1
-0	mc2p_mux7to0/clock_int7/bead_val[0]	1	6	1
-0	mc2p_mux7to0/clock_int7/bead_val[1]	1	7	1
-1	mc2p_mux15to8/clock_int0/bead_val[0]	2	7	1
-1	mc2p_mux15to8/clock_int0/bead_val[1]	3	0	1
-1	mc2p_mux15to8/clock_int1/bead_val[0]	3	1	1
-1	mc2p_mux15to8/clock_int1/bead_val[1]	3	2	1
-1	mc2p_mux15to8/clock_int2/bead_val[0]	3	3	1
-1	mc2p_mux15to8/clock_int2/bead_val[1]	3	4	1
-1	mc2p_mux15to8/clock_int3/bead_val[0]	3	5	1
-1	mc2p_mux15to8/clock_int3/bead_val[1]	3	6	1
-1	mc2p_mux15to8/clock_int4/bead_val[0]	3	7	1
-1	mc2p_mux15to8/clock_int4/bead_val[1]	4	0	1
-1	mc2p_mux15to8/clock_int5/bead_val[0]	4	1	1
-1	mc2p_mux15to8/clock_int5/bead_val[1]	4	2	1
-1	mc2p_mux15to8/clock_int6/bead_val[0]	4	3	1
-1	mc2p_mux15to8/clock_int6/bead_val[1]	4	4	1
-1	mc2p_mux15to8/clock_int7/bead_val[0]	4	5	1
-1	mc2p_mux15to8/clock_int7/bead_val[1]	4	6	1
-1	mc2p_mux23to16/clock_int0/bead_val[0]	4	7	1
-1	mc2p_mux23to16/clock_int0/bead_val[1]	5	0	1
-1	mc2p_mux23to16/clock_int1/bead_val[0]	5	1	1
-1	mc2p_mux23to16/clock_int1/bead_val[1]	5	2	1
-1	mc2p_mux23to16/clock_int2/bead_val[0]	5	3	1
-1	mc2p_mux23to16/clock_int2/bead_val[1]	5	4	1
-1	mc2p_mux23to16/clock_int3/bead_val[0]	5	5	1
-1	mc2p_mux23to16/clock_int3/bead_val[1]	5	6	1
-1	mc2p_mux23to16/clock_int4/bead_val[0]	5	7	1
-1	mc2p_mux23to16/clock_int4/bead_val[1]	6	0	1
-1	mc2p_mux23to16/clock_int5/bead_val[0]	6	1	1
-1	mc2p_mux23to16/clock_int5/bead_val[1]	6	2	1
-1	mc2p_mux23to16/clock_int6/bead_val[0]	6	3	1
-1	mc2p_mux23to16/clock_int6/bead_val[1]	6	4	1
-1	mc2p_mux23to16/clock_int7/bead_val[0]	6	5	1
-1	mc2p_mux23to16/clock_int7/bead_val[1]	6	6	1
-1	mc2p_mux31to24/clock_int0/bead_val[0]	6	7	1
-1	mc2p_mux31to24/clock_int0/bead_val[1]	7	0	1
-1	mc2p_mux31to24/clock_int1/bead_val[0]	7	1	1
-1	mc2p_mux31to24/clock_int1/bead_val[1]	7	2	1
-1	mc2p_mux31to24/clock_int2/bead_val[0]	7	3	1
-1	mc2p_mux31to24/clock_int2/bead_val[1]	7	4	1
-1	mc2p_mux31to24/clock_int3/bead_val[0]	7	5	1
-1	mc2p_mux31to24/clock_int3/bead_val[1]	7	6	1
-1	mc2p_mux31to24/clock_int4/bead_val[0]	7	7	1
-1	mc2p_mux31to24/clock_int4/bead_val[1]	8	0	1
-1	mc2p_mux31to24/clock_int5/bead_val[0]	8	1	1
-1	mc2p_mux31to24/clock_int5/bead_val[1]	8	2	1
-1	mc2p_mux31to24/clock_int6/bead_val[0]	8	3	1
-1	mc2p_mux31to24/clock_int6/bead_val[1]	8	4	1
-1	mc2p_mux31to24/clock_int7/bead_val[0]	8	5	1
-1	mc2p_mux31to24/clock_int7/bead_val[1]	8	6	1
-1	mc2p_mux7to0/clock_int0/bead_val[0]	0	7	1
-1	mc2p_mux7to0/clock_int0/bead_val[1]	1	0	1
-1	mc2p_mux7to0/clock_int1/bead_val[0]	1	1	1
-1	mc2p_mux7to0/clock_int1/bead_val[1]	1	2	1
-1	mc2p_mux7to0/clock_int2/bead_val[0]	1	3	1
-1	mc2p_mux7to0/clock_int2/bead_val[1]	1	4	1
-1	mc2p_mux7to0/clock_int3/bead_val[0]	1	5	1
-1	mc2p_mux7to0/clock_int3/bead_val[1]	1	6	1
-1	mc2p_mux7to0/clock_int4/bead_val[0]	1	7	1
-1	mc2p_mux7to0/clock_int4/bead_val[1]	2	0	1
-1	mc2p_mux7to0/clock_int5/bead_val[0]	2	1	1
-1	mc2p_mux7to0/clock_int5/bead_val[1]	2	2	1
-1	mc2p_mux7to0/clock_int6/bead_val[0]	2	3	1
-1	mc2p_mux7to0/clock_int6/bead_val[1]	2	4	1
-1	mc2p_mux7to0/clock_int7/bead_val[0]	2	5	1
-1	mc2p_mux7to0/clock_int7/bead_val[1]	2	6	1
-2	mc2p_mux15to8/clock_int0/bead_val[0]	2	2	1
-2	mc2p_mux15to8/clock_int0/bead_val[1]	2	3	1
-2	mc2p_mux15to8/clock_int1/bead_val[0]	2	4	1
-2	mc2p_mux15to8/clock_int1/bead_val[1]	2	5	1
-2	mc2p_mux15to8/clock_int2/bead_val[0]	2	6	1
-2	mc2p_mux15to8/clock_int2/bead_val[1]	2	7	1
-2	mc2p_mux15to8/clock_int3/bead_val[0]	3	0	1
-2	mc2p_mux15to8/clock_int3/bead_val[1]	3	1	1
-2	mc2p_mux15to8/clock_int4/bead_val[0]	3	2	1
-2	mc2p_mux15to8/clock_int4/bead_val[1]	3	3	1
-2	mc2p_mux15to8/clock_int5/bead_val[0]	3	4	1
-2	mc2p_mux15to8/clock_int5/bead_val[1]	3	5	1
-2	mc2p_mux15to8/clock_int6/bead_val[0]	3	6	1
-2	mc2p_mux15to8/clock_int6/bead_val[1]	3	7	1
-2	mc2p_mux15to8/clock_int7/bead_val[0]	4	0	1
-2	mc2p_mux15to8/clock_int7/bead_val[1]	4	1	1
-2	mc2p_mux23to16/clock_int0/bead_val[0]	4	2	1
-2	mc2p_mux23to16/clock_int0/bead_val[1]	4	3	1
-2	mc2p_mux23to16/clock_int1/bead_val[0]	4	4	1
-2	mc2p_mux23to16/clock_int1/bead_val[1]	4	5	1
-2	mc2p_mux23to16/clock_int2/bead_val[0]	4	6	1
-2	mc2p_mux23to16/clock_int2/bead_val[1]	4	7	1
-2	mc2p_mux23to16/clock_int3/bead_val[0]	5	0	1
-2	mc2p_mux23to16/clock_int3/bead_val[1]	5	1	1
-2	mc2p_mux23to16/clock_int4/bead_val[0]	5	2	1
-2	mc2p_mux23to16/clock_int4/bead_val[1]	5	3	1
-2	mc2p_mux23to16/clock_int5/bead_val[0]	5	4	1
-2	mc2p_mux23to16/clock_int5/bead_val[1]	5	5	1
-2	mc2p_mux23to16/clock_int6/bead_val[0]	5	6	1
-2	mc2p_mux23to16/clock_int6/bead_val[1]	5	7	1
-2	mc2p_mux23to16/clock_int7/bead_val[0]	6	0	1
-2	mc2p_mux23to16/clock_int7/bead_val[1]	6	1	1
-2	mc2p_mux31to24/clock_int0/bead_val[0]	6	2	1
-2	mc2p_mux31to24/clock_int0/bead_val[1]	6	3	1
-2	mc2p_mux31to24/clock_int1/bead_val[0]	6	4	1
-2	mc2p_mux31to24/clock_int1/bead_val[1]	6	5	1
-2	mc2p_mux31to24/clock_int2/bead_val[0]	6	6	1
-2	mc2p_mux31to24/clock_int2/bead_val[1]	6	7	1
-2	mc2p_mux31to24/clock_int3/bead_val[0]	7	0	1
-2	mc2p_mux31to24/clock_int3/bead_val[1]	7	1	1
-2	mc2p_mux31to24/clock_int4/bead_val[0]	7	2	1
-2	mc2p_mux31to24/clock_int4/bead_val[1]	7	3	1
-2	mc2p_mux31to24/clock_int5/bead_val[0]	7	4	1
-2	mc2p_mux31to24/clock_int5/bead_val[1]	7	5	1
-2	mc2p_mux31to24/clock_int6/bead_val[0]	7	6	1
-2	mc2p_mux31to24/clock_int6/bead_val[1]	7	7	1
-2	mc2p_mux31to24/clock_int7/bead_val[0]	8	0	1
-2	mc2p_mux31to24/clock_int7/bead_val[1]	8	1	1
-2	mc2p_mux7to0/clock_int0/bead_val[0]	0	2	1
-2	mc2p_mux7to0/clock_int0/bead_val[1]	0	3	1
-2	mc2p_mux7to0/clock_int1/bead_val[0]	0	4	1
-2	mc2p_mux7to0/clock_int1/bead_val[1]	0	5	1
-2	mc2p_mux7to0/clock_int2/bead_val[0]	0	6	1
-2	mc2p_mux7to0/clock_int2/bead_val[1]	0	7	1
-2	mc2p_mux7to0/clock_int3/bead_val[0]	1	0	1
-2	mc2p_mux7to0/clock_int3/bead_val[1]	1	1	1
-2	mc2p_mux7to0/clock_int4/bead_val[0]	1	2	1
-2	mc2p_mux7to0/clock_int4/bead_val[1]	1	3	1
-2	mc2p_mux7to0/clock_int5/bead_val[0]	1	4	1
-2	mc2p_mux7to0/clock_int5/bead_val[1]	1	5	1
-2	mc2p_mux7to0/clock_int6/bead_val[0]	1	6	1
-2	mc2p_mux7to0/clock_int6/bead_val[1]	1	7	1
-2	mc2p_mux7to0/clock_int7/bead_val[0]	2	0	1
-2	mc2p_mux7to0/clock_int7/bead_val[1]	2	1	1
+layout	bit	part	dframe	dbdata	polarity
+0	mc2p_mux15to8/clock_int0/bead_val[0]	hdr	16	0	1
+0	mc2p_mux15to8/clock_int0/bead_val[1]	hdr	17	0	1
+0	mc2p_mux15to8/clock_int1/bead_val[0]	hdr	18	0	1
+0	mc2p_mux15to8/clock_int1/bead_val[1]	hdr	19	0	1
+0	mc2p_mux15to8/clock_int2/bead_val[0]	hdr	20	0	1
+0	mc2p_mux15to8/clock_int2/bead_val[1]	hdr	21	0	1
+0	mc2p_mux15to8/clock_int3/bead_val[0]	hdr	22	0	1
+0	mc2p_mux15to8/clock_int3/bead_val[1]	hdr	23	0	1
+0	mc2p_mux15to8/clock_int4/bead_val[0]	hdr	24	0	1
+0	mc2p_mux15to8/clock_int4/bead_val[1]	hdr	25	0	1
+0	mc2p_mux15to8/clock_int5/bead_val[0]	hdr	26	0	1
+0	mc2p_mux15to8/clock_int5/bead_val[1]	hdr	27	0	1
+0	mc2p_mux15to8/clock_int6/bead_val[0]	hdr	28	0	1
+0	mc2p_mux15to8/clock_int6/bead_val[1]	hdr	29	0	1
+0	mc2p_mux15to8/clock_int7/bead_val[0]	hdr	30	0	1
+0	mc2p_mux15to8/clock_int7/bead_val[1]	hdr	31	0	1
+0	mc2p_mux23to16/clock_int0/bead_val[0]	hdr	32	0	1
+0	mc2p_mux23to16/clock_int0/bead_val[1]	hdr	33	0	1
+0	mc2p_mux23to16/clock_int1/bead_val[0]	hdr	34	0	1
+0	mc2p_mux23to16/clock_int1/bead_val[1]	hdr	35	0	1
+0	mc2p_mux23to16/clock_int2/bead_val[0]	hdr	36	0	1
+0	mc2p_mux23to16/clock_int2/bead_val[1]	hdr	37	0	1
+0	mc2p_mux23to16/clock_int3/bead_val[0]	hdr	38	0	1
+0	mc2p_mux23to16/clock_int3/bead_val[1]	hdr	39	0	1
+0	mc2p_mux23to16/clock_int4/bead_val[0]	hdr	40	0	1
+0	mc2p_mux23to16/clock_int4/bead_val[1]	hdr	41	0	1
+0	mc2p_mux23to16/clock_int5/bead_val[0]	hdr	42	0	1
+0	mc2p_mux23to16/clock_int5/bead_val[1]	hdr	43	0	1
+0	mc2p_mux23to16/clock_int6/bead_val[0]	hdr	44	0	1
+0	mc2p_mux23to16/clock_int6/bead_val[1]	hdr	45	0	1
+0	mc2p_mux23to16/clock_int7/bead_val[0]	hdr	46	0	1
+0	mc2p_mux23to16/clock_int7/bead_val[1]	hdr	47	0	1
+0	mc2p_mux31to24/clock_int0/bead_val[0]	hdr	48	0	1
+0	mc2p_mux31to24/clock_int0/bead_val[1]	hdr	49	0	1
+0	mc2p_mux31to24/clock_int1/bead_val[0]	hdr	50	0	1
+0	mc2p_mux31to24/clock_int1/bead_val[1]	hdr	51	0	1
+0	mc2p_mux31to24/clock_int2/bead_val[0]	hdr	52	0	1
+0	mc2p_mux31to24/clock_int2/bead_val[1]	hdr	53	0	1
+0	mc2p_mux31to24/clock_int3/bead_val[0]	hdr	54	0	1
+0	mc2p_mux31to24/clock_int3/bead_val[1]	hdr	55	0	1
+0	mc2p_mux31to24/clock_int4/bead_val[0]	hdr	56	0	1
+0	mc2p_mux31to24/clock_int4/bead_val[1]	hdr	57	0	1
+0	mc2p_mux31to24/clock_int5/bead_val[0]	hdr	58	0	1
+0	mc2p_mux31to24/clock_int5/bead_val[1]	hdr	59	0	1
+0	mc2p_mux31to24/clock_int6/bead_val[0]	hdr	60	0	1
+0	mc2p_mux31to24/clock_int6/bead_val[1]	hdr	61	0	1
+0	mc2p_mux31to24/clock_int7/bead_val[0]	hdr	62	0	1
+0	mc2p_mux31to24/clock_int7/bead_val[1]	hdr	63	0	1
+0	mc2p_mux7to0/clock_int0/bead_val[0]	hdr	0	0	1
+0	mc2p_mux7to0/clock_int0/bead_val[1]	hdr	1	0	1
+0	mc2p_mux7to0/clock_int1/bead_val[0]	hdr	2	0	1
+0	mc2p_mux7to0/clock_int1/bead_val[1]	hdr	3	0	1
+0	mc2p_mux7to0/clock_int2/bead_val[0]	hdr	4	0	1
+0	mc2p_mux7to0/clock_int2/bead_val[1]	hdr	5	0	1
+0	mc2p_mux7to0/clock_int3/bead_val[0]	hdr	6	0	1
+0	mc2p_mux7to0/clock_int3/bead_val[1]	hdr	7	0	1
+0	mc2p_mux7to0/clock_int4/bead_val[0]	hdr	8	0	1
+0	mc2p_mux7to0/clock_int4/bead_val[1]	hdr	9	0	1
+0	mc2p_mux7to0/clock_int5/bead_val[0]	hdr	10	0	1
+0	mc2p_mux7to0/clock_int5/bead_val[1]	hdr	11	0	1
+0	mc2p_mux7to0/clock_int6/bead_val[0]	hdr	12	0	1
+0	mc2p_mux7to0/clock_int6/bead_val[1]	hdr	13	0	1
+0	mc2p_mux7to0/clock_int7/bead_val[0]	hdr	14	0	1
+0	mc2p_mux7to0/clock_int7/bead_val[1]	hdr	15	0	1

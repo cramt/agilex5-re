@@ -21,15 +21,16 @@ from imagemap import FRAME_BYTES, PARTS  # noqa: E402
 
 def read_bits(img, prefix, uid):
     start = {(o, p): s for o, p, s, _ in PARTS}
-    anchor = next(r for r in csv.DictReader(open(prefix + '.anchors.tsv'), delimiter='\t') if r['uid'] == uid)
-    base = start[(anchor['object'], anchor['part'])]
-    f0, d0 = int(anchor['frame']), int(anchor['bdata'])
+    anchors = {r['part']: r for r in csv.DictReader(open(prefix + '.anchors.tsv'), delimiter='\t') if r['uid'] == uid}
+    lid = next(iter(anchors.values()))['layout']
     bits = {}
     for r in csv.DictReader(open(prefix + '.layout.tsv'), delimiter='\t'):
-        if r['layout'] != anchor['layout']:
+        if r['layout'] != lid:
             continue
-        f, d = f0 + int(r['dframe']), d0 + int(r['dbdata'])
-        off, k = (base + f * FRAME_BYTES + d // 8, d % 8) if anchor['part'] == 'cram' else (base + f, d)
+        a = anchors[r['part']]
+        base = start[(a['object'], r['part'])]
+        f, d = int(a['frame']) + int(r['dframe']), int(a['bdata']) + int(r['dbdata'])
+        off, k = (base + f * FRAME_BYTES + d // 8, d % 8) if r['part'] == 'cram' else (base + f // 8, f % 8)
         v = img[off] >> k & 1
         bits[r['bit']] = v if r['polarity'] == '1' else 1 - v
     return bits

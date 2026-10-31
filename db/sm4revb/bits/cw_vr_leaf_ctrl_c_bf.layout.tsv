@@ -1,26 +1,26 @@
-layout	bit	dframe	dbdata	polarity
-0	x22/burnin	2	2	1
-0	x22/fuse_vcchg[0]	0	0	1
-0	x22/fuse_vcchg[1]	0	1	1
-0	x22/fuse_vcchg[2]	0	2	1
-0	x22/ovr_strength[0]	0	7	1
-0	x22/ovr_strength[1]	1	0	1
-0	x22/ovrsht_enb	1	7	1
-0	x22/pull_down[0]	0	3	1
-0	x22/pull_down[1]	0	4	1
-0	x22/pull_up[0]	0	5	1
-0	x22/pull_up[1]	0	6	1
-0	x22/trim_ovrsht[0]	1	5	1
-0	x22/trim_ovrsht[1]	1	6	1
-0	x22/trim_undrsht[0]	1	3	1
-0	x22/trim_undrsht[1]	1	4	1
-0	x22/undr_strength[0]	1	1	1
-0	x22/undr_strength[1]	1	2	1
-0	x22/undrsht_enb	2	0	1
-0	x22/usermode	2	3	1
-0	x23/x39/x24/dft_iref10u	2	7	1
-0	x23/x39/x24/dft_sec_en	2	4	1
-0	x23/x39/x24/dft_vcchg	2	6	1
-0	x23/x39/x24/dft_vp5v	2	5	1
-0	x23/x39/x24/dft_vref_vcchg	3	0	1
-0	x24/cram_margin	2	1	1
+layout	bit	part	dframe	dbdata	polarity
+0	x22/burnin	hdr	18	0	1
+0	x22/fuse_vcchg[0]	hdr	0	0	1
+0	x22/fuse_vcchg[1]	hdr	1	0	1
+0	x22/fuse_vcchg[2]	hdr	2	0	1
+0	x22/ovr_strength[0]	hdr	7	0	1
+0	x22/ovr_strength[1]	hdr	8	0	1
+0	x22/ovrsht_enb	hdr	15	0	1
+0	x22/pull_down[0]	hdr	3	0	1
+0	x22/pull_down[1]	hdr	4	0	1
+0	x22/pull_up[0]	hdr	5	0	1
+0	x22/pull_up[1]	hdr	6	0	1
+0	x22/trim_ovrsht[0]	hdr	13	0	1
+0	x22/trim_ovrsht[1]	hdr	14	0	1
+0	x22/trim_undrsht[0]	hdr	11	0	1
+0	x22/trim_undrsht[1]	hdr	12	0	1
+0	x22/undr_strength[0]	hdr	9	0	1
+0	x22/undr_strength[1]	hdr	10	0	1
+0	x22/undrsht_enb	hdr	16	0	1
+0	x22/usermode	hdr	19	0	1
+0	x23/x39/x24/dft_iref10u	hdr	23	0	1
+0	x23/x39/x24/dft_sec_en	hdr	20	0	1
+0	x23/x39/x24/dft_vcchg	hdr	22	0	1
+0	x23/x39/x24/dft_vp5v	hdr	21	0	1
+0	x23/x39/x24/dft_vref_vcchg	hdr	24	0	1
+0	x24/cram_margin	hdr	17	0	1
