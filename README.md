@@ -1008,13 +1008,10 @@ modules from `devices/programmer/firmware/agilex5e.zip`), two codebooks from
     v_dense. Every design-independent `CORE` page (both codebooks, the
     482,784-byte block, the BBM header, the second action page, the
     sector-header stream) is byte-identical to pfg's.
-- **`CORE` is not byte-identical, by construction** [obs]: pfg picks libs and
-  BBM codes (`run_row_target`, `update_with_libs`, `run_combined_target`),
-  which is not reimplemented. The writer stores every column literally
-  (code 0), one zero lib per IP id. That makes fz0's `CORE` 248 KiB against
-  pfg's 112 KiB (36 frame pages instead of 2), and the random-CRAM one
-  slightly smaller than pfg's. Since phase 4 it sets the S4 flags exactly
-  as pfg does (o), so its physical frames equal pfg's.
+- **`CORE` is byte-identical since phase 4** [obs]: phase 3 stored every
+  column literally with one zero lib per IP id (fz0's `CORE` was 248 KiB
+  against pfg's 112 KiB). a5db now reproduces pfg's S4 flags, lib and BBM
+  code choice and page interleave, so the whole `.rbf` equals pfg's (o).
 
 **The S4 flag rule** (phase 2 [unk], solved in phase 4, see (o)):
 
@@ -1088,10 +1085,11 @@ Section format, now complete [obs, every item checked on the 60 pairs]:
 - **The sector-header stream** (one page after the second `CORE` action
   page): both sectors' headers, twice. Each is a send of the header's bits
   reversed and shifted by 24 bits, behind a command word (0x0CA8004C,
-  0x08A8004C, then 0x0CA80040, 0x08A80040); the first pass also forces 4–5
-  bits. After each pass come the control pairs `0x0064000d` and `0x0004000c`.
-  The forced bits are constants copied from the specimens [inf: their
-  meaning is unknown, and sector headers never varied in any specimen].
+  0x08A8004C, then 0x0CA80040, 0x08A80040). Each pass overwrites the low
+  bits of the send: the first pass sets bits 0–223 to zero except a fixed
+  list of ones (plus 4 ones further up), the second bits 0–31 (o). After
+  each pass come the control pairs `0x0064000d` and `0x0004000c`. What the
+  forced bits mean is [unk].
 
 ### (m) Phase 3: a design written by a5db, read back by Quartus (Plan step 4 → 7)
 
@@ -1165,6 +1163,69 @@ repairer:
   `a5db` reads the lists from the user's install at run time
   (`install::rif_lists`): the `S4_SI` records are stored raw, 10 bytes each,
   one ascending run per slot.
+
+**pfg's 2D compression** [obs; `FBGEN_ND_2D_ENGINE::run`,
+`FBGEN_GEN::merge_and_create_2d_libs`, `update_with_libs`,
+`find_and_clear_top_hash` and `run_combined_target` decompiled, then
+checked]. A block is one of the 60 BBM columns over one stored 98-frame
+group, taken from the physical frames (S4 flags included):
+
+- **Zero**: an all-zero block gets code 1. pfg resets a column's zero flag
+  and CRC after each group only for IP ids 1–4, so for ids 5, 6 and 15 the
+  flag sticks: their code 1 needs the column zero in every earlier stored
+  group of the sector too (the `walk` specimen has id-6 columns that become
+  literal for good after one non-zero group).
+- **Libs**, ids 1–4 only: each non-zero block's CRC (reflected, polynomial
+  0x88010000, no inversion, `FBGEN_UTIL::lsb_calculate_crc32`, chained over
+  the group's frames from 0) is counted over both sectors. Lib 0 is the
+  block with the highest count, ties to the smaller CRC (the `std::map`
+  walk keeps the first maximum); its count is cleared and lib 1 is picked
+  the same way. A lib needs a count of at least 1, so an id has 0, 1 or 2
+  libs. Blocks equal to lib k get code 2 + k.
+- **Lib storage**: per id, its libs back to back, each frame's bytes
+  padded to the stride (4 bytes under 12, else 8); ids 1–4 in order. The
+  `0x1f` record holds the id offsets in 8-byte units and the lib area is
+  cut into pages; with no lib at all there are no lib pages and no
+  `0x15 (n, s, 4)` records.
+- **Everything else** of ids 1–4 takes the candidate leaving the most zero
+  bytes in the 98 × width residual: literal (0), XOR lib 0 (10), XOR lib 1
+  (11), row history class 1 (8) and class 2 (9) (bytes of the class XOR the
+  frame 18 back, frames 26–97), tried in that order; a later one needs
+  strictly more zeros to win. Ids 5, 6 and 15 stay literal. Literal and
+  residual columns go into the frame packets as before.
+
+**Frame page interleave** [obs; `BITASM_FAMILY_VAR1::get_group_data`
+decompiled]. Lib pages go sector by sector and the four setup pages per
+sector alternate. Each sector's deflated frame stream is then cut into
+pages and merged: with n₀, n₁ pages, r = max/min and R the sector with
+more pages (sector 0 on a tie), turns alternate 0, 1, 0, … starting at R;
+R sends a page on each of its turns, the other only when its bytes sent
+times r minus R's bytes sent is at most 4,096. This gives strict
+alternation for similar sizes and spreads the smaller stream evenly
+otherwise (95 against 17 pages in `n_dup`). `merge_km_bitstream_data`,
+the obvious candidate, never runs for this part.
+
+**Sector-header stream** [obs]: five specimens with random, all-zero and
+all-one sector headers classify every bit of both passes: in the first
+pass bits 0–223 of each send are forced (to zero, except bits 2, 3, 6, 19,
+21, 23, 26, 27 of sector 0 and 2, 3, 6, 19, 21, 23, 27 of sector 1) and
+bits 832, 1885, 2134, 3183 (sector 0) and 768, 921, 1494, 2095 (sector 1)
+are forced to one; in the second pass bits 0–31 are forced the same way
+(ones at 6, 19, 21, 23, 26, 27 and 6, 19, 21, 23, 27). Every other bit is
+the header's. rt0, the first specimen whose clock network sets the top
+header bits, broke the phase-3 constants.
+
+**Verified** [obs]: `a5db rbf` writes a whole `.rbf` byte-identical to
+pfg's for all 78 `.sof`/`.rbf` pairs at hand: the 63 from phases 2
+and 3 (blinky, fz0, the random-header, random-IO, pattern, random-CRAM,
+bit-flip, walk and dense specimens) and 15 new ones: rt0 (a real design
+with clock routing), nine CRAM edits of fz0 and blinky (2,000 and 50,000
+random flips, 1 % random noise, half-random sectors, duplicated random
+groups that tie two libs, rows repeating every 18 frames, an all-zero and
+an all-one CRAM, a walking bit in sector 1) and the five sector-header
+specimens above. Specimens and gdb scripts are in `/tmp/a5p4c`, not
+committed. The board question of phase 3 (does the SDM take a literal
+`CORE`) no longer matters for a5db's own output.
 
 ### quartus_sta fails under chipsmith [obs]
 

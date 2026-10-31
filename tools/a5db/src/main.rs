@@ -5,7 +5,7 @@
 //!   a5db bits  <db> <in.sof> <uid>                 named bit values
 //!   a5db set   <db> <in.sof> <out.sof> <hmac.key> <uid> <attr>=<value>...
 //!   a5db rbf   <db> <in.sof> <out.rbf> <quartus root> <keyed-hash.key>
-//!       the .rbf quartus_pfg would make (CORE all literal); the root is the
+//!       the .rbf quartus_pfg would make, byte for byte; the root is the
 //!       install's version directory, the key `tools/bitstream.py key`'s
 //!   a5db join  <db> <graph>                       how many graph edges resolve to bits
 //!   a5db route <db> <graph> <in.sof> <out.sof> <hmac.key> <routes>
