@@ -1,7 +1,11 @@
 # Map every named configuration bit of one block type to its CRAM address,
 # using Quartus's own assembler (asm2). Run under quartus_asm, not quartus_sh:
 #
-#   quartus_asm -t bitmap.tcl <base.sof> <block_type> <outdir>
+#   quartus_asm -t bitmap.tcl <base.sof> <block_type> <outdir> [uids.txt|-] [bits.txt]
+#
+# With uids.txt (one uid per line) only those instances are mapped, and with
+# bits.txt only those bits ("-" keeps all instances). A few bits for every
+# instance is the anchor probe that extrapolate.py uses.
 #
 # Every (instance, bit) pair gets id = 1 + instance_index * nbits + bit_index.
 # For each id bit k, k.1.sof flips the pairs whose id has bit k set and
@@ -13,13 +17,30 @@
 # hviowr receiver bits): get_bit on those aborts with "Illegal Usage".
 load_package asm2
 load_devices
-lassign $quartus(args) base btype outdir
+lassign $quartus(args) base btype outdir only onlybits
+if {$only eq "-"} { set only "" }
 file mkdir $outdir
 set h [open_sof $base]
 set dev [get_device_name $h]
 set bits [get_bit_names $dev $btype]
+if {$onlybits ne ""} {
+    set fh [open $onlybits]
+    set wantbits [lsearch -all -inline -not [split [read $fh] \n] {}]
+    close $fh
+    set bits [lmap b $bits { expr {[lsearch -exact $wantbits $b] >= 0 ? $b : [continue]} }]
+}
 set uids {}
-foreach u [get_uids $dev $btype] { if {![string match *_rsp* $u]} { lappend uids $u } }
+set keep {}
+if {$only ne ""} {
+    set fh [open $only]
+    foreach u [split [read $fh] \n] { if {$u ne ""} { dict set keep $u 1 } }
+    close $fh
+}
+foreach u [get_uids $dev $btype] {
+    if {[string match *_rsp* $u]} continue
+    if {$only ne "" && ![dict exists $keep $u]} continue
+    lappend uids $u
+}
 set nb [llength $bits]
 set n [expr {[llength $uids] * $nb}]
 set w 1

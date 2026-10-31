@@ -555,6 +555,14 @@ forms were recovered from the binaries, since `-help` prints nothing.
   bdata growing toward X = 1 (4176); sector 1 holds X ≥ 62 mirrored (X =
   62 → 112, X = 120 → 4176). The two sectors are mirror images about the
   centre seam, but the LAB's internal layout is the same in both.
+- **Extrapolation, validated** [obs]: brute force costs about 1 s per
+  million `set_bit` calls per image, so a 21.5 M-pair type (`cw_rt_lab_base`)
+  would take 5 h. `extrapolate.py` takes the layouts from a fully mapped
+  subset of rows. A probe maps 4 reference bits for every instance
+  (`bitmap.tcl … - bits.txt`, under 3 min). Each instance gets the layout
+  whose reference offsets match after a single shift. Checked on LABs: 3
+  rows (156 instances) plus the probe predict **all 2,667,600 LAB bit
+  positions of the full map exactly, 0 wrong**.
 - **Cross-checked against the fitter** [obs]: the 256 CRAM bits that the
   ECO runs changed (fz's four LUT masks, all-0 against all-1) are, by the
   asm2 map, exactly `cw_la_lab_r48_c120` `xtophalf/xale{0..3}/xcw_la_le_lut`
