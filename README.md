@@ -651,6 +651,9 @@ forms were recovered from the binaries, since `-help` prints nothing.
   | `cw_la_lab` | 2,340 (spare rows skipped) | 1,165 | 1,140 (2,667,600 pairs; 7,020 clash bits) | **1** | CRAM, 94 frames x 16 bdata |
   | `cw_ml_mlab` | 2,340 | 1,206 | 1,148 (2,686,320 pairs; 14,040 clash bits) | **1** | CRAM, 94 x 16, same row frames as LABs |
   | `hviowr` | 5 | 5,927 | 4,748 | 1 | `perictrl{0,1,2}` object headers |
+  | `cw_rt_lab_base` (routing tile) | 4,888 | 4,398 | 4,394, by extrapolation from rows 5, 6, 7, 27, 28, 50, 51 (728 instances, 3,201,744 pairs) | **1** | CRAM, 94 x 48 |
+  | clock network (`cw_cc_*`, 13 types), `cw_vr_leaf_ctrl_c_bf` | 2–84 each | 25–480 | all | 1–4 per type | CRAM |
+  | `cw_rt_vio_{lab,mlab}_base` | 104 each | 142 | 142 | 1 | CRAM |
 
   The LAB anchors decompose exactly [obs]: frame = 200 + 98·(Y − 6),
   so one LAB row per 98-frame group (`sof_meta`'s `_frames` unit), and
@@ -666,6 +669,15 @@ forms were recovered from the binaries, since `-help` prints nothing.
   whose reference offsets match after a single shift. Checked on LABs: 3
   rows (156 instances) plus the probe predict **all 2,667,600 LAB bit
   positions of the full map exactly, 0 wrong**.
+- **Routing tiles** [obs]: the extrapolated `cw_rt_lab_base` map predicts
+  **all 659,100 bit positions of 150 random tiles outside the subset rows**
+  (brute-forced independently), 0 wrong. Tile row Y = 5 sits in 98-frame
+  group 0 (frame 4) and Y = 6..51 in groups 2..47 (frame 200 + 98·(Y − 6),
+  as for LABs). Group 1 holds no routing tiles, consistent with pfg never
+  storing it. With LAB, MLAB and routing tiles, **99.87 % of the set CRAM
+  bits in the fz0 image are named bits** (1,547,304 of 1,549,318 in
+  sector 0). The remaining 38–44 set bits per row group are [unk] until the
+  M20K/DSP types are mapped.
 - **Cross-checked against the fitter** [obs]: the 256 CRAM bits that the
   ECO runs changed (fz's four LUT masks, all-0 against all-1) are, by the
   asm2 map, exactly `cw_la_lab_r48_c120` `xtophalf/xale{0..3}/xcw_la_le_lut`
