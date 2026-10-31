@@ -1165,6 +1165,14 @@ quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
   differs in its LAB X120 Y17, two HIOL tiles and `hvio_1_1` (84 bits),
   and fz0 in its LAB, routing, clock path and pins (513 bits). Block types
   no design touched (M20K, DSP, HSSI) agree in all four images.
+  **Held out** [obs]: `designs/ho` (a 23-bit counter from V16 on LED1,
+  DJ32), compiled afterwards and not used in the derivation, differs from
+  the idle image only in its own blocks (954 bits). Those are the V16
+  clock path, LAB X107 Y7, MLABs X108 Y6–7, their routing, `hvio_3_1`'s
+  V16 bits and LED1's 107 `pio_0_0` bits plus one IO96 header bit. Every
+  set CRAM bit in all five images is a named bit, so the spare-row and
+  redundancy tiles, which have no maps, are all zero there, and the idle
+  image leaves them zero.
 - **The `.sof` container from the install alone** (`sofgen.rs`, `a5db
   blank`/`wrap`) [obs]. Records 0x01 (version, taken from a database
   header), 0x02, 0x2f (die and snapshot from `sof_meta.pb`), 0x03, 0x13 and
@@ -1198,6 +1206,14 @@ quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
     (46282, idle 1, cleared). That is lane `xio12phytop_5` pin 1's output
     driver, bypasses and the read-training bits the IO96 lane controllers
     set when any lane is used.
+
+  - `DJ32_out.tsv` (LED1, from `designs/ho`): lane 5 pin 5. It is
+    DF35's table with pin 1 → 5 in the four per-pin blocks (`txdigitop`,
+    `txtop`, `drvstatctrl`, `x_gpio`), the pin's IOSSM init bit 29037 →
+    29041 (29036 + pin) and the header bit 46282 → 46286. That prediction
+    equals the observed bits, 107 of 107; the other 94 bits are the same
+    for both pins. So an IO96 GPIO output is a template over (lane, pin)
+    [obs for two pins of one lane; other lanes inf].
 
   Rows starting with `@object/part` write bits no named bit covers.
 - **The ALM's fabric pins** [obs, rt0's atom locations against its routes]:
@@ -1247,6 +1263,8 @@ Verified:
   50 MHz), and all three LAB clocks trace back to V16's `HVIOWR_RE`. The
   381 edges the image selects are exactly `net`'s configured hops, with
   nothing else and nothing missing.
+- The idle image alone (`0_blank.sof`) goes through `quartus_pfg -c` too,
+  and `a5db rbf` of it equals pfg's.
 - **pfg converts it**: `quartus_pfg -c` succeeds. **a5db's `.rbf` is
   byte-identical to pfg's** (SHA-256 `515440fe…`), with the (o) encoder.
   `quartus_pfg --check_integrity` says OK on both, and `bitstream.py check`

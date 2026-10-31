@@ -243,8 +243,7 @@ pub fn diff(db: &mut Db, a: &[u8], b: &[u8]) -> Result<()> {
         }
     }
     for (inst, bits) in &by_inst {
-        let show: Vec<&str> = bits.iter().take(8).map(String::as_str).collect();
-        println!("{inst}\t{}\t{}", bits.len(), show.join(" "));
+        println!("{inst}\t{}\t{}", bits.len(), bits.join(" "));
     }
     println!("total\t{}", by_inst.values().map(Vec::len).sum::<usize>());
     Ok(())
