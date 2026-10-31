@@ -1,0 +1,250 @@
+//! The routing graph from `tools/rgdump` (README (i)) and its join to the
+//! bit maps: every edge whose edge API names a mux setting becomes the named
+//! bits that setting writes in its block (README (k)).
+//!
+//! Files in the graph directory: `nodes.tsv` (gid − 0x80000000, DYGR name,
+//! fanout), `edges.bin` (per node `u32 src, u32 n`, then n × `u32 dst,
+//! u32 uid id, u32 config id`), `uids.txt` and `configs.txt` (line k = id k,
+//! id 0 = none).
+
+use std::collections::HashMap;
+use std::path::Path;
+
+use anyhow::{bail, ensure, Context, Result};
+
+use crate::db::{BitPos, Db};
+
+pub struct Graph {
+    /// DYGR name by gid ("" for gids the dump doesn't list).
+    pub names: Vec<String>,
+    /// CSR fanout: edges of gid g are `first[g]..first[g + 1]`.
+    first: Vec<u32>,
+    pub dst: Vec<u32>,
+    pub uid: Vec<u32>,
+    pub cfg: Vec<u32>,
+    pub uids: Vec<String>,
+    pub cfgs: Vec<String>,
+}
+
+impl Graph {
+    pub fn load(dir: &Path) -> Result<Graph> {
+        let text = std::fs::read_to_string(dir.join("nodes.tsv")).context("reading nodes.tsv")?;
+        let mut names = Vec::new();
+        for l in text.lines() {
+            let mut f = l.split('\t');
+            let g: usize = f.next().context("nodes.tsv")?.parse()?;
+            if names.len() <= g {
+                names.resize(g + 1, String::new());
+            }
+            names[g] = f.next().context("nodes.tsv")?.to_owned();
+        }
+        drop(text);
+        let raw = std::fs::read(dir.join("edges.bin")).context("reading edges.bin")?;
+        ensure!(raw.len() % 4 == 0, "edges.bin is not whole words");
+        let w: Vec<u32> = raw.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect();
+        drop(raw);
+        let mut count = vec![0u32; names.len() + 1];
+        let mut p = 0;
+        while p < w.len() {
+            let (src, n) = (w[p] as usize, w[p + 1] as usize);
+            ensure!(src < names.len(), "edges.bin names gid {src} beyond nodes.tsv");
+            count[src] += n as u32;
+            p += 2 + 3 * n;
+        }
+        let mut first = vec![0u32; names.len() + 1];
+        for g in 0..names.len() {
+            first[g + 1] = first[g] + count[g];
+        }
+        let total = first[names.len()] as usize;
+        let (mut dst, mut uid, mut cfg) = (vec![0u32; total], vec![0u32; total], vec![0u32; total]);
+        let mut fill = first.clone();
+        p = 0;
+        while p < w.len() {
+            let (src, n) = (w[p] as usize, w[p + 1] as usize);
+            for k in 0..n {
+                let r = p + 2 + 3 * k;
+                let e = fill[src] as usize;
+                (dst[e], uid[e], cfg[e]) = (w[r], w[r + 1], w[r + 2]);
+                fill[src] += 1;
+            }
+            p += 2 + 3 * n;
+        }
+        let lines = |f: &str| -> Result<Vec<String>> {
+            Ok(std::fs::read_to_string(dir.join(f)).with_context(|| format!("reading {f}"))?.split('\n').map(str::to_owned).collect())
+        };
+        Ok(Graph { names, first, dst, uid, cfg, uids: lines("uids.txt")?, cfgs: lines("configs.txt")? })
+    }
+
+    pub fn fanout(&self, g: u32) -> std::ops::Range<usize> {
+        self.first[g as usize] as usize..self.first[g as usize + 1] as usize
+    }
+
+    pub fn edge(&self, src: u32, dst: u32) -> Option<usize> {
+        self.fanout(src).find(|&e| self.dst[e] == dst)
+    }
+
+    pub fn index(&self) -> HashMap<&str, u32> {
+        self.names.iter().enumerate().filter(|(_, n)| !n.is_empty()).map(|(g, n)| (n.as_str(), g as u32)).collect()
+    }
+}
+
+/// One mux choice of an edge configuration: `<mux path>/sel` set to a
+/// setting. Sub-mux stages (`;s2 clkin[0];s1 clk[0]`) are `<mux>/s2/sel`
+/// and `<mux>/s1/sel`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Choice {
+    pub attr: String,
+    pub input: String,
+}
+
+/// `mux input[;stage input]...` → choices. The top mux's own `sel` drives no
+/// bits when it has stages (it is `<VIRTUAL>` in the BCM), but it is kept so
+/// the caller can tell.
+pub fn parse_config(cfg: &str) -> Result<(Choice, Vec<Choice>)> {
+    let mut parts = cfg.split(';');
+    let (mux, input) = parts.next().unwrap().split_once(' ').with_context(|| format!("bad config {cfg:?}"))?;
+    let top = Choice { attr: format!("{mux}/sel"), input: input.to_owned() };
+    let mut stages = Vec::new();
+    for s in parts {
+        let (stage, input) = s.split_once(' ').with_context(|| format!("bad config {cfg:?}"))?;
+        stages.push(Choice { attr: format!("{mux}/{stage}/sel"), input: input.to_owned() });
+    }
+    Ok((top, stages))
+}
+
+/// The BCM setting an edge input selects: `name[k]` is the setting that
+/// holds `NAMEk` between `_` boundaries (`muxin[6]` → `MUXIN6_`,
+/// `clk_in[0]` → `CLK_IN0_`, sub-mux `clk[0]` → `CLK24_CLK16_CLK8_CLK0_`),
+/// a bare `name` is `NAME` (`stitch` → `STITCH`, `clk_in` → `CLK_IN`).
+pub fn setting_matches(input: &str, setting: &str) -> bool {
+    let want = match input.split_once('[') {
+        Some((n, k)) => format!("{}{}", n.to_uppercase(), k.trim_end_matches(']')),
+        None => input.to_uppercase(),
+    };
+    setting == want || format!("_{setting}").contains(&format!("_{want}_"))
+}
+
+/// Why an edge configuration has no bits.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Miss {
+    /// The element has no BCM model (a plain buffer): nothing to configure.
+    NoModel(String),
+    /// The element's BCM leaf has no `sel` (programmable inverter, delay
+    /// chain): the edge is a pass-through with no mux bits.
+    NoSel(String),
+    /// The leaf's `sel` drives no bits at all (`ce_rt_xleim_inv`).
+    NoSelBits(String),
+    /// A hyper-register clock input (`clk`, `clk_delayed`, `nclk`): set by
+    /// the leaf's `flop_mode`, not by `sel`; normal routing never uses it.
+    HyperClock(String),
+    NoBitMap(String),
+    NoAttribute(String),
+    NoSetting(String),
+    UnmappedBit(String),
+}
+
+/// Named bit writes, relative to a block: (bit path, value).
+pub type Named = Vec<(String, bool)>;
+
+/// Resolves edges to bit writes. Settings are resolved once per (block
+/// type, configuration); only the anchor differs between instances.
+pub struct Join<'a> {
+    pub db: &'a mut Db,
+    graph: &'a Graph,
+    types: HashMap<u32, Option<String>>,
+    named: HashMap<(String, u32), std::result::Result<std::rc::Rc<Named>, Miss>>,
+}
+
+impl<'a> Join<'a> {
+    pub fn new(db: &'a mut Db, graph: &'a Graph) -> Join<'a> {
+        Join { db, graph, types: HashMap::new(), named: HashMap::new() }
+    }
+
+    pub fn btype(&mut self, uid: u32) -> Option<String> {
+        if let Some(t) = self.types.get(&uid) {
+            return t.clone();
+        }
+        let t = self.db.type_by_prefix(&self.graph.uids[uid as usize]);
+        self.types.insert(uid, t.clone());
+        t
+    }
+
+    /// Bit writes of edge e, or why it has none; Ok(None) if the edge has no
+    /// configuration (hardwired, or no edge API).
+    pub fn edge(&mut self, e: usize) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        self.pair(self.graph.uid[e], self.graph.cfg[e])
+    }
+
+    pub fn pair(&mut self, u: u32, c: u32) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        if c == 0 {
+            return Ok(None);
+        }
+        let uid = &self.graph.uids[u as usize];
+        let Some(btype) = self.btype(u) else {
+            return Ok(Some(Err(Miss::NoBitMap(generic(uid)))));
+        };
+        let key = (btype.clone(), c);
+        if !self.named.contains_key(&key) {
+            let r = self.resolve(&btype, c)?;
+            self.named.insert(key.clone(), r);
+        }
+        let named = match &self.named[&key] {
+            Ok(n) => n.clone(),
+            Err(m) => return Ok(Some(Err(m.clone()))),
+        };
+        let map = self.db.map(&btype);
+        let mut out = Vec::with_capacity(named.len());
+        for (b, v) in named.iter() {
+            match map.pos(uid, b) {
+                Some(p) => out.push((p, *v)),
+                None => return Ok(Some(Err(Miss::UnmappedBit(format!("{btype} {}", generic(b)))))),
+            }
+        }
+        Ok(Some(Ok(out)))
+    }
+
+    fn resolve(&mut self, btype: &str, c: u32) -> Result<std::result::Result<std::rc::Rc<Named>, Miss>> {
+        let (top, stages) = parse_config(&self.graph.cfgs[c as usize])?;
+        let choices = if stages.is_empty() { vec![top] } else { stages };
+        let mut named = Vec::new();
+        for ch in choices {
+            let Some(a) = self.db.attribute(btype, &ch.attr) else {
+                let mux = ch.attr.strip_suffix("/sel").unwrap_or(&ch.attr);
+                return Ok(Err(match self.db.bcm.leaf(btype, mux) {
+                    None => Miss::NoModel(format!("{btype} {}", generic(mux))),
+                    Some(leaf) if !self.db.bcm.has_custom(&leaf, "sel") => Miss::NoSel(leaf),
+                    Some(_) => Miss::NoAttribute(format!("{btype} {}", generic(&ch.attr))),
+                }));
+            };
+            let all = self.db.bcm.settings(&a);
+            // A programmable inverter's input passes uninverted (README (k)).
+            let input = if ch.input == "rpi_in" { "non_inv" } else { ch.input.as_str() };
+            let found: Vec<_> = all.iter().filter(|s| setting_matches(input, &s.name)).collect();
+            let s = match found.as_slice() {
+                [s] => s,
+                [] if all.is_empty() => return Ok(Err(Miss::NoSelBits(a.leaf.clone()))),
+                [] if matches!(input, "clk" | "clk_delayed" | "nclk") && self.db.bcm.has_custom(&a.leaf, "flop_mode") => {
+                    return Ok(Err(Miss::HyperClock(a.leaf.clone())))
+                }
+                [] => return Ok(Err(Miss::NoSetting(format!("{} {} {}", a.leaf, a.name, ch.input)))),
+                _ => bail!("{btype} {}: {} settings match {}", ch.attr, found.len(), ch.input),
+            };
+            for (b, &(v, _)) in s.bits.iter().zip(&s.values) {
+                named.push((format!("{}{b}", a.prefix), v));
+            }
+        }
+        Ok(Ok(std::rc::Rc::new(named)))
+    }
+}
+
+/// An attribute path with its indices dropped, for grouping misses.
+pub fn generic(path: &str) -> String {
+    path.chars().filter(|c| !c.is_ascii_digit()).collect()
+}
+
+impl Miss {
+    /// A pass-through: the edge exists but configures nothing.
+    pub fn is_pass_through(&self) -> bool {
+        matches!(self, Miss::NoModel(_) | Miss::NoSel(_) | Miss::NoSelBits(_))
+    }
+}
