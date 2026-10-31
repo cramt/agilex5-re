@@ -560,7 +560,7 @@ forms were recovered from the binaries, since `-help` prints nothing.
   `rb{0,1}lut[*]`, polarity "equal". So `rb*lut` holds the inverted LUT mask,
   and the fitter's `LABCELL_X120_Y48_N0/6/12/18` are ALMs 0–3 of the top
   half.
-- **LUT mask bit order, through the fitter** [obs]: six more ECO runs gave
+- **LUT mask bit order, through the fitter** [obs, ECO `-mask` convention]: six more ECO runs gave
   all four LUTs mask `Σ{2^i : bit k of i}` (k = 0..5). Each changed CRAM
   bit's on/off pattern over the runs is its mask index. In all four ALMs,
   **`lut_mask[i]` is `rb{i >> 5}lut[31 − (i & 31)]`, stored inverted**. So
@@ -570,6 +570,19 @@ forms were recovered from the binaries, since `-help` prints nothing.
   that order. The fitter could permute LUT inputs, but these four
   identically connected LUTs all came out with the same identity-like map
   [inf: no permutation here].
+- **Attribute decode from the database alone agrees with Quartus's reader**
+  [obs]. `tools/bitmap/attrs.py` reads an instance's named bits from a
+  `.sof` through `db/sm4revb/bits` and picks the matching setting from the
+  BCM settings dump. For `cw_la_lab_r48_c120` (used by fz) and
+  `cw_la_lab_r10_c1` (unused) in fz0, **all 315 decodable CUSTOM attributes
+  equal asm2's `get_attribute`**. Another 83 are `<VIRTUAL>` in Quartus, and
+  25 DFT/emulation attributes can't be decoded because their bits are among
+  the 25 unmapped ones. Asm2's DIRECT `lut_mask` is the raw bits,
+  `lut_mask[j] = rb{j>>5}lut[j & 31]` (10/10 ALMs). So the WYSIWYG/ECO mask
+  is `W[i] = ¬BCM[i XOR 31]`: inputs A–E are inverted in silicon, and the
+  stored value too [inf]. fz0's original LUTs don't decode to their
+  WYSIWYG masks (fitter input permutation [inf]); the ECO `-mask` values
+  land as given.
 - **Quartus Pro ECO works for fuzzing** [obs]. `quartus_fit <rev> --eco
   eco.tcl` loads the post-fit snapshot (about 4 min) and runs ECO commands
   (`modify_lutmask`, `place_node`, `make_connection`,
