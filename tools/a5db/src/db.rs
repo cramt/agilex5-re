@@ -3,6 +3,7 @@
 //! and CUSTOM settings, and DIRECT attributes' bit lists.
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -73,8 +74,24 @@ pub struct BlockMap {
     anchors: HashMap<String, Placed>,
 }
 
+/// A database table: `path` itself, or `path.xz` when the table is stored
+/// compressed (the big io96 and HSSI layouts).
+pub fn read_table(path: &Path) -> Result<String> {
+    if path.exists() {
+        return std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()));
+    }
+    let mut xz = path.as_os_str().to_owned();
+    xz.push(".xz");
+    let file = std::fs::File::open(&xz).with_context(|| format!("reading {} (or .xz)", path.display()))?;
+    let mut text = String::new();
+    lzma_rust2::XzReader::new(std::io::BufReader::new(file), false)
+        .read_to_string(&mut text)
+        .with_context(|| format!("decompressing {}.xz", path.display()))?;
+    Ok(text)
+}
+
 fn tsv(path: &Path) -> Result<Vec<Vec<String>>> {
-    let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let text = read_table(path)?;
     Ok(text.lines().skip(1).map(|l| l.split('\t').map(str::to_owned).collect()).collect())
 }
 
@@ -109,6 +126,20 @@ impl BlockMap {
         self.anchors.contains_key(uid)
     }
 
+    /// Image byte offsets of every mapped bit of an instance in one part.
+    pub fn byte_offsets(&self, uid: &str, part: &str) -> Vec<usize> {
+        let Some(placed) = self.anchors.get(uid) else { return Vec::new() };
+        let Some(a) = placed.parts.get(part) else { return Vec::new() };
+        self.layouts[placed.layout]
+            .values()
+            .filter(|(p, ..)| p == part)
+            .map(|(_, df, dd, _)| {
+                let (f, d) = ((a.frame + df) as usize, (a.bdata + dd) as usize);
+                if a.cram { a.start + f * FRAME_BYTES + d / 8 } else { a.start + f / 8 }
+            })
+            .collect()
+    }
+
     pub fn pos(&self, uid: &str, bit: &str) -> Option<BitPos> {
         let placed = self.anchors.get(uid)?;
         let (part, df, dd, equal) = self.layouts[placed.layout].get(bit)?;
@@ -131,6 +162,7 @@ pub struct Setting {
     pub values: Vec<(bool, bool)>, // (value, cares)
 }
 
+#[derive(Clone)]
 pub struct Attr {
     pub path: String,
     pub prefix: String,
@@ -217,6 +249,19 @@ impl Bcm {
         }
     }
 
+    /// The BCM type at an instance path under a block type.
+    pub fn leaf(&self, btype: &str, path: &str) -> Option<String> {
+        let mut t = btype.to_owned();
+        for p in path.split('/') {
+            t = self.types[&t]["children"][p].as_str()?.to_owned();
+        }
+        Some(t)
+    }
+
+    pub fn has_custom(&self, t: &str, attr: &str) -> bool {
+        self.types[t]["custom"].as_array().is_some_and(|a| a.iter().any(|x| x == attr))
+    }
+
     pub fn settings(&self, a: &Attr) -> &[Setting] {
         self.settings.get(&(a.leaf.clone(), a.name.clone())).map(Vec::as_slice).unwrap_or(&[])
     }
@@ -230,12 +275,13 @@ pub struct Db {
     pub dir: PathBuf,
     pub bcm: Bcm,
     maps: HashMap<String, BlockMap>,
+    attrs: HashMap<String, HashMap<String, Attr>>,
 }
 
 impl Db {
     pub fn open(dir: &str) -> Result<Db> {
         let dir = PathBuf::from(dir);
-        Ok(Db { bcm: Bcm::load(&dir)?, dir, maps: HashMap::new() })
+        Ok(Db { bcm: Bcm::load(&dir)?, dir, maps: HashMap::new(), attrs: HashMap::new() })
     }
 
     /// Load a type's block map (once).
@@ -250,6 +296,46 @@ impl Db {
     /// A block map that `load` has read.
     pub fn map(&self, btype: &str) -> &BlockMap {
         &self.maps[btype]
+    }
+
+    /// A CUSTOM attribute of a block type by path.
+    pub fn attribute(&mut self, btype: &str, path: &str) -> Option<Attr> {
+        if !self.attrs.contains_key(btype) {
+            let all = self.bcm.attributes(btype).into_iter().map(|a| (a.path.clone(), a)).collect();
+            self.attrs.insert(btype.to_owned(), all);
+        }
+        self.attrs[btype].get(path).cloned()
+    }
+
+    /// The block type of a `<type>_r<y>_c<x>` uid, trying only types whose
+    /// name is a prefix of it (no full scan of the big periphery maps).
+    pub fn type_by_prefix(&mut self, uid: &str) -> Option<String> {
+        let (t, _) = uid.rsplit_once("_r")?;
+        let path = self.dir.join("bits").join(format!("{t}.anchors.tsv"));
+        if !path.exists() {
+            return None;
+        }
+        self.load(t).ok()?;
+        self.map(t).has(uid).then(|| t.to_owned())
+    }
+
+    /// The instance of a block family (type-name prefix) at fitter X/Y:
+    /// (uid, type). Some families have several types by row.
+    pub fn uid_at(&mut self, family: &str, x: u32, y: u32) -> Option<(String, String)> {
+        let mut types: Vec<String> = std::fs::read_dir(self.dir.join("bits"))
+            .ok()?
+            .filter_map(|e| e.ok()?.file_name().into_string().ok()?.strip_suffix(".anchors.tsv").map(str::to_owned))
+            .filter(|t| t.starts_with(family))
+            .collect();
+        types.sort();
+        for t in types {
+            let uid = format!("{t}_r{y}_c{x}");
+            self.load(&t).ok()?;
+            if self.map(&t).has(&uid) {
+                return Some((uid, t));
+            }
+        }
+        None
     }
 
     /// The block type of an instance uid: `<type>_r<y>_c<x>` or a bare name.

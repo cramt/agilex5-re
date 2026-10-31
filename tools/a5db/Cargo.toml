@@ -8,6 +8,13 @@ description = "Agilex 5 (sm4revb) configuration database: read and write named b
 anyhow = "1"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 hmac = "0.12"
+ddb = { path = "../ddb" }
+# pfg's deflate is zlib's own (level 9, 8 KiB window, Z_FIXED); only zlib
+# reproduces it byte for byte, so link the bundled C zlib (README (l)).
+libz-sys = { version = "1.1", default-features = false, features = ["static"] }
+# Big tables in db/ are stored as .tsv.xz (docs/db-format.md).
+lzma-rust2 = { version = "0.21", default-features = false, features = ["std", "xz"] }
+rustc-hash = "2"
 serde_json = "1"
 sha2 = "0.10"
 

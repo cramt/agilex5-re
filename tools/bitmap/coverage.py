@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sof  # noqa: E402
 from imagemap import FRAME_BYTES, PARTS  # noqa: E402
+from table import open_table  # noqa: E402
 
 
 def covered_mask(dbdir, nbits):
@@ -21,9 +22,9 @@ def covered_mask(dbdir, nbits):
     for anchors in sorted(glob.glob(os.path.join(dbdir, 'bits', '*.anchors.tsv'))):
         prefix = anchors[:-len('.anchors.tsv')]
         lay = collections.defaultdict(lambda: collections.defaultdict(list))
-        for r in csv.DictReader(open(prefix + '.layout.tsv'), delimiter='\t'):
+        for r in csv.DictReader(open_table(prefix + '.layout.tsv'), delimiter='\t'):
             lay[r['layout']][r['part']].append((int(r['dframe']), int(r['dbdata'])))
-        for a in csv.DictReader(open(anchors), delimiter='\t'):
+        for a in csv.DictReader(open_table(anchors), delimiter='\t'):
             L = np.array(lay[a['layout']][a['part']])
             base = start[(a['object'], a['part'])] * 8
             if a['part'] == 'cram':

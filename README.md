@@ -859,6 +859,298 @@ u32 uid id, u32 config id`, with gids minus `0x80000000`. Line k of
   V/H wires that cross tiles and other tile types (`cw_rt_m20k_dsp_base`,
   `cw_rt_hiol_base`, `cw_rt_vio_*`) needs a design that routes through them.
 
+### (j) Phase 3: big tables stored compressed
+
+Tables bigger than 4 MiB in `db/` are `xz -9` files (`<name>.tsv.xz`):
+`io96.layout.tsv` (318 MB) is 2.7 MB and `sm_hssi_top.layout.tsv` (45 MB)
+is 0.9 MB [obs]. `a5db` (`db::read_table`, pure-Rust `lzma-rust2`) and the
+Python tools (`tools/bitmap/table.py`) read `.tsv` or `.tsv.xz`; `pack.py`
+and `aliases.py` write whichever the size calls for, and Python's `lzma`
+preset 9 writes the same bytes as `xz -9`. Every `a5db attrs`/`bits` output
+on fz0 (io96 `pio_0_0`, `hssi_mono_0_0`, `hvio_3_1`, a LAB) and
+`coverage.py`'s output are byte-identical before and after [obs]. The old
+plain files stay in history.
+
+### (k) Phase 3: routing graph joined to the bit maps (Plan step 3 → 4)
+
+`a5db` joins every graph edge's mux setting to the named bits it writes
+(`tools/a5db/src/graph.rs`, `route.rs`), so a routed net, as a list of
+graph edges, becomes CRAM bits:
+
+- `a5db join <db> <graph>` resolves all 22.7 M configured edges and prints
+  why the rest have no bits;
+- `a5db route <db> <graph> in.sof out.sof <hmac.key> <routes>` writes a
+  set of routes into a `.sof`;
+- `a5db routed <db> <graph> in.sof` reads routing back: every edge whose
+  setting the image holds;
+- `a5db routecheck <db> <graph> in.sof <routes> [out.sof key]` puts every
+  routing mux of `in.sof` in its idle state, writes only the routes' bits
+  and compares the result with `in.sof`.
+
+`<graph>` is a `tools/rgdump` directory (git-ignored, about 13 min to
+regenerate). Routes come from `tools/rgdump/routes.tcl`, run in
+`quartus_fit <rev> --eco` on a copy of a compiled run: `report_routing` for
+every connected input of every atom (`report_connections` crashes the
+fitter, so the ports come from `read_atom_netlist`).
+
+- **The join rule**: an edge's `mux input[k]` selects the setting of
+  `<mux>/sel` that holds `INPUTk` between `_` boundaries: `muxin[6]` →
+  `MUXIN6_`, `clk_in[0]` → `CLK_IN0_`, `stitch` → `STITCH` [obs, every
+  configured edge of the two designs below]. A configuration with stages
+  (`mux in;stage in…`) sets `<mux>/<stage>/sel` per stage, and the top
+  `sel` drives no bits. The vertical-seam form `…clk_32_l_0… clkin1;xclkmux21
+  clk1` is used by rt0's clock and checks out [obs]. The 768 DCM forms
+  `mux clk[0];s2 clkin[0];s1 clk[0]` would set `<mux>/s2/sel = CLKIN0_` and
+  `<mux>/s1/sel = CLK24_CLK16_CLK8_CLK0_` (the stage-1 setting whose name
+  contains `CLK0`), but neither design uses one [inf]. A programmable
+  inverter's `rpi_in` is `NON_INV` [inf].
+- **Every configured edge is classified** [obs, `a5db join`]: 19,746,758 of
+  the 22,718,018 resolve to bits (23,318,498 distinct routing bits). The
+  rest:
+  - pass-throughs with nothing to set: 18,664 through plain buffers with
+    no BCM model (`ilaboutb_buf`, `i_mux`), 48,356 through inverters and
+    delay chains whose leaf has no `sel` (`*_rpi`, `*_delay_chain`), and
+    1,565,476 into `ce_rt_xleim_inv`, whose `sel` drives no bits;
+  - 1,316,752 hyper-register clock inputs (`clk`, `clk_delayed`, `nclk`),
+    which `flop_mode` sets, not `sel`;
+  - 22,012 into blocks without a bit map: redundancy tiles
+    (`cw_rd_redtl_bf`, `cw_cc_vseam_*_redt_bf`, 17,132) and spare-row
+    tiles (`*_rsp*`, 4,880) [unk].
+- **Clock muxes behind edges with no edge API** [obs]: some clock-network
+  edges carry no configuration in the graph but do select a mux input, so
+  the join adds three rules from the node names (`graph::clock_rule`):
+  - `CE_CC_CLKMUX51_INPUT … In → OUTPUT` (the spine tap's 5:1 mux) sets
+    `cw_cc_tap_cs_bf` `cell_k/mux51_dolsgn_cs_dolsgn_0/sel = CLKINn`, where
+    k is the `SPINE_TAP_RE` index the cell drives;
+  - `SCLKMUX_RE` input k (k < 32) → row clock j's mux node `44 + 7j` sets
+    `xrowclkmux/xrmx{l,r}{j mod 6}/rmux32to1_dolsgn_rc_dolsgn_0` `s1` to the
+    setting holding `CLKINk` and `s2 = CLKIN(k/8)_` (row clocks 0–5 are
+    `l`, 6–11 `r`, by node index, not by side);
+  - row clock j's mux node → its predrive node `50 + 7j` sets
+    `mux_predrive_{l,r}{j mod 6}` to `CLKIN1_` (input 0 is the delay
+    chain).
+
+  Check: every clock-block attribute Quartus set in fz0 and rt0 was put back
+  to its idle value, the designs' routes re-applied with `a5db route`, and
+  all of them came back equal to Quartus's: the switchboxes, seam taps,
+  spine taps and row muxes of both designs. One DCM periphery mux,
+  `cw_cc_dcm_hssi_p2c_bf` `mp2c_mux_bot/mux11to8/clock_int0 = CLKIN2`
+  (`CE_CC_CLKMUX41_LOW_INPUT Z111 I2`), has no rule yet: one instance can't
+  fix the order of its 32 muxes [unk]. Designs clocked from an HVIO pin
+  pass through it.
+- **The idle state of a routing mux is `VCC` where it has that setting,
+  else `MUX_DIS`** [obs]: Quartus ties every unused HIOL clock mux
+  (`iclkmux*`, 16 per tile, 94 tiles) to `VCC`; all others idle at 0.
+- **Checked against Quartus-routed designs** [obs]. fz0 (four LUTs, a shift
+  register) and `designs/rt` (a 32-bit LFSR and a CRC-32 in two place
+  regions at X8–14 Y6–10 and X104–114 Y42–48, so nets cross both sectors
+  on H0–H12 and V1–V8 wires; clock from `CLOCK1_50` through the DCM,
+  switchbox, seam, spine and row-clock muxes):
+
+  | | fz0 | rt0 |
+  |---|---|---|
+  | routed connections (`report_routing`) | 48 | 723 |
+  | hops, all of them graph edges | 1,710 | 17,528 |
+  | edges written by the join (with the clock rules below) | 67 | 3,157 |
+  | routing bits Quartus set | 1,617 | 6,334 |
+  | of them, set by the join from the routes | 1,609 | 6,229 |
+  | set by the join but not by Quartus | 0 | 0 |
+  | left: LL → LEIM edges into FF data inputs | 8 | 105 |
+
+  The bits left over are exactly the decoded settings of LL → LEIM edges
+  into `xleim_1`/`xleim_6`, the FF data-input muxes. Those connections (FF
+  `D` fed by a LUT) are the ones `report_routing` crashes the fitter on, so
+  the dump skips them. `a5db routed` on the Quartus image finds 75 and
+  3,262 active edges: exactly the edges the routes write plus those.
+- **"Direct links" resolved** [obs]: a direct link is an LL node driven
+  straight from a LAB_RE (a block output fed back into a block's local
+  interconnect), one per LL node, hence 526,400. rt0's fit report counts 548
+  block interconnects and 67 direct links; its routes use 548 distinct LL
+  nodes, 67 of them reached straight from a LAB_RE.
+- Fitter names map to DYGR names as before, and the fitter drops DYGR's
+  underscores in periphery types (`HVIOWRX1RGMIIWRCONNRE` is
+  `HVIOWR_X1_RGMII_WR_CONN_RE`); `HIO_BUFFER` is `HIOB` and
+  `BLOCK_INPUT_MUX_PASSTHROUGH_WB` is `LEIM_WB`.
+
+Reproduce (graph and routes are Quartus output, so git-ignored):
+
+```
+tools/rgdump/rgdump.sh                                 # specimens/rg/full
+tools/flow.sh designs/rt specimens/runs/rt0 --wait     # ~25 min
+cp -r specimens/runs/rt0 /tmp/rt0r && cd /tmp/rt0r && tools/quartus.sh quartus_fit rt --eco <repo>/tools/rgdump/routes.tcl
+a5db routecheck db/sm4revb specimens/rg/full specimens/runs/rt0/output_files/rt.sof /tmp/rt0r/routes.txt
+```
+
+### (l) Phase 3: the `.rbf` writer (Plan step 6)
+
+`a5db rbf <db> <in.sof> <out.rbf> <quartus root> <keyed-hash.key>` writes the
+whole `.rbf` from a `.sof` image with no Quartus tool in the loop
+(`tools/a5db/src/rbf/`). It reads three things from the user's own install
+and commits none of them: the signed firmware (`main.cmf` and the `.fw`
+modules from `devices/programmer/firmware/agilex5e.zip`), two codebooks from
+`devices/programmer/sm4revb_npcf.ddb`, and the CRAM `s4` group list from
+`sof_meta.pb`. The key is `tools/bitstream.py key`'s.
+
+- **Verified** [obs] on all 60 `.sof`/`.rbf` pairs from phases 2 and 3
+  (blinky, fz0, the random-header, random-IO, pattern, random-CRAM and
+  bit-flip specimens):
+  - the `CMF` section is byte-identical to pfg's;
+  - the `IO` section is byte-identical to pfg's, including the specimens
+    whose t41 stream needs four chain tables and the one with random
+    perictrl0 data;
+  - `bitstream.py check` passes, and the `CORE` header's per-design fields
+    (+0x78 sum, design hash, IO hash) equal pfg's;
+  - `quartus_pfg --check_integrity` says `Integrity status: OK` for the
+    fz0 `.rbf`; with one `CORE` bit flipped it fails with `Section hash
+    mismatch, expect 0x992B32EA`, which is the +0x3C word below.
+  - The all-literal `CORE` decodes (`core_decode.py verify`) to exactly the
+    `.sof` CRAM: 0 frames differ on fz0, blinky, the random-CRAM specimen and
+    v_dense. Every design-independent `CORE` page (both codebooks, the
+    482,784-byte block, the BBM header, the second action page, the
+    sector-header stream) is byte-identical to pfg's.
+- **`CORE` is not byte-identical, by construction** [obs]: pfg picks libs and
+  BBM codes (`run_row_target`, `update_with_libs`, `run_combined_target`) and
+  sets the S4 flags, none of which is reimplemented. The writer stores every
+  column literally (code 0), one zero lib per IP id, and S4 pairs as plain
+  `00ab` nibbles. That makes fz0's `CORE` 248 KiB against pfg's 112 KiB
+  (36 frame pages instead of 2), and the random-CRAM one slightly smaller
+  than pfg's. Whether the SDM accepts plain nibbles where pfg would have set
+  the S4 flag is the open question the board test answers [unk].
+
+**The S4 flag rule** (phase 2 [unk], now mostly [obs]):
+
+- `BITASM_CRAM_REPAIRER::get_4bit_code(sof, a, b, frame)` (decompiled)
+  builds a pair's nibble as `a·2 + b`. When exactly one of the two is set,
+  it looks up a list for (frame, set bit) (`get_s1_list`). For each entry
+  `S4_SI (frame', bit', flag, value)` whose bit (frame', bit') is set in the
+  image, the code becomes `8 | flag·4 | value`. This is the "flagged
+  nibble".
+- The lists live in `devices/programmer/fm_sector_bnxplv_rif_t{0,1,2}.ddb`
+  (the sector type is shared with Agilex 7). Each holds a table of 1,568
+  frame slots of `S4_SII` → `S4_SII_BIT` (u32 bit) → one `S4_SI`
+  (u32 frame', u32 bit', u8 flag, u8 value). The three files parse
+  completely, with 217,520, 262,400 and 233,920 entries. File t covers
+  frames 1,568·t … 1,568·t + 1,567 (frame' is the slot plus 1,568·t), and
+  bit' always equals the key bit, so an entry's condition is its own bit.
+  Keys are only the low four bits g…g+3 of the 253 `s4` groups, so only
+  the `a` side of a pair (g+2, g+3) can flag. Every flagged nibble in
+  blinky, the tiny design and the random specimen has (a, b) = (1, 0).
+- Not solved [unk]: which slot an image frame uses. The slot pattern isn't
+  the frame index, nor the frame within its 98-frame group with any
+  single row offset. On the random specimen every image frame's flags
+  match some slot's key set exactly, and the slots' empty patterns line up
+  with the image groups (slot rows 0, 2 and 3 have exactly the 25 empty
+  frames of image groups 2–5, slot row 1 is empty like the never-stored
+  group 1). The repairer's `set_labrow_distances` and spare-row shift are
+  the likely missing piece. Until it is solved, an encoder can't place the
+  flags, and a5db writes plain nibbles. Whether the SDM needs the flag
+  (rather than accepting `0010`) is what the board test shows.
+
+Section format, now complete [obs, every item checked on the 60 pairs]:
+
+- **Header block** (+0): constants (the same in every specimen; the writer
+  carries them as offset/hex runs) plus:
+  - +0x08 the section size;
+  - **+0x3C: the first 4 bytes of SHA-256 over [+0x2000, end)**, which pfg's
+    integrity check calls the "section hash". Flipping one `CORE` bit
+    changes only `CORE`'s, one IO bit only `IO`'s;
+  - **+0x78: the byte sum (u32) of every object header plus both sectors'
+    CRAM** of the image. One flipped CRAM bit moved it by exactly 1 in both
+    sections; t40/t41 and perictrl data are not included. +0x7C and +0x80
+    hold a constant `0xc362c0dd`;
+  - +0xC0 SHA-384 of the first chain table, the design and IO hashes
+    (g2), the keyed hash at +0xBB0, and **+0xBD0: SHA-384 over
+    [+0x2000, end)**; then the CRC at +0xFFC.
+- **Block 1**: SHA-384 of block 0, and **at +0xF00 the number of sections
+  that follow**: 2 in `CMF` (the word (f) saw patched from 0 to 2), 1 in
+  `IO`, 0 in `CORE`. It is 2 in blinky, fz0 and all other specimens, so the
+  CMF patch only depends on the section count [obs].
+- **Chain tables**: `u32 1, u32 16 + 52n, u32 n, u32 0`, then n entries of
+  SHA-384 and flag. A table holds at most 78 entries. When more pages
+  remain, entry 57 is the flag-4 link to the next table, whose page sits at
+  that point in the file, and 20 more entries follow it; the last table
+  takes the rest.
+- **Pages**: a firmware module is its pages without the trailing `MFST`
+  page, the first hashed with flag 0x80000002. A stream is its deflate
+  output cut into zero-padded pages. `IO`: `enable_pm.fw`, `cssm.fw`, action
+  page, streams 0–2, `cssm_reset_release.fw`, `cssm_ux_phy.fw`,
+  `io_config.fw`, action page, streams 3–5. `CORE`: `lsm_init.fw`, action
+  page, both sectors' lib pages (sector 0 then 1), then the two sectors'
+  remaining pages alternating (codebook, block, codebook, BBM, frames; the
+  longer one runs on alone), `unfreeze_routing_fw.fw`, action page, the
+  sector-header stream, `enter_user_mode_fw.fw`.
+- **Action pages**: TLV records that are the same in every specimen except
+  that a **0x17 record (one per stream) has the stream's page count (link
+  pages excluded) in word 0 and ends in a page bitmap**, one bit per page,
+  set for sector-1 pages in `CORE` and zero in `IO`. That is the "7 extra
+  words" phase 2 saw in t41's record: ⌈pages / 32⌉ − 1 words beyond the
+  first. `CORE`'s `0x1f` records hold the lib offsets and `0x15 (n, s, 4)`
+  the lib page count.
+- **The perictrl0 register list** (phase 2 [unk]): every 32-bit word that
+  holds an `sm_hssi_top` named bit, except 8 control words: the `ux_quad`
+  clock-mux configuration at 0xA1000 and seven `ss_ctrl` CSR words at
+  0x20F000, 0x20F004, 0x20F034, 0x20F114, 0x20F120, 0x20F124 and 0x20F128.
+  That reproduces pfg's 521 ranges exactly. Why those 8 are skipped is
+  [inf]: the firmware owns them.
+- **The codebooks** are NPCF parameters (`FBGEN_GEN::copy_altera_codebook`
+  reads `GZIP_ALTERA_LITERALS` through `FBGEN_BLOCK_CONFIG::get_param_values`).
+  `sm4revb_npcf.ddb` stores them sparsely as 12-byte `(value, offset, 0)`
+  records; it holds three 256-entry tables, and pfg's first codebook page
+  is the second table, its second page the first, one u64 per entry.
+- **The 482,784-byte block** after the first codebook is generated: 47
+  groups × 4 records of `8, w, 128, 2` and 2,564 zero bytes, with w = 12,
+  16, 20, 25.
+- **The sector-header stream** (one page after the second `CORE` action
+  page): both sectors' headers, twice. Each is a send of the header's bits
+  reversed and shifted by 24 bits, behind a command word (0x0CA8004C,
+  0x08A8004C, then 0x0CA80040, 0x08A80040); the first pass also forces 4–5
+  bits. After each pass come the control pairs `0x0064000d` and `0x0004000c`.
+  The forced bits are constants copied from the specimens [inf: their
+  meaning is unknown, and sector headers never varied in any specimen].
+
+### (m) Phase 3: a design written by a5db, read back by Quartus (Plan step 4 → 7)
+
+A small design added to fz0's image entirely by a5db, then checked with
+Quartus's own assembler: `s[0]` (fz's shift-register bit, LAB X120 Y48) →
+a NOT LUT in the unused LAB X40 Y20 (sector 0, the other half of the
+chip) → a flip-flop clocked from fz's clock network.
+
+```
+L=cw_la_lab_r20_c40; P=xtophalf/xale0
+a5db set db/sm4revb fz0.sof t0.sof specimens/sof_hmac.key $L \
+    $P/xcw_la_le_lut/lut_mask=0101…01 $P/xcw_la_le_reg0/xlabclk_mux/regclk=DFF_LABCLK0 \
+    $P/xcw_la_le_reg0/xreg0/reg_input=LUTOUT_6LUT $P/xcw_la_le_reg0/xreg0/register_comb=DFF_LATCH \
+    $P/xcw_la_le_reg0/xreg0/leout=LEOUT $P/xcw_la_le_reg0/xreg_aclr/regclr=CLR2 \
+    $P/xcw_la_le_regctrl/xcw_la_le_regctrl_reg/ce_sel=CE $P/xcw_la_le_regctrl/xcw_la_le_regctrl_reg/clr_sel=CLR \
+    xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off=DISABLE_TIEOFF
+a5db net db/sm4revb specimens/rg/full t0.sof t1.sof specimens/sof_hmac.key \
+    'LAB_RE:X120Y48Z0I107>LAB_RE:X40Y20Z0I3' 'clock:<fz0 clock-route nodes>>LAB_RE:X40Y20Z0I83'
+quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
+```
+
+- `a5db net` is a breadth-first router over the graph: it takes hardwired,
+  pass-through and resolvable edges through nodes the image doesn't already
+  drive (`routed` gives those), and a `clock:` net stays off H/V/LL/LEIM
+  wires. The data net is 18 hops: H6, H0, five H12, V8, H12, two V8, H0,
+  V4, H2, H0, LL, LEIM into ALM 0's DATAA (LAB_RE I3). The clock net
+  branches off fz's switchbox at X121 Y51, then goes through switchbox
+  X60 Y51, seam tap X60 Y27, spine tap X28 (cell 6), row mux X28 Y20 (row
+  clock 6) and row-clock tap X40 Y20 into the LAB clock (LAB_RE I83).
+- **Quartus reads it back as intended** [obs]: asm2's `get_attribute` on
+  the result returns every setting the design meant. That is all 17 data
+  mux settings (`MUXINk_` for each hop's `muxin[k]`), the 8 clock-path
+  settings (including the rule-driven tap, row-mux and predrive ones), the
+  LUT mask (NOT DATAA in asm2's DIRECT form) and the 8 register and LAB
+  clock settings.
+- `quartus_pfg -c` accepts the a5db-signed `.sof`. `a5db rbf` on it gives
+  `CMF` and `IO` byte-identical to pfg's, and both `CORE`s decode to its
+  CRAM (pfg's with 4 S4-flagged nibbles, a5db's with none).
+- **Limits**: the base image is still fz0's, so the device defaults, the
+  I/O and the clock source come from Quartus; the new FF's output goes
+  nowhere. Writing a whole image from defaults needs every block's idle
+  values (I/O, HSSI, IO96 included) [unk]. Whether the logic works needs
+  the board.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -870,6 +1162,53 @@ the other compression dependency). chipsmith's
 belongs in chipsmith: add `brotli = pkgs.brotli.lib.outPath;` to that
 list. Fitter and assembler are unaffected, so blinky was assembled with a
 separate `quartus_asm blinky`.
+
+### Board test (prepared, not run: the board is off)
+
+Everything the SDM checks is now reproducible except what only the device
+can say: whether it takes an all-literal `CORE` (plain S4 nibbles), and
+whether it checks the IO and design hashes. The files are built from
+blinky's `.sof` (`specimens/board/`, git-ignored; regenerate as below), and
+each is meant to light LED0 at about 1.5 Hz the way pfg's blinky does.
+
+```
+B=specimens/board; Q=/pool/dev/altera_pro/quartus-pro/26.1.1
+cp <blinky run>/output_files/blinky.sof $B/blinky.sof
+tools/quartus.sh quartus_pfg -c $B/blinky.sof $B/blinky_pfg.rbf          # control, pfg's own
+tools/a5db/target/release/a5db rbf db/sm4revb $B/blinky.sof $B/blinky_a5db.rbf $Q specimens/rbf_keyed_hash.key
+for v in zero-io-hash zero-design-hash corrupt-core; do
+    python3 -I tools/rbf_patch.py $v $B/blinky_a5db.rbf $B/blinky_a5db_$v.rbf; done
+for f in $B/*.rbf; do python3 -I tools/bitstream.py check $f; done      # all pass but corrupt-core
+```
+
+SHA-256 of the files as built here (blinky from phase 1):
+`blinky_pfg.rbf` 8b490e78…, `blinky_a5db.rbf` 456d1276…,
+`blinky_a5db_zero-io-hash.rbf` 60767b4d…,
+`blinky_a5db_zero-design-hash.rbf` 80527719…,
+`blinky_a5db_corrupt-core.rbf` e56af076….
+
+On the board (DE25-Nano, on-board USB-Blaster III, JTAG; MSEL as shipped):
+
+1. `quartus_pgm -l` and `quartus_pgm -c 1 -a` (through `tools/quartus.sh`
+   with USB passed through) to see the cable and read the IDCODE. Add that
+   IDCODE for `A5EB013B` to openFPGALoader's `src/part.hpp` next to
+   `0x4369c0dd` (A5EC008B), as an Agilex 5 entry.
+2. Control: `quartus_pgm -c 1 -m jtag -o "p;blinky.sof"` → LED0 blinks.
+3. Loader check: `openFPGALoader -c usb-blasterIII blinky_pfg.rbf` → LED0
+   blinks. If not, the loader is the problem, not the bitstream; stop here.
+4. **`openFPGALoader -c usb-blasterIII blinky_a5db.rbf`**. Blinks: the SDM
+   accepts a CMF/IO section from a5db and an all-literal `CORE`; the open
+   writer works. Doesn't: try 5 and 6 to see whether it's the CORE.
+5. `blinky_a5db_zero-io-hash.rbf` and `blinky_a5db_zero-design-hash.rbf`:
+   blinks means the SDM ignores that hash.
+6. Negative control: `blinky_a5db_corrupt-core.rbf` must fail (one bit in a
+   hashed `CORE` page, hashes left stale); if it configures, the SDM isn't
+   checking section hashes and steps 4–5 prove less.
+
+Record for each: LED behaviour, openFPGALoader's exit status, and the SDM
+status it prints (`ISC_SR`). If 4 fails while 3 passes, the next suspects
+are the S4 flag rule (pfg sets it, a5db never does) and the lib/BBM layout
+(a5db uses one zero lib per IP and code 0 everywhere).
 
 ## Oracle
 
@@ -888,6 +1227,43 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 3 status** (branch `phase3`):
+
+- Step 1 (big tables compressed): **done** (j). `io96` and `sm_hssi_top`
+  layouts are `.tsv.xz` (363 MB → 3.6 MB); every reader takes either form
+  and outputs are byte-identical.
+- Step 2 (routing graph → bits): **done** (k). `a5db join/route/routed/
+  routecheck`; on fz0 and `designs/rt` every routing bit Quartus set is the
+  join's from `report_routing`'s paths or a decoded FF data-in edge that
+  `report_routing` can't print, and the join sets none Quartus didn't.
+  "Direct links" are LAB_RE → LL.
+- Step 3 (`.rbf` writer): **done, CORE not byte-identical** (l). `a5db rbf`
+  writes CMF and IO byte-identical to pfg on 60 specimens and an all-literal
+  CORE that decodes to the same CRAM; pfg's `--check_integrity` accepts it.
+  Byte identity would need pfg's lib/code choice and the S4 flag rule
+  [unk]. SDM acceptance is [unk] until the board test below.
+- Step 4 (a design from a5db): **done on top of fz0's image** (m). A LUT,
+  an FF and two routed nets (one a clock through spine and row-clock muxes)
+  written by `a5db set`/`net`; Quartus's asm2 reads every setting back as
+  intended and pfg converts the `.sof`.
+
+Open after phase 3 [unk]:
+
+- SDM acceptance of an a5db `.rbf` (all-literal `CORE`, no S4 flags), and
+  whether the SDM checks the IO and design hashes: the board test above.
+- The S4 flag's image-frame → RIF-slot mapping (l), and pfg's lib and BBM
+  code choice; both are needed for a byte-identical `CORE`.
+- The DCM periphery clock muxes (`cw_cc_dcm_hssi_p2c_bf`, no edge API):
+  one instance mapped, the order of the other 31 isn't (k).
+- Redundancy and spare-row tiles have no bit maps (k).
+- The constant `0xc362c0dd` at +0x7C/+0x80 of the section header, the
+  eight perictrl0 control words pfg skips, and the first-pass bits of the
+  sector-header stream: copied, not understood (l).
+- A whole image from defaults rather than on top of a Quartus `.sof` (m).
+
+Next: the board test; then nextpnr (Plan step 7) on `a5db net`'s graph and
+join, with `a5db rbf` as the writer.
 
 **Phase 2 status** (branch `phase2`):
 

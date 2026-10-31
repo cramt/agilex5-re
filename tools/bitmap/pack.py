@@ -9,21 +9,22 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from layout import layout, load  # noqa: E402
+from table import write_table  # noqa: E402
 
 
 def write(prefix, keys, anchors):
     """keys: [layout key] by id; anchors: [(uid, id, {part: (obj, a0, b0)})]."""
     os.makedirs(os.path.dirname(prefix), exist_ok=True)
-    with open(prefix + '.layout.tsv', 'w') as f:
-        f.write('layout\tbit\tpart\tdframe\tdbdata\tpolarity\n')
-        for lid, key in enumerate(keys):
-            for b, part, da, dc, pol in key:
-                f.write(f'{lid}\t{b}\t{part}\t{da}\t{dc}\t{pol}\n')
-    with open(prefix + '.anchors.tsv', 'w') as f:
-        f.write('uid\tlayout\tobject\tpart\tframe\tbdata\n')
-        for u, lid, parts in anchors:
-            for part, (obj, a0, c0) in sorted(parts.items()):
-                f.write(f'{u}\t{lid}\t{obj}\t{part}\t{a0}\t{c0}\n')
+    rows = ['layout\tbit\tpart\tdframe\tdbdata\tpolarity\n']
+    for lid, key in enumerate(keys):
+        for b, part, da, dc, pol in key:
+            rows.append(f'{lid}\t{b}\t{part}\t{da}\t{dc}\t{pol}\n')
+    write_table(prefix + '.layout.tsv', ''.join(rows))
+    rows = ['uid\tlayout\tobject\tpart\tframe\tbdata\n']
+    for u, lid, parts in anchors:
+        for part, (obj, a0, c0) in sorted(parts.items()):
+            rows.append(f'{u}\t{lid}\t{obj}\t{part}\t{a0}\t{c0}\n')
+    write_table(prefix + '.anchors.tsv', ''.join(rows))
 
 
 def main(path, prefix):

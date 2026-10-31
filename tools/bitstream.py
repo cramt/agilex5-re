@@ -64,8 +64,46 @@ def check(d):
             good = d[base + KEYED_HASH_AT:base + KEYED_HASH_AT + 32] == want
             ok &= good
             print(f'  {typ:5s} keyed hash {"ok" if good else "BAD"}')
+            ok &= section_hashes(d[base:base + size], typ)
         base += size
     return ok
+
+
+def section_hashes(S, typ):
+    """The section hash (+0x3C, SHA-256 prefix of [+0x2000, end)), its
+    SHA-384 at +0xBD0, the first chain table's at +0xC0, block 1's SHA-384
+    of block 0, and every chain entry against its page (README (l))."""
+    body = S[0x2000:]
+    checks = {
+        'section hash': S[0x3C:0x40] == hashlib.sha256(body).digest()[:4],
+        'body SHA-384': S[0xBD0:0xC00] == hashlib.sha384(body).digest(),
+        'chain table SHA-384': S[0xC0:0xF0] == hashlib.sha384(S[0x2000:0x3000]).digest(),
+        'header SHA-384': S[0x1000:0x1030] == hashlib.sha384(S[:0x1000]).digest(),
+    }
+    # Chain entries in order, each matched to the next page with that hash.
+    k, todo, ents, bad = 3, [0x2000], [], 0
+    while todo:
+        p = todo.pop(0)
+        n = struct.unpack_from('<I', S, p + 8)[0]
+        ents += [(S[p + 16 + 52 * i:p + 64 + 52 * i], struct.unpack_from('<I', S, p + 64 + 52 * i)[0]) for i in range(n)]
+        while ents:
+            h, f = ents.pop(0)
+            while k * 4096 < len(S) and hashlib.sha384(S[k * 4096:(k + 1) * 4096]).digest() != h:
+                k += 1
+            if k * 4096 >= len(S):
+                bad += 1
+                break
+            if f == 4:
+                todo.append(k * 4096)
+                k += 1
+                break
+            k += 1
+        if bad:
+            break
+    checks['chain'] = bad == 0 and not ents
+    for name, good in checks.items():
+        print(f'  {typ:5s} {name} {"ok" if good else "BAD"}')
+    return all(checks.values())
 
 
 def sof(raw):

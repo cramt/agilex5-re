@@ -68,6 +68,11 @@ impl Sof {
         Ok(Sof { image: image.start + 4..image.end, raw })
     }
 
+    /// Every record as (tag, data).
+    pub fn records(&self) -> Vec<(u16, &[u8])> {
+        records(&self.raw).map(|rs| rs.into_iter().map(|r| (r.tag, &self.raw[r.data])).collect()).unwrap_or_default()
+    }
+
     pub fn image(&self) -> &[u8] {
         &self.raw[self.image.clone()]
     }
