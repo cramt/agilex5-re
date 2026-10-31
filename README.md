@@ -1220,14 +1220,23 @@ quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
   LUT input A–F of ALM k (k = 0–4 top half, 5–9 bottom) is `LAB_RE` pin
   8k + 3, 4, 2, 1, 0, 7. FF slot m (two per ALM, `reg0`/`reg1`) drives
   pins 89 + 2m (`xreg0`) and 90 + 2m (`xreg1`). The LAB clock is pin 83.
-- **The DCM P2C clock muxes, rule** (k) [obs for `mux11to8/clock_int0`,
-  inf for the other 31]: these muxes have no edge API. Their 32
+- **The DCM P2C clock muxes, rule** (k) [obs on two of the 32 muxes,
+  inf for the rest]: these muxes have no edge API. Their 32
   `CE_CC_CLKMUX41_LOW` nodes (Z111–Z142) are told apart by the
   `HSSI_P2C_RE` index n that their output reaches through the hardwired
   `MUX_BOT`/`MUX_TOP` and `P2C_MUX_X4` nodes. The attribute is
   `mp2c_mux_{bot if n < 16, else top}/mux(4m+3)to(4m)/clock_int(n mod 4)/sel`
-  with m = n / 4, and input i sets `CLKINi`. Quartus' V16 clock (n = 8,
-  input 2) comes out as the attribute all three designs set. Idle is `VSS`.
+  with m = n / 4, and input i sets `CLKINi`. Idle is `VSS`. Two checks:
+  - V16 (blinky, fz0, rt0, ho): Z111, n = 8, input 2 → `mux11to8/
+    clock_int0 = CLKIN2`.
+  - `designs/gc` (CLOCK2_50 from `hvio_1_1`, forced global, compiled for
+    this): Z121, n = 2, input 3 → `mux3to0/clock_int2 = CLKIN3`.
+
+  Quartus set exactly that attribute in both. `a5db routed` on gc's image
+  decodes the edge, and the clock traces through routed and hardwired
+  edges from BF23's `HVIOWR_RE` through DCM r23, the P2C mux, switchbox,
+  seam and spine taps and the row clock into its LAB (X120 Y16). gc also
+  differs from the idle image only in its own blocks (355 bits).
 - **`a5db net` builds one tree per net** (`from>to;to;…`): each sink's
   branch may start anywhere on the tree so far, so a clock's trunk is
   shared, not duplicated.
@@ -1494,7 +1503,7 @@ critical warning, which a real design should follow.
   page interleave and the sector-header forced bits. `a5db rbf` equals
   pfg's whole `.rbf` on 78 specimen pairs and on the from-scratch blinky.
 - Step 3 (leftover [unk]s): `0xc362c0dd` is the JTAG IDCODE (n); the DCM
-  P2C mux order has a rule, checked on one mux (n); the sector-header
+  P2C mux order has a rule, checked on two muxes (n); the sector-header
   forced bits are classified (o). Still open: redundancy/spare-row tiles
   and the 8 skipped perictrl0 words.
 - Step 4 (board test): files and steps for the from-scratch blinky ready
