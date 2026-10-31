@@ -1,0 +1,39 @@
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY pt
+set_global_assignment -name VERILOG_FILE pt.v
+set_global_assignment -name SDC_FILE pt.sdc
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
+set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+
+set_location_assignment PIN_DF35 -to p_LED_0
+set_instance_assignment -name IO_STANDARD "1.1-V" -to p_LED_0
+set_location_assignment PIN_DN22 -to p_LED_2
+set_instance_assignment -name IO_STANDARD "1.1-V" -to p_LED_2
+set_location_assignment PIN_DP25 -to p_LED_5
+set_instance_assignment -name IO_STANDARD "1.1-V" -to p_LED_5
+set_location_assignment PIN_CG26 -to p_GPIO1_D_1
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to p_GPIO1_D_1
+set_location_assignment PIN_BV6 -to p_HDMI_TX_D_12
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to p_HDMI_TX_D_12
+set_location_assignment PIN_F2 -to p_GPIO0_D_7
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to p_GPIO0_D_7
+set_location_assignment PIN_AG26 -to p_DRAM_ADDR_7
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to p_DRAM_ADDR_7
+set_location_assignment PIN_DK24 -to p_SW_0
+set_instance_assignment -name IO_STANDARD "1.1-V" -to p_SW_0
+set_location_assignment PIN_DD27 -to p_SW_2
+set_instance_assignment -name IO_STANDARD "1.1-V" -to p_SW_2
+set_location_assignment PIN_DK32 -to p_FAN_ALERT_n
+set_instance_assignment -name IO_STANDARD "1.1-V" -to p_FAN_ALERT_n
+set_location_assignment PIN_DD3 -to p_GPIO1_D_23
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to p_GPIO1_D_23
+set_location_assignment PIN_V14 -to p_GPIO0_D_31
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to p_GPIO0_D_31
+set_location_assignment PIN_AT14 -to p_HDMI_TX_D_5
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to p_HDMI_TX_D_5
+set_location_assignment PIN_AU1 -to p_DRAM_DQ_0
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to p_DRAM_DQ_0

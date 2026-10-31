@@ -11,6 +11,7 @@
 //!   a5db route <db> <graph> <in.sof> <out.sof> <hmac.key> <routes>
 //!                                                  write the routes' mux bits
 //!   a5db fanout <graph> <name prefix>...          edges out of matching nodes
+//!   a5db fanin <graph> <name prefix>...           edges into matching nodes
 //!   a5db routed <db> <graph> <in.sof>             edges the image's mux settings select
 //!   a5db net   <db> <graph> <in.sof> <out.sof> <hmac.key> '[clock:]from,from...>to;to...'...
 //!       route nets through free nodes (sources may be busy: they are the
@@ -347,6 +348,18 @@ fn main() -> Result<()> {
                 if prefixes.iter().any(|p| name.starts_with(*p)) {
                     for e in g.fanout(n as u32) {
                         println!("{name}\t{}\t{}\t{}", g.names[g.dst[e] as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
+                    }
+                }
+            }
+            Ok(())
+        }
+        ["fanin", g, prefixes @ ..] if !prefixes.is_empty() => {
+            let g = graph::Graph::load(std::path::Path::new(g))?;
+            for s in 0..g.names.len() as u32 {
+                for e in g.fanout(s) {
+                    let name = &g.names[g.dst[e] as usize];
+                    if prefixes.iter().any(|p| name.starts_with(*p)) {
+                        println!("{name}\t{}\t{}\t{}", g.names[s as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
                     }
                 }
             }
