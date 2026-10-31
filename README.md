@@ -584,6 +584,12 @@ forms were recovered from the binaries, since `-help` prints nothing.
   stored value too [inf]. fz0's original LUTs don't decode to their
   WYSIWYG masks (fitter input permutation [inf]); the ECO `-mask` values
   land as given.
+  On blinky, a different fit, the database finds exactly the instances the
+  design uses: `cw_la_lab_r48_c109` plus MLABs `r47_c108` and `r48_c108`,
+  the only ones differing from the unused state. Decoded attributes equal
+  Quartus's on all 315 decodable for the LAB and all 318 for MLAB
+  `r47_c108` [obs]. The third instance's query hit an asm2 internal error
+  (`asm2_state.cpp:347`), so it is unchecked.
 - **Quartus Pro ECO works for fuzzing** [obs]. `quartus_fit <rev> --eco
   eco.tcl` loads the post-fit snapshot (about 4 min) and runs ECO commands
   (`modify_lutmask`, `place_node`, `make_connection`,
