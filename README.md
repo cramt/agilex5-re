@@ -527,6 +527,11 @@ forms were recovered from the binaries, since `-help` prints nothing.
   is `LAB_X120_Y48`, where `designs/fz` put its LUTs. There are 52 LAB
   columns, each with an MLAB column at X+1, and 2,340 non-spare LABs and
   MLABs.
+- **Database files** (committed, derived from the dumps below):
+  `db/sm4revb/bcm_types.json` (671 BCM types: children by instance name,
+  CUSTOM attribute names, DIRECT attribute widths) and
+  `db/sm4revb/bcm_settings.tsv` (21,346 `intent, attribute, setting, bits,
+  values` rows: every CUSTOM setting that drives bits).
 - **Every CUSTOM attribute's setting → bit values** [obs]:
   `tools/bcm/settings.tcl` walks all 670 BCM intents and writes 196,315
   `(intent, attribute, setting, bits, values)` rows. Routing and clock
