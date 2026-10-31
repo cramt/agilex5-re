@@ -5,7 +5,7 @@ Everything is placed and routed by hand through a5db, on the idle image the
 database describes:
 
   a5db blank                 the idle image in a5db's own .sof container
-  a5db apply                 CLOCK1_50 (V16) input and LED0 (DF35) output
+  a5db pins                  CLOCK1_50 (V16) clock input and LED0 (DF35) output
   a5db set (x3 LABs)         LUT masks and flip-flop settings
   a5db net                   the clock tree and every data net
   a5db wrap                  a fresh container for the final image
@@ -79,7 +79,7 @@ def main(outdir):
 
     sof = [os.path.join(outdir, f'{n}.sof') for n in ('0_blank', '1_io', '2_lab6', '3_lab7', '4_lab8', '5_nets', 'blinky_a5db')]
     run('blank', DB, QUARTUS, SOF_KEY, sof[0])
-    run('apply', DB, sof[0], sof[1], SOF_KEY, os.path.join(DB, 'io/V16_clock_in.tsv'), os.path.join(DB, 'io/DF35_out.tsv'))
+    run('pins', DB, sof[0], sof[1], SOF_KEY, 'V16=clock_in:3.3', 'DF35=out')
     for li, row in enumerate(ROWS):
         attrs = ['xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off=DISABLE_TIEOFF']
         for name, ins in cs:

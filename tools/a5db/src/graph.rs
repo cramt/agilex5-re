@@ -149,6 +149,9 @@ pub enum Miss {
 pub struct Named {
     writes: Vec<(String, bool)>,
     idle: Vec<(String, bool)>,
+    /// `flop_mode = FAST_WIRE` of a mux with a hyper-register: Quartus sets
+    /// it on every mux it uses, except LEIMs into LAB control inputs (README (q)).
+    flop: Vec<(String, bool)>,
 }
 
 /// Resolves edges to bit writes. Settings are resolved once per (block
@@ -181,7 +184,11 @@ impl<'a> Join<'a> {
         if self.graph.cfg[e] == 0 {
             return self.rule_edge(e, false);
         }
-        self.pair(self.graph.uid[e], self.graph.cfg[e])
+        // In a LAB's routing tile, LEIM I80 and up feed the LAB's control
+        // signals (clock enables, clears); their muxes keep flop_mode DIS.
+        let control = self.graph.uids[self.graph.uid[e] as usize].starts_with("cw_rt_lab_base")
+            && matches!(parse_node(&self.graph.names[self.graph.dst[e] as usize]), Some(("LEIM", _, _, _, i)) if i >= 80);
+        self.pair_full(self.graph.uid[e], self.graph.cfg[e], false, !control)
     }
 
     /// Bits of a clock-network edge that has no edge API but does select a
@@ -211,8 +218,13 @@ impl<'a> Join<'a> {
         Ok(Some(Ok(out)))
     }
 
+    /// The mux setting's bits alone (what decoding an image checks).
     pub fn pair(&mut self, u: u32, c: u32) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
         self.pair_with(u, c, false)
+    }
+
+    fn pair_with(&mut self, u: u32, c: u32, idle: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        self.pair_full(u, c, idle, false)
     }
 
     /// The idle state of the bits an edge's setting writes.
@@ -220,7 +232,7 @@ impl<'a> Join<'a> {
         self.pair_with(u, c, true)
     }
 
-    fn pair_with(&mut self, u: u32, c: u32, idle: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+    fn pair_full(&mut self, u: u32, c: u32, idle: bool, flop: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
         if c == 0 {
             return Ok(None);
         }
@@ -240,7 +252,7 @@ impl<'a> Join<'a> {
         let map = self.db.map(&btype);
         let list = if idle { &named.idle } else { &named.writes };
         let mut out = Vec::with_capacity(list.len());
-        for (b, v) in list.iter() {
+        for (b, v) in list.iter().chain(if flop { &named.flop[..] } else { &[] }) {
             match map.pos(uid, b) {
                 Some(p) => out.push((p, *v)),
                 None => return Ok(Some(Err(Miss::UnmappedBit(format!("{btype} {}", generic(b)))))),
@@ -256,8 +268,14 @@ impl<'a> Join<'a> {
     }
 
     fn resolve_choices(&mut self, btype: &str, choices: Vec<Choice>) -> Result<std::result::Result<std::rc::Rc<Named>, Miss>> {
-        let (mut writes, mut idle) = (Vec::new(), Vec::new());
+        let (mut writes, mut idle, mut flop) = (Vec::new(), Vec::new(), Vec::new());
         for ch in choices {
+            let mux = ch.attr.strip_suffix("/sel").unwrap_or(&ch.attr).to_owned();
+            if let Some(f) = self.db.attribute(btype, &format!("{mux}/flop_mode")) {
+                if let Some(s) = self.db.bcm.settings(&f).iter().find(|s| s.name == "FAST_WIRE") {
+                    flop.extend(s.bits.iter().zip(&s.values).map(|(b, &(v, _))| (format!("{}{b}", f.prefix), v)));
+                }
+            }
             let Some(a) = self.db.attribute(btype, &ch.attr) else {
                 let mux = ch.attr.strip_suffix("/sel").unwrap_or(&ch.attr);
                 return Ok(Err(match self.db.bcm.leaf(btype, mux) {
@@ -288,7 +306,7 @@ impl<'a> Join<'a> {
                 idle.push((format!("{}{b}", a.prefix), v));
             }
         }
-        Ok(Ok(std::rc::Rc::new(Named { writes, idle })))
+        Ok(Ok(std::rc::Rc::new(Named { writes, idle, flop })))
     }
 }
 

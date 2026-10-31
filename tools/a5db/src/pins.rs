@@ -40,10 +40,15 @@ pub struct Pin {
     site: Site,
     usage: Use,
     std: String,
+    /// Which of the input register's two 4:1 muxes feeds the fabric; None
+    /// takes the template's (Quartus' usual) choice.
+    ireg: Option<u32>,
 }
 
-/// `<ball>=<in|out|clock_in>[:<standard>]`; the standard is 3.3, 1.8 or 1.1
-/// (or the full Quartus name) and defaults to 1.1-V on IO96 pins.
+/// `<ball>=<in|in0|in1|out|clock_in>[:<standard>]`; the standard is 3.3, 1.8
+/// or 1.1 (or the full Quartus name) and defaults to 1.1-V on IO96 pins.
+/// `in0`/`in1` pick the input register mux the fabric route leaves through
+/// (`in` is mux0 on IO96 pins and mux1 on HVIO pins, Quartus' usual choice).
 pub fn parse(db: &Db, specs: &[String]) -> Result<Vec<Pin>> {
     let text = std::fs::read_to_string(db.dir.join("io/pins.tsv")).context("reading io/pins.tsv")?;
     let mut balls = BTreeMap::new();
@@ -55,8 +60,13 @@ pub fn parse(db: &Db, specs: &[String]) -> Result<Vec<Pin>> {
     for s in specs {
         let (ball, rest) = s.split_once('=').with_context(|| format!("{s}: expected <ball>=<use>[:<standard>]"))?;
         let (u, std) = rest.split_once(':').map_or((rest, None), |(a, b)| (a, Some(b)));
+        let ireg = match u {
+            "in0" => Some(0),
+            "in1" => Some(1),
+            _ => None,
+        };
         let usage = match u {
-            "in" => Use::In,
+            "in" | "in0" | "in1" => Use::In,
             "out" => Use::Out,
             "clock_in" => Use::ClockIn,
             _ => bail!("{s}: use must be in, out or clock_in"),
@@ -77,7 +87,7 @@ pub fn parse(db: &Db, specs: &[String]) -> Result<Vec<Pin>> {
             (Some(x), _) => x.to_owned(),
             (None, Site::Hvio { .. }) => bail!("{s}: an HVIO pin needs a standard (:3.3 or :1.8)"),
         };
-        pins.push(Pin { ball: ball.to_owned(), uid: uid.clone(), site, usage, std });
+        pins.push(Pin { ball: ball.to_owned(), uid: uid.clone(), site, usage, std, ireg });
     }
     Ok(pins)
 }
@@ -161,7 +171,11 @@ pub fn table(db: &Db, pins: &[Pin]) -> Result<Vec<(String, String, String)>> {
                 _ => continue,
             }
             hit = true;
-            put(expand(r[4], &vars)?, expand(r[5], &vars)?, r[6], &p.ball)?;
+            let mut bit = expand(r[5], &vars)?;
+            if let Some(k) = p.ireg {
+                bit = bit.replace("ireg_4to1_mux0/", &format!("ireg_4to1_mux{k}/")).replace("ireg_4to1_mux1/", &format!("ireg_4to1_mux{k}/"));
+            }
+            put(expand(r[4], &vars)?, bit, r[6], &p.ball)?;
         }
         if !hit {
             bail!("{} ({} {}): no template rows for {} {}", p.ball, block, p.uid, p.usage.name(), p.std);

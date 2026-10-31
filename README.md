@@ -1394,6 +1394,75 @@ and `tools/rbfpairs.sh specimens/core/pairs.txt` reruns the comparison (8 min;
 78 of 78 identical after the merge into `phase4`). The board question of phase 3 (does the SDM take a literal
 `CORE`) no longer matters for a5db's own output.
 
+### (p) Phase 5: pin tables from a template
+
+The phase-4 tables (V16 in, DF35 and DJ32 out) are replaced by one template,
+`db/sm4revb/io/template.tsv`, that `tools/pins/derive.py` writes from the I/O
+bits of three training images (`designs/pt`, blinky, ho). `a5db pintable`
+expands it for any set of pins, `a5db pins` writes the result, and
+`db/sm4revb/io/de25_pins.tsv` holds the expansion for every DE25-Nano user pin
+as input and as output (`tools/pins/de25.sh`). `db/sm4revb/io/pins.tsv` lists
+the package's 351 HVIO and IO96 balls with their block and pad (`ddb pins`).
+The DE25-Nano pin list with the manual's standards is
+`designs/pins/de25_pins.tsv` (from the Terasic System Builder scripts in
+[spersvold/de25_nano](https://github.com/spersvold/de25_nano)): 159 HVIO pins
+in banks 6A–6H (6G and 6H at 1.8 V, the rest 3.3 V) and 22 IO96 pins in bank
+2A at 1.1 V, 6 of them the camera's D-PHY.
+
+- **Pad name → bits** [obs]: an HVIO pad `HVIO_B<b>_<g>_<k>` is
+  `xx20_u<b>/xx4_u<g>/xx1_u<k>` of its `hvio_*` instance (V16 is
+  `HVIO_B1_2_1` = `xx20_u1/xx4_u2/xx1_u1`), and an IO96 pad `P<n>` is lane
+  n / 12, pin n % 12 (DF35 is P61, lane 5 pin 1). The two hold for every pin
+  checked below.
+- **HVIO pins are self-contained** [obs]: a used pin changes only bits under
+  its own `xx1_u<k>`, with no bank or group bits. Output: `itxen` = 1, the
+  output and OE register muxes in bypass (`oreg` sel 00, `din3` 0). Input:
+  `irxen` = 1 and one input register mux in bypass (`ireg_4to1_mux1` sel 00
+  for data). The standard is `iio_config_[1:0]`: idle 11, 3.3-V LVCMOS 00,
+  1.8-V LVCMOS 10 (the rx and tx `iio_config_` bits are one image bit). A
+  clock input uses `ireg_4to1_mux0`, the bank's `clkordat` demux
+  `u<4g + k>` and an `xif` ioclk mux.
+- **IO96 pins have pin, lane and bank parts** [obs]:
+  - pin: output 12 bits (`txdigitop`/`txtop`/`drvstatctrl`/`x_gpio` of pin p:
+    data and OE bypass, slew, drive code), input 3 (`i_rx_tggpiorxen`,
+    `ireg_4to1_mux0` sel 00), plus their IOSSM bit below;
+  - lane: 56 bits once a lane has any used pin (ODT/sense-amp timing,
+    vref enables), plus 11 vref bits whose values depend on whether the lane
+    has an input: output-only lanes get `rxdatavref{l,u}` = 358 and
+    `i_vdac_sel` = 01, a lane with an input `rxdatavrefu` = 384,
+    `rxdatavrefl` = 0, `i_vdac_sel` idle, and all 12 `xp2c` bead selects of
+    its fabric adapter. So pin tables don't simply add up; `pintable`
+    composes them per lane;
+  - bank: 23 bits once per IO96 with any pin (`rd_training` in all 8 lanes,
+    the power controller, 8 IOSSM bits);
+  - the IOSSM init memory (`iossm_mem_init_122_bit[]`) is a pin map: lane L
+    has a 32-bit word at 28,992 + 32 (L − 4), inputs at bit p, outputs at
+    12 + p, and bit L of the bytes at 28,800, 28,808, 28,816 and 28,824 marks
+    a used lane;
+  - an output also clears one unnamed `io96_0` header bit,
+    45,136 + 229 L + p (seen in lanes 4 and 5; the stride is [inf] for the
+    others).
+- **Held out** [obs]: `designs/pins/gen.py` writes `pt` (training: 7 inputs,
+  7 outputs in all 8 HVIO banks and IO96 lanes 4–5, both HVIO voltages) and
+  `ph1`/`ph2`, every other DE25-Nano pin, ph1 with the even pins of the list
+  as outputs and the odd ones as inputs and ph2 the reverse (167 pins each,
+  outputs XOR two inputs, no clock). `tools/pins/check.sh` writes the idle
+  image plus `a5db pins` for the design's pins and compares every hviowr,
+  io96 and unnamed io96 bit with Quartus' image. pt: 0 bits differ. Of 334
+  held-out pin uses, **6 bits differ**, all in the input register mux:
+  - ph2's `DRAM_RAS_n` input has no load (the generator never used it), so
+    Quartus enabled the buffer but no `ireg` mux (2 bits);
+  - ph1's SW3 (lane 5 pin 7) leaves through `ireg_4to1_mux1` instead of mux0
+    (4 bits). Which of the two muxes an input uses goes with the fabric route
+    Quartus chose, so a pin spec can name it: `in0`/`in1` (`in` is the
+    usual one). Which graph node each mux reaches is [unk].
+- **Not covered**: the D-PHY standard (used here single-ended at 1.1 V),
+  bidirectional pins, pull-ups, bus hold, current strength and slew
+  settings (the DE25-Nano manual sets none), IO96 lanes 0–3 and 6–7 and the
+  second IO96 bank (no DE25-Nano pins), differential I/O, and the pin ↔
+  routing-graph node map (which fabric node carries a pin's input or
+  output; phase 4 took V16's and DF35's from Quartus routes).
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
