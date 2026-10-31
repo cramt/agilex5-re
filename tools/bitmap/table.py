@@ -1,5 +1,5 @@
 # Database tables are <name>.tsv, or <name>.tsv.xz when the table is bigger
-# than BIG (io96 and sm_hssi_top layouts; README (j)). Readers take either.
+# than BIG (io96 and sm_hssi_top layouts; docs/db-format.md). Readers take either.
 import lzma
 import os
 
