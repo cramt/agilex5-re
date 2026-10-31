@@ -654,6 +654,9 @@ forms were recovered from the binaries, since `-help` prints nothing.
   | `cw_rt_lab_base` (routing tile) | 4,888 | 4,398 | 4,394, by extrapolation from rows 5, 6, 7, 27, 28, 50, 51 (728 instances, 3,201,744 pairs) | **1** | CRAM, 94 x 48 |
   | clock network (`cw_cc_*`, 13 types), `cw_vr_leaf_ctrl_c_bf` | 2–84 each | 25–480 | all | 1–4 per type | CRAM |
   | `cw_rt_vio_{lab,mlab}_base` | 104 each | 142 | 142 | 1 | CRAM |
+  | `cw_rt_m20k_dsp_base` (M20K/DSP routing) | 752 | 5,831 | all, extrapolated from rows 5, 6, 27, 51 | 1 | CRAM, 94 x 64 |
+  | `cw_dssm` (DSP) | 188 | 521 | all | 1 | CRAM |
+  | `sm_hssi_top` | 1 | 186,662 | all | 1 | `perictrl0` data region |
 
   The LAB anchors decompose exactly [obs]: frame = 200 + 98·(Y − 6),
   so one LAB row per 98-frame group (`sof_meta`'s `_frames` unit), and
