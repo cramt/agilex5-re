@@ -12,12 +12,24 @@
 //!                                                  write the routes' mux bits
 //!   a5db fanout <graph> <name prefix>             edges out of matching nodes
 //!   a5db routed <db> <graph> <in.sof>             edges the image's mux settings select
-//!   a5db net   <db> <graph> <in.sof> <out.sof> <hmac.key> '[clock:]from,from...>to'...
+//!   a5db net   <db> <graph> <in.sof> <out.sof> <hmac.key> '[clock:]from,from...>to;to...'...
 //!       route nets through free nodes (sources may be busy: they are the
-//!       net's own) and write their bits; a clock: net avoids H/V/LL/LEIM
+//!       net's own), one tree per net, and write their bits; a clock: net
+//!       avoids H/V/LL/LEIM
 //!   a5db routecheck <db> <graph> <in.sof> <routes> [<out.sof> <hmac.key>]
 //!       clear every routing bit of in.sof, set only the routes' bits, and
 //!       compare with in.sof (its routes, e.g. from tools/rgdump/routes.tcl)
+//!
+//!   a5db blank <db> <quartus root> <hmac.key> <out.sof>
+//!       the idle image (README (n)) in a .sof that a5db builds itself
+//!   a5db wrap <quartus root> <hmac.key> <in.sof> <out.sof>
+//!       in.sof's image in a5db's own .sof container
+//!   a5db apply <db> <in.sof> <out.sof> <hmac.key> <table.tsv>...
+//!       write named bits from (uid, bit, value) tables (db/sm4revb/io/*)
+//!   a5db trace <graph> <node> <depth>              downstream edges, breadth first
+//!   a5db idle-derive <db> <sof>...                 derive db/sm4revb/idle*.tsv
+//!   a5db idle-diff <db> <in.sof>                   bits of in.sof that differ from idle
+//!   a5db imgdiff <db> <a.sof> <b.sof>              bits that differ, by instance (b's values)
 //!
 //! <graph> is a tools/rgdump directory; <routes> is routes.tcl output or one
 //! path of node names per line.
@@ -32,6 +44,7 @@ mod graph;
 mod rbf;
 mod route;
 mod sof;
+mod sofgen;
 
 use anyhow::{bail, Context, Result};
 use db::{Attr, Db};
@@ -263,6 +276,70 @@ fn main() -> Result<()> {
             let img = blank::image(&mut db)?;
             blank::diff(&mut db, &img, sof::Sof::read(s)?.image())
         }
+        ["blank", dbdir, root, key, out] => {
+            let mut db = Db::open(dbdir)?;
+            let inst = rbf::install::Install::open(std::path::Path::new(root))?;
+            let img = blank::image(&mut db)?;
+            let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
+            sof::Sof::from_raw(sofgen::build(&inst, &img)?)?.write(out, &key)
+        }
+        ["wrap", root, key, inp, out] => {
+            let inst = rbf::install::Install::open(std::path::Path::new(root))?;
+            let img = sof::Sof::read(inp)?.image().to_vec();
+            let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
+            sof::Sof::from_raw(sofgen::build(&inst, &img)?)?.write(out, &key)
+        }
+        ["apply", dbdir, inp, out, key, tables @ ..] if !tables.is_empty() => {
+            let mut db = Db::open(dbdir)?;
+            let mut sof = sof::Sof::read(inp)?;
+            for t in tables {
+                for l in std::fs::read_to_string(t).with_context(|| format!("reading {t}"))?.lines() {
+                    let f: Vec<&str> = l.split('\t').collect();
+                    if f.len() < 3 || l.starts_with('#') || f[2] == "value" {
+                        continue;
+                    }
+                    // `@object/part  offset`: an image bit no named bit covers.
+                    if let Some(op) = f[0].strip_prefix('@') {
+                        let (o, pt) = op.split_once('/').with_context(|| format!("{op}: expected object/part"))?;
+                        let (_, _, start, _) = db::PARTS.iter().find(|(a, b, ..)| *a == o && *b == pt).with_context(|| format!("no part {op}"))?;
+                        let off: usize = f[1].parse()?;
+                        let (byte, m) = (start + off / 8, 1u8 << (off % 8));
+                        let img = sof.image_mut();
+                        img[byte] = if f[2] == "1" { img[byte] | m } else { img[byte] & !m };
+                        continue;
+                    }
+                    let ty = db.type_of(f[0])?;
+                    let p = db.map(&ty).pos(f[0], f[1]).with_context(|| format!("{} {} is not mapped", f[0], f[1]))?;
+                    p.set(sof.image_mut(), f[2] == "1");
+                }
+            }
+            let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
+            sof.write(out, &key)
+        }
+        ["trace", g, node, depth] => {
+            let g = graph::Graph::load(std::path::Path::new(g))?;
+            let idx = g.index();
+            let mut frontier = vec![*idx.get(node).with_context(|| format!("no node {node}"))?];
+            let mut seen: std::collections::HashSet<u32> = frontier.iter().copied().collect();
+            for d in 0..depth.parse::<usize>()? {
+                let mut next = Vec::new();
+                for &n in &frontier {
+                    for e in g.fanout(n) {
+                        let t = g.dst[e];
+                        println!("{d}\t{}\t{}\t{}\t{}", g.names[n as usize], g.names[t as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
+                        if seen.insert(t) {
+                            next.push(t);
+                        }
+                    }
+                }
+                frontier = next;
+            }
+            Ok(())
+        }
+        ["imgdiff", dbdir, a, b] => {
+            let mut db = Db::open(dbdir)?;
+            blank::diff(&mut db, sof::Sof::read(a)?.image(), sof::Sof::read(b)?.image())
+        }
         ["uncovered", dbdir, s] => blank::uncovered(&mut Db::open(dbdir)?, sof::Sof::read(s)?.image()),
         ["fanout", g, prefix] => {
             let g = graph::Graph::load(std::path::Path::new(g))?;
@@ -287,27 +364,32 @@ fn main() -> Result<()> {
                     Some(s) => (true, s),
                     None => (false, &spec[..]),
                 };
-                let (from, to) = spec.split_once('>').with_context(|| format!("{spec}: expected from,...>to"))?;
+                let (from, to) = spec.split_once('>').with_context(|| format!("{spec}: expected from,...>to;to..."))?;
                 let node = |n: &str| idx.get(n).copied().with_context(|| format!("no node {n}"));
-                let from: Vec<u32> = from.split(',').map(node).collect::<Result<_>>()?;
-                let to = node(to)?;
-                let path = route::find_path(&mut j, &g, &from, to, &busy, clock)?.with_context(|| format!("{spec}: no free path"))?;
-                println!("net {spec}: {} hops", path.len());
-                for &e in &path {
-                    let s = route::edge_src(&g, e);
-                    let w = j.edge(e)?;
-                    let what = match &w {
-                        Some(Ok(_)) => format!("{} {}", g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]),
-                        Some(Err(m)) => format!("({m:?})"),
-                        None => "(hardwired)".into(),
-                    };
-                    println!("  {} -> {}  {what}", g.names[s as usize], g.names[g.dst[e] as usize]);
-                    if let Some(Ok(w)) = w {
-                        for (p, v) in w {
-                            p.set(sof.image_mut(), v);
+                // One tree per net: each sink's branch may start anywhere on
+                // the tree so far (a clock's trunk is shared, not duplicated).
+                let mut tree: Vec<u32> = from.split(',').map(node).collect::<Result<_>>()?;
+                for to in to.split(';') {
+                    let to = node(to)?;
+                    let path = route::find_path(&mut j, &g, &tree, to, &busy, clock)?.with_context(|| format!("{spec}: no free path to {}", g.names[to as usize]))?;
+                    println!("net {} > {}: {} hops", from, g.names[to as usize], path.len());
+                    for &e in &path {
+                        let s = route::edge_src(&g, e);
+                        let w = j.edge(e)?;
+                        let what = match &w {
+                            Some(Ok(_)) => format!("{} {}", g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]),
+                            Some(Err(m)) => format!("({m:?})"),
+                            None => "(hardwired)".into(),
+                        };
+                        println!("  {} -> {}  {what}", g.names[s as usize], g.names[g.dst[e] as usize]);
+                        if let Some(Ok(w)) = w {
+                            for (p, v) in w {
+                                p.set(sof.image_mut(), v);
+                            }
                         }
+                        busy.insert(g.dst[e]);
+                        tree.push(g.dst[e]);
                     }
-                    busy.insert(g.dst[e]);
                 }
             }
             let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;

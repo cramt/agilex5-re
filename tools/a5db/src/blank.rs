@@ -93,12 +93,13 @@ fn named_mask(db: &mut Db, len: usize) -> Result<Vec<u8>> {
 
 /// Derive the idle state from Quartus images of designs that use different
 /// blocks: per type the majority vector; per instance the type's vector if
-/// any image shows it, else the instance's own vector when every image
-/// agrees on it (a position-dependent idle value). Instances that never show
-/// the type's vector and vary between images are reported, not guessed.
+/// any image shows it, else the instance's own most common vector when at
+/// least two images agree on it (a position-dependent idle value; the other
+/// images' designs use the instance). Anything else is reported, not guessed.
 /// Writes `idle.tsv` (type, bit: named bits idle at 1), `idle_inst.tsv`
 /// (uid, bit, value: per-instance exceptions) and `idle_unnamed.tsv`
-/// (object, part, bit offset: set image bits no named bit covers).
+/// (object, part, bit offset: image bits no named bit covers, set in most
+/// images).
 pub fn derive(db: &mut Db, imgs: &[(String, Vec<u8>)], out: &std::path::Path) -> Result<()> {
     use std::fmt::Write;
     let (mut idle, mut inst) = (String::from("type\tbit\n"), String::from("uid\tbit\tvalue\n"));
@@ -124,9 +125,20 @@ pub fn derive(db: &mut Db, imgs: &[(String, Vec<u8>)], out: &std::path::Path) ->
                 continue;
             }
             let names = map.bit_names(u);
-            if obs.iter().all(|v| *v == obs[0]) {
+            // The instance's own most common vector, if at least two images
+            // agree on it and no other vector ties it: a design used it in
+            // the others.
+            let mut seen: Vec<(&Vec<bool>, usize)> = Vec::new();
+            for v in &obs {
+                match seen.iter_mut().find(|(w, _)| w == v) {
+                    Some(e) => e.1 += 1,
+                    None => seen.push((v, 1)),
+                }
+            }
+            seen.sort_by_key(|e| std::cmp::Reverse(e.1));
+            if seen[0].1 >= 2 && seen.get(1).is_none_or(|e| e.1 < seen[0].1) {
                 own += 1;
-                for ((b, v), m) in names.iter().zip(obs[0]).zip(&maj) {
+                for ((b, v), m) in names.iter().zip(seen[0].0).zip(&maj) {
                     if v != m {
                         writeln!(inst, "{u}\t{b}\t{}", *v as u8)?;
                     }
@@ -150,9 +162,11 @@ pub fn derive(db: &mut Db, imgs: &[(String, Vec<u8>)], out: &std::path::Path) ->
             let sets: Vec<u8> = imgs.iter().map(|(_, img)| img[i] & !cov[i]).collect();
             for bit in 0..8 {
                 let on = sets.iter().filter(|s| *s >> bit & 1 == 1).count();
-                if on == imgs.len() {
+                // Idle at 1 when most images agree; the others' designs clear it.
+                if 2 * on > imgs.len() {
                     writeln!(unnamed, "{o}\t{p}\t{}", (i - start) * 8 + bit)?;
-                } else if on > 0 {
+                }
+                if on > 0 && on < imgs.len() {
                     eprintln!("  unnamed bit {o}/{p} {} set in {on} of {} images", (i - start) * 8 + bit, imgs.len());
                 }
             }

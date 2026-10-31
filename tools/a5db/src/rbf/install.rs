@@ -17,16 +17,28 @@ pub struct Install {
     pub cb2: Vec<u8>,
     /// Bit offsets of the `s4` groups of `sectorbnxplv_dr`.
     pub s4: Vec<usize>,
+    /// `devices/10nm/sm4revb/sof_meta.pb` as is.
+    pub sof_meta: Vec<u8>,
+    /// `programming_sequence.pb.enc` inflated: the .sof's PROGRAMMING_SEQUENCE.
+    pub programming_sequence: Vec<u8>,
+    /// "Quartus Prime Version 26.1.1 Build 130 …", from a database header.
+    pub version: String,
 }
 
 impl Install {
     pub fn open(root: &Path) -> Result<Install> {
         let zip = std::fs::read(root.join("devices/programmer/firmware/agilex5e.zip")).context("reading the firmware zip")?;
         let fw = unzip(&zip, "sm4revb/SHA_384/")?;
-        let npcf = ddb::container::Ddb::open(&root.join("devices/programmer/sm4revb_npcf.ddb"))?.body;
-        let (cb1, cb2) = codebooks(&npcf)?;
+        let npcf = ddb::container::Ddb::open(&root.join("devices/programmer/sm4revb_npcf.ddb"))?;
+        let version = format!("Quartus Prime {}", npcf.header.version_string);
+        let (cb1, cb2) = codebooks(&npcf.body)?;
         let meta = std::fs::read(root.join("devices/10nm/sm4revb/sof_meta.pb")).context("reading sof_meta.pb")?;
-        Ok(Install { fw, cb1, cb2, s4: s4_positions(&meta)? })
+        // An 8-byte `ac 0f` wrapper, then zlib.
+        let enc = std::fs::read(root.join("devices/10nm/sm4revb/programming_sequence.pb.enc")).context("reading programming_sequence.pb.enc")?;
+        ensure!(enc.len() > 10 && enc[..2] == [0xac, 0x0f], "programming_sequence.pb.enc: unexpected wrapper");
+        let mut programming_sequence = Vec::new();
+        std::io::Read::read_to_end(&mut flate2::read::ZlibDecoder::new(&enc[8..]), &mut programming_sequence)?;
+        Ok(Install { fw, cb1, cb2, s4: s4_positions(&meta)?, sof_meta: meta, programming_sequence, version })
     }
 
     pub fn fw(&self, name: &str) -> Result<&[u8]> {

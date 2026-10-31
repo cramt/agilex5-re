@@ -303,8 +303,8 @@ pub fn parse_node(n: &str) -> Option<(&str, u32, u32, u32, u32)> {
 }
 
 /// Clock-network edges with no edge API that still select a mux input
-/// (README (k)): the spine tap's 5:1 mux and a row clock's 32:1 mux and
-/// predrive mux. Returns the block family, its X/Y and the choices.
+/// (README (k), (n)): the spine tap's 5:1 mux, a row clock's 32:1 mux and
+/// predrive mux, and the DCM's P2C 4:1 muxes. Returns the block family, its X/Y and the choices.
 pub fn clock_rule(g: &Graph, e: usize) -> Option<(&'static str, u32, u32, Vec<Choice>)> {
     let src = crate::route::edge_src(g, e);
     let (st, x, y, sz, si) = parse_node(&g.names[src as usize])?;
@@ -326,6 +326,45 @@ pub fn clock_rule(g: &Graph, e: usize) -> Option<(&'static str, u32, u32, Vec<Ch
                                 return Some(("cw_cc_tap_cs_bf", x, y, vec![ch(format!("cell_{k}/mux51_dolsgn_cs_dolsgn_0/sel"), si)]))
                             }
                             Some(("CW_CC_TAP_CS_CELL_RE", ..)) => next.push(d),
+                            _ => {}
+                        }
+                    }
+                }
+                front = next;
+            }
+            None
+        }
+        // The DCM's P2C 4:1 muxes (README (n)): the mux whose output reaches
+        // HSSI_P2C_RE I<n> is clock_int(n mod 4) of the group mux(4m+3)to(4m),
+        // m = n / 4, under mp2c_mux_bot for n < 16 (through the MUX_BOT
+        // nodes) and mp2c_mux_top above; the input index is CLKIN<i>.
+        ("CE_CC_CLKMUX41_LOW_INPUT", "CE_CC_CLKMUX41_LOW_OUTPUT") if sz == dz => {
+            let mut front = vec![g.dst[e]];
+            let mut side = None;
+            for _ in 0..4 {
+                let mut next = Vec::new();
+                for n in front {
+                    for f in g.fanout(n) {
+                        let d = g.dst[f];
+                        match parse_node(&g.names[d as usize]) {
+                            Some(("HSSI_P2C_RE", _, _, _, n)) if n < 32 => {
+                                let half = if n < 16 { "bot" } else { "top" };
+                                if side.is_some_and(|s| s != half) {
+                                    return None;
+                                }
+                                let m = 4 * (n / 4);
+                                let attr = format!("mp2c_mux_{half}/mux{}to{m}/clock_int{}/sel", m + 3, n % 4);
+                                return Some(("cw_cc_dcm_hssi_p2c_bf", x, y, vec![ch(attr, si)]));
+                            }
+                            Some(("CW_CC_DCM_HSSI_P2C_MUX_BOT_RE", ..)) => {
+                                side = Some("bot");
+                                next.push(d)
+                            }
+                            Some(("CW_CC_DCM_HSSI_P2C_MUX_TOP_RE", ..)) => {
+                                side = Some("top");
+                                next.push(d)
+                            }
+                            Some(("CW_CC_DCM_P2C_MUX_X4_RE", ..)) => next.push(d),
                             _ => {}
                         }
                     }
