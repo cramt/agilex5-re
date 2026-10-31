@@ -916,6 +916,28 @@ fitter, so the ports come from `read_atom_netlist`).
   - 22,012 into blocks without a bit map: redundancy tiles
     (`cw_rd_redtl_bf`, `cw_cc_vseam_*_redt_bf`, 17,132) and spare-row
     tiles (`*_rsp*`, 4,880) [unk].
+- **Clock muxes behind edges with no edge API** [obs]: some clock-network
+  edges carry no configuration in the graph but do select a mux input, so
+  the join adds three rules from the node names (`graph::clock_rule`):
+  - `CE_CC_CLKMUX51_INPUT … In → OUTPUT` (the spine tap's 5:1 mux) sets
+    `cw_cc_tap_cs_bf` `cell_k/mux51_dolsgn_cs_dolsgn_0/sel = CLKINn`, where
+    k is the `SPINE_TAP_RE` index the cell drives;
+  - `SCLKMUX_RE` input k (k < 32) → row clock j's mux node `44 + 7j` sets
+    `xrowclkmux/xrmx{l,r}{j mod 6}/rmux32to1_dolsgn_rc_dolsgn_0` `s1` to the
+    setting holding `CLKINk` and `s2 = CLKIN(k/8)_` (row clocks 0–5 are
+    `l`, 6–11 `r`, by node index, not by side);
+  - row clock j's mux node → its predrive node `50 + 7j` sets
+    `mux_predrive_{l,r}{j mod 6}` to `CLKIN1_` (input 0 is the delay
+    chain).
+
+  Check: every clock-block attribute Quartus set in fz0 and rt0 was put back
+  to its idle value, the designs' routes re-applied with `a5db route`, and
+  all of them came back equal to Quartus's: the switchboxes, seam taps,
+  spine taps and row muxes of both designs. One DCM periphery mux,
+  `cw_cc_dcm_hssi_p2c_bf` `mp2c_mux_bot/mux11to8/clock_int0 = CLKIN2`
+  (`CE_CC_CLKMUX41_LOW_INPUT Z111 I2`), has no rule yet: one instance can't
+  fix the order of its 32 muxes [unk]. Designs clocked from an HVIO pin
+  pass through it.
 - **The idle state of a routing mux is `VCC` where it has that setting,
   else `MUX_DIS`** [obs]: Quartus ties every unused HIOL clock mux
   (`iclkmux*`, 16 per tile, 94 tiles) to `VCC`; all others idle at 0.
@@ -1057,6 +1079,49 @@ Section format, now complete [obs, every item checked on the 60 pairs]:
   The forced bits are constants copied from the specimens [inf: their
   meaning is unknown, and sector headers never varied in any specimen].
 
+### (m) Phase 3: a design written by a5db, read back by Quartus (Plan step 4 → 7)
+
+A small design added to fz0's image entirely by a5db, then checked with
+Quartus's own assembler: `s[0]` (fz's shift-register bit, LAB X120 Y48) →
+a NOT LUT in the unused LAB X40 Y20 (sector 0, the other half of the
+chip) → a flip-flop clocked from fz's clock network.
+
+```
+L=cw_la_lab_r20_c40; P=xtophalf/xale0
+a5db set db/sm4revb fz0.sof t0.sof specimens/sof_hmac.key $L \
+    $P/xcw_la_le_lut/lut_mask=0101…01 $P/xcw_la_le_reg0/xlabclk_mux/regclk=DFF_LABCLK0 \
+    $P/xcw_la_le_reg0/xreg0/reg_input=LUTOUT_6LUT $P/xcw_la_le_reg0/xreg0/register_comb=DFF_LATCH \
+    $P/xcw_la_le_reg0/xreg0/leout=LEOUT $P/xcw_la_le_reg0/xreg_aclr/regclr=CLR2 \
+    $P/xcw_la_le_regctrl/xcw_la_le_regctrl_reg/ce_sel=CE $P/xcw_la_le_regctrl/xcw_la_le_regctrl_reg/clr_sel=CLR \
+    xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off=DISABLE_TIEOFF
+a5db net db/sm4revb specimens/rg/full t0.sof t1.sof specimens/sof_hmac.key \
+    'LAB_RE:X120Y48Z0I107>LAB_RE:X40Y20Z0I3' 'clock:<fz0 clock-route nodes>>LAB_RE:X40Y20Z0I83'
+quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
+```
+
+- `a5db net` is a breadth-first router over the graph: it takes hardwired,
+  pass-through and resolvable edges through nodes the image doesn't already
+  drive (`routed` gives those), and a `clock:` net stays off H/V/LL/LEIM
+  wires. The data net is 18 hops: H6, H0, five H12, V8, H12, two V8, H0,
+  V4, H2, H0, LL, LEIM into ALM 0's DATAA (LAB_RE I3). The clock net
+  branches off fz's switchbox at X121 Y51, then goes through switchbox
+  X60 Y51, seam tap X60 Y27, spine tap X28 (cell 6), row mux X28 Y20 (row
+  clock 6) and row-clock tap X40 Y20 into the LAB clock (LAB_RE I83).
+- **Quartus reads it back as intended** [obs]: asm2's `get_attribute` on
+  the result returns every setting the design meant. That is all 17 data
+  mux settings (`MUXINk_` for each hop's `muxin[k]`), the 8 clock-path
+  settings (including the rule-driven tap, row-mux and predrive ones), the
+  LUT mask (NOT DATAA in asm2's DIRECT form) and the 8 register and LAB
+  clock settings.
+- `quartus_pfg -c` accepts the a5db-signed `.sof`. `a5db rbf` on it gives
+  `CMF` and `IO` byte-identical to pfg's, and both `CORE`s decode to its
+  CRAM (pfg's with 4 S4-flagged nibbles, a5db's with none).
+- **Limits**: the base image is still fz0's, so the device defaults, the
+  I/O and the clock source come from Quartus; the new FF's output goes
+  nowhere. Writing a whole image from defaults needs every block's idle
+  values (I/O, HSSI, IO96 included) [unk]. Whether the logic works needs
+  the board.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -1149,6 +1214,10 @@ critical warning, which a real design should follow.
   CORE that decodes to the same CRAM; pfg's `--check_integrity` accepts it.
   Byte identity would need pfg's lib/code choice and the S4 flag rule
   [unk]. SDM acceptance is [unk] until the board test below.
+- Step 4 (a design from a5db): **done on top of fz0's image** (m). A LUT,
+  an FF and two routed nets (one a clock through spine and row-clock muxes)
+  written by `a5db set`/`net`; Quartus's asm2 reads every setting back as
+  intended and pfg converts the `.sof`.
 
 **Phase 2 status** (branch `phase2`):
 
