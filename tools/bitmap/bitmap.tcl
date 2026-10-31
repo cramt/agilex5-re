@@ -25,9 +25,10 @@ set dev [get_device_name $h]
 set bits [get_bit_names $dev $btype]
 if {$onlybits ne ""} {
     set fh [open $onlybits]
-    set wantbits [lsearch -all -inline -not [split [read $fh] \n] {}]
+    set wantbits [dict create]
+    foreach b [split [read $fh] \n] { if {$b ne ""} { dict set wantbits $b 1 } }
     close $fh
-    set bits [lmap b $bits { expr {[lsearch -exact $wantbits $b] >= 0 ? $b : [continue]} }]
+    set bits [lmap b $bits { expr {[dict exists $wantbits $b] ? $b : [continue]} }]
 }
 set uids {}
 set keep {}
