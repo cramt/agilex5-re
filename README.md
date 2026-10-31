@@ -415,6 +415,20 @@ forms were recovered from the binaries, since `-help` prints nothing.
   tiles (`cw_rt_lab_base`) carry mux attributes such as
   `ifdim_col/xfdim_ale0/xfdim_0/sel` ∈ {MUXIN0_ … MUXIN7_, STITCH,
   MUX_DIS}. Which wire drives each MUXIN is the routing graph, still [unk].
+- **Floorplan** [obs]: `dump_uid_floorplan -device sm4revb -output_file f`
+  (Bcm_device) gives every instance its fitter coordinates, saved as
+  [`db/sm4revb/floorplan.tsv`](db/sm4revb/floorplan.tsv) (11,408
+  instances). `<type>_r<y>_c<x>` is X/Y in fitter terms: `cw_la_lab_r48_c120`
+  is `LAB_X120_Y48`, where `designs/fz` put its LUTs. There are 52 LAB
+  columns, each with an MLAB column at X+1, and 2,340 non-spare LABs and
+  MLABs.
+- **Every CUSTOM attribute's setting → bit values** [obs]:
+  `tools/bcm/settings.tcl` walks all 670 BCM intents and writes 196,315
+  `(intent, attribute, setting, bits, values)` rows. Routing and clock
+  muxes are one-hot plus an enable bit; for example `ce_rt_edim_clkmux sel
+  = CLK_IN3_` is `cram_off_hg=1, cram_hg[3]=1`, other `cram_hg` 0, and
+  `MUX_DIS` is all zero. DIRECT attributes (`lut_mask`, memory-controller
+  fields) are plain bit vectors.
 - **Quartus Pro ECO works for fuzzing** [obs]. `quartus_fit <rev> --eco
   eco.tcl` loads the post-fit snapshot (about 4 min) and runs ECO commands
   (`modify_lutmask`, `place_node`, `make_connection`,
