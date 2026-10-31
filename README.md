@@ -365,6 +365,86 @@ any protobuf (`sof_meta.pb`, the `.sof` 0x36 record) without a schema.
   repeat every 16 bytes (`ff` at byte 0, 14, 16, 30, …), so most of them
   are default values, not design bits [inf].
 
+#### CORE section: 2D compression
+
+`python3 -I tools/core_decode.py decode x.rbf out.bin` rebuilds both
+sectors' CRAM (2 x 4,704 x 540 bytes) from the `CORE` section; `verify
+x.rbf x.sof` compares it with the `.sof` image. The encoder is
+`FBGEN_KM_DC_THREAD::compress` and `FBGEN_ND_2D_ENGINE` in
+`quartus/linux64/libpgm_fbgen.so` (decompiled with rz-ghidra);
+`final_2d_compression` in `libpgm_bitasm.so` only decides whether to use it.
+
+- **Pages and streams** [obs]: the per-entry word of the SHA-384 chain
+  tables (g2) is the stream id: 0 = sector 0, 1 = sector 1, 2 and
+  0x80000002 shared pages, 4 = the next chain table, inserted after the
+  78th entry. Pages of the two streams alternate once both are present.
+  Per stream, in page order: lib pages (count in the `0x15 (n, stream, 4)`
+  record of the action list at +0x6000), a 256-entry byte table, a page
+  holding a deflated 482,784-byte block that is all zero in every specimen,
+  a second byte table, the BBM page, then one raw-deflate frame stream
+  (`0x17 (n, 0x810, …)` gives the page count of both). The byte tables
+  and the zero block don't take part in CRAM decoding [obs]; what they are
+  for is [unk].
+- **BBM page** [obs]: 15 words `(id, width/16 bits, 98, 0)`, a u16, then
+  48 rows of `u16 0` and 60 nibbles, low nibble first. Row 0 is the IP id
+  of each of the 60 columns; rows 1..47 hold one code per column for one
+  98-frame group, in the order the groups are stored. Widths: id 1 and 2 =
+  10 bytes, 3 = 24, 4 and 5 = 16, 6 and 15 = 8. The 60 columns add up to
+  a **656-byte physical frame**.
+- **Frame stream** [obs]: one packet per frame, `04 00 a4 00`, 4 zero
+  bytes, then the literal columns (codes 0 and ≥ 8) in column order, each
+  as stored in the physical frame. Groups go 0, 2, 3, …, 47: **group 1
+  (frames 98–195) is never stored**. Randomising it gives a byte-identical
+  frame stream, so pfg drops it.
+- **Codes** [obs from the decompile; each one checked against specimens]:
+  0 literal; 1 all zero; 2..7 copy of lib `code-2` for that id; 8 and 9
+  literal XOR frame `f-18` of the same group, for frames 26..97, on the
+  bytes whose 2-bit class is 1 or 2 (`get_row_history_iprow_data`); 10+k
+  literal XOR lib k. The class bytes, measured on the random specimen:
+  id 1: 8–9 / 6–7, id 2: 0–1 / 2–3, id 3: 10–11 / 12–13, id 4: 4–5 / 6–7.
+  Ids 5, 6 and 15 never got codes 2..15 here, and whether they can is [unk].
+- **Libs** [obs]: only ids 1..4 have them. The `0x1f` action record
+  (`stream, 0x01260000, 0x0372024c, 0x436, …` in blinky) holds each id's
+  lib offset in 8-byte units (0, 0x126, 0x24c, 0x372, end 0x436). Each lib
+  is 98 frames of the id's physical bytes at a stride rounded up to 4
+  (under 12 bytes) or 8: blinky has 2, 2, 1 and 1 libs. The libs are
+  extracted from both sectors together (editing one sector changes both
+  streams) and stored once per stream.
+- **Physical frame ↔ dr** [obs, fitted bit by bit on a random `.sof`,
+  then checked]: read the dr from bit 4,319 down to 0 into physical bits
+  0, 1, … (LSB first). Each of the 253 `s4` groups that `sof_meta.pb`
+  lists at bit g is stored as 12 bits: `g+5, g+1, g+4, g`, then the
+  nibbles of the pairs `(g+3, g+7)` and `(g+2, g+6)`. A nibble is `00ab`,
+  or has its bit 0 set (`1001`, `1101`, `1011`, …) when exactly one of a,
+  b is 1. Seven dr ranges (256–275, 1664–1675, 2080–2099, 2496–2515,
+  3392–3403, 3808–3827, 4192–4215; 128 bits) have no physical bit, and
+  flipping them leaves the stream unchanged. The 4-bit groups at 4264, 3488
+  and 1760 become `pad pad b+2 b+3 pad pad b b+1`. 32 zero bits sit at
+  physical bit 2528 (inside the id 6 column).
+- **The S4 flag is the one gap** [unk]: which bit of the pair a flagged
+  nibble stands for depends on a fixed per-(frame, nibble) polarity table.
+  It is identical in two different random specimens. When the flag fires
+  is [unk] too: it isn't explained by any single dr bit within ±300 frames
+  of either sector (`fill_core_frame_data` takes it from `S4_SII_BIT`
+  lists, which `BITASM_CRAM_REPAIRER` supplies). The decoder reads a
+  flagged nibble as (1, 0) unless it is `1100`/`1110` (bits 0, 1
+  [, 2] set), and that is right for 97% of the flagged nibbles in the
+  random specimen.
+- **Verification** [obs] (group 1 and the 128 dropped bits excluded):
+  blinky decodes exactly, including 6 flagged nibbles. So do a frame of
+  `0x5a` in sector 0 and one in sector 1. 300 random bit flips per sector
+  leave 1 frame with 2 wrong bits, and 40 random frames plus 100 flips per
+  sector leave 3 frames wrong. Both residues are flagged nibbles of the
+  other polarity. An all-random `.sof` leaves 165 frames per sector wrong,
+  all in flagged nibbles; every other physical bit matches.
+  `core_decode.py reencode` rebuilds pfg's inflated packet streams
+  byte for byte from the decoded physical frames, BBM and libs.
+- **Not yet an encoder** [unk]: pfg's raw deflate isn't zlib's at any
+  level, memLevel or strategy. The encoder's lib and code choice
+  (`run_row_target`, `update_with_libs`, `run_combined_target`) isn't
+  reimplemented. Whether the SDM accepts an all-literal stream (every code
+  0, plain `00ab` nibbles) is the obvious first board test.
+
 ### (g2) Phase 2: every `.rbf` integrity value is reproducible (Plan step 1)
 
 `python3 -I tools/bitstream.py check x.rbf` recomputes them all; it passes
@@ -454,6 +534,32 @@ forms were recovered from the binaries, since `-help` prints nothing.
   = CLK_IN3_` is `cram_off_hg=1, cram_hg[3]=1`, other `cram_hg` 0, and
   `MUX_DIS` is all zero. DIRECT attributes (`lut_mask`, memory-controller
   fields) are plain bit vectors.
+- **Named bit → CRAM address maps, from Quartus's own assembler** [obs].
+  `tools/bitmap/run.sh <base.sof> <outdir> <type…>` runs
+  `bitmap.tcl` under `quartus_asm`. It gives every (instance, bit) pair an
+  id, writes 2 × ⌈log2 ids⌉ `.sof` files, each flipping the pairs whose id
+  has bit k set (or clear), and `bitmap.py` reads every changed image bit's
+  id back. A CRAM bit hit by more than one pair is reported as a clash.
+  `pack.py` stores one relative layout plus a per-instance anchor in
+  [`db/sm4revb/bits/`](db/sm4revb/bits/).
+
+  | type | instances | bits/instance | mapped | layouts | where |
+  |---|---|---|---|---|---|
+  | `cw_la_lab` | 2,340 (spare rows skipped) | 1,165 | 1,140 (2,667,600 pairs; 7,020 clash bits) | **1** | CRAM, 94 frames x 16 bdata |
+  | `hviowr` | 5 | 5,927 | 4,748 | 1 | `perictrl{0,1,2}` object headers |
+
+  The LAB anchors decompose exactly [obs]: frame = 200 + 98·(Y − 6),
+  so one LAB row per 98-frame group (`sof_meta`'s `_frames` unit), and
+  bdata depends only on X, at 64 bdata per column. Sector 0 holds X ≤ 59 with
+  bdata growing toward X = 1 (4176); sector 1 holds X ≥ 62 mirrored (X =
+  62 → 112, X = 120 → 4176). The two sectors are mirror images about the
+  centre seam, but the LAB's internal layout is the same in both.
+- **Cross-checked against the fitter** [obs]: the 256 CRAM bits that the
+  ECO runs changed (fz's four LUT masks, all-0 against all-1) are, by the
+  asm2 map, exactly `cw_la_lab_r48_c120` `xtophalf/xale{0..3}/xcw_la_le_lut`
+  `rb{0,1}lut[*]`, polarity "equal". So `rb*lut` holds the inverted LUT mask,
+  and the fitter's `LABCELL_X120_Y48_N0/6/12/18` are ALMs 0–3 of the top
+  half.
 - **Quartus Pro ECO works for fuzzing** [obs]. `quartus_fit <rev> --eco
   eco.tcl` loads the post-fit snapshot (about 4 min) and runs ECO commands
   (`modify_lutmask`, `place_node`, `make_connection`,
