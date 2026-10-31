@@ -54,13 +54,68 @@ struct GID_RANGE {
 };
 struct DYGR_ROUTE_INFO { GID_RANGE gids() const; };
 
-struct DBCM_DEVICE;
-struct DBCM_BUNDLE { const DBCM_DEVICE* get_device() const; };
-struct DBCM_BUNDLE_SINGLETON { static DBCM_BUNDLE* get_bundle(); };
-struct CUT_DEV_DYGR_DBCM_UTIL { std::string get_blc_rtl_path(DEV_GLOBAL_ID); };
-std::shared_ptr<CUT_DEV_DYGR_DBCM_UTIL> cut_dev_obtain_dygr_dbcm_util(const DYGR_DIE_INFO*, const DBCM_DEVICE*);
+namespace DYGR_QDL {
+// Pimpl handle on one routing edge's configuration, as the assembler sees it.
+struct CONFIG_DATA;
+struct EDGE_API {
+  void* impl;
+  void get_mux_config(CONFIG_DATA*);
+  unsigned num_sub_mux_configs();
+  void get_sub_mux_config(unsigned, CONFIG_DATA*);
+  ~EDGE_API();
+  bool valid() const;
+  std::string get_path();
+  std::string get_uid();
+};
+struct EMULATOR {
+  static std::shared_ptr<EMULATOR> obtain(const DEV_DEVICE*, bool);
+  EDGE_API get_edge_api(DEV_GLOBAL_ID, DEV_GLOBAL_ID) const;
+  std::string get_mode_str() const;
+};
+}  // namespace DYGR_QDL
+struct DYGR_ROUTE_INFO_UDM_BASE { std::string get_string_representation(DEV_GLOBAL_ID) const; };
 
 static const unsigned ROUTER_BASE = 0x80000000u;
+
+// DYGR_QDL::CONFIG_DATA as get_mux_config fills it: the mux instance path
+// below the block uid (ileim_col/xleim_ale0/xleim_4) and the mux input
+// (muxin[6], stitch). Only these two members are known; the tail is slack.
+struct CFG_PROBE {
+  unsigned long a = 0;
+  std::string mux, input;
+  unsigned long rest[32] = {};
+};
+
+// Interns strings into ids, written out as one string per line.
+struct INTERN {
+  std::map<std::string, unsigned> ids;
+  std::vector<const std::string*> by_id;
+  unsigned get(const std::string& s) {
+    auto [it, fresh] = ids.emplace(s, (unsigned)by_id.size());
+    if (fresh) by_id.push_back(&it->first);
+    return it->second;
+  }
+  void write(const std::string& path) const {
+    FILE* f = fopen(path.c_str(), "w");
+    for (auto* s : by_id) fprintf(f, "%s\n", s->c_str());
+    fclose(f);
+  }
+};
+
+// One edge's configuration as "mux input" pairs; hierarchical muxes add
+// their sub-mux settings after a ';'. Empty if the edge needs no setting.
+static std::string edge_config(DYGR_QDL::EDGE_API& e) {
+  CFG_PROBE c;
+  e.get_mux_config(reinterpret_cast<DYGR_QDL::CONFIG_DATA*>(&c));
+  std::string r = c.mux.empty() && c.input.empty() ? "" : c.mux + " " + c.input;
+  unsigned n = e.num_sub_mux_configs();
+  for (unsigned k = 0; k < n; k++) {
+    CFG_PROBE sc;
+    e.get_sub_mux_config(k, reinterpret_cast<DYGR_QDL::CONFIG_DATA*>(&sc));
+    r += ";" + sc.mux + " " + sc.input;
+  }
+  return r;
+}
 
 static int dump(void*, Tcl_Interp*, int argc, const char** argv) {
   if (argc < 2) { fprintf(stderr, "usage: rg_dump <outdir> [max_nodes]\n"); return 1; }
@@ -70,6 +125,12 @@ static int dump(void*, Tcl_Interp*, int argc, const char** argv) {
   const DYGR_ROUTE_INFO* ri = di->get_route_info();
   if (!ri) { fprintf(stderr, "rg_dump: route info not loaded (run load_die_info)\n"); return 1; }
 
+  DEV_DEVICE* dev = DMGR_UTILITY::get_current_device();
+  auto em = DYGR_QDL::EMULATOR::obtain(dev, false);
+  INTERN uids, cfgs;
+  uids.get("");  // id 0: no block / invalid edge
+  cfgs.get("");  // id 0: no setting
+  unsigned long invalid = 0, configured = 0;
   FILE* fn = fopen((dir + "/nodes.tsv").c_str(), "w");
   FILE* fe = fopen((dir + "/edges.bin").c_str(), "wb");
   GID_RANGE r = ri->gids();
@@ -85,10 +146,22 @@ static int dump(void*, Tcl_Interp*, int argc, const char** argv) {
     di->get_element_string_name({g}, name);
     fo.clear();
     di->get_fanout({g}, fo);
-    // edges.bin: u32 src, u32 nfanout, u32 dst[nfanout], gids minus ROUTER_BASE
+    // edges.bin: u32 src, u32 nfanout, then per fanout u32 dst, u32 block
+    // uid id (uids.txt), u32 setting id (configs.txt); gids minus ROUTER_BASE
     unsigned hdr[2] = {g - ROUTER_BASE, (unsigned)fo.size()};
     fwrite(hdr, 4, 2, fe);
-    for (auto& d : fo) { unsigned x = d.v - ROUTER_BASE; fwrite(&x, 4, 1, fe); }
+    for (auto& d : fo) {
+      DYGR_QDL::EDGE_API ea = em->get_edge_api({g}, d);
+      unsigned rec[3] = {d.v - ROUTER_BASE, 0, 0};
+      if (ea.valid()) {
+        rec[1] = uids.get(ea.get_uid());
+        rec[2] = cfgs.get(edge_config(ea));
+        configured += rec[2] != 0;
+      } else {
+        invalid++;
+      }
+      fwrite(rec, 4, 3, fe);
+    }
     fprintf(fn, "%u\t%s\t%zu\n", g - ROUTER_BASE, name.c_str(), fo.size());
     auto& pt = per_type[name.substr(0, name.find(':'))];
     pt.first++; pt.second += fo.size();
@@ -98,29 +171,54 @@ static int dump(void*, Tcl_Interp*, int argc, const char** argv) {
               std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
   }
   fclose(fn); fclose(fe);
+  uids.write(dir + "/uids.txt");
+  cfgs.write(dir + "/configs.txt");
   FILE* fs = fopen((dir + "/types.tsv").c_str(), "w");
   for (auto& [k, v] : per_type) fprintf(fs, "%s\t%lu\t%lu\n", k.c_str(), v.first, v.second);
   fclose(fs);
-  fprintf(stderr, "rg_dump: done, %lu nodes %lu edges\n", n, e);
+  fprintf(stderr, "rg_dump: done, %lu nodes %lu edges, %lu with a mux setting, %lu with no edge API, %zu blocks, %zu distinct settings\n",
+          n, e, configured, invalid, uids.by_id.size() - 1, cfgs.by_id.size() - 1);
   return 0;
 }
 
-// rg_rtl <gid offset>...: the BCM RTL path of routing elements
+// rg_rtl <gid offset>...: UDM string form and fanin list of routing elements
 static int rtl(void*, Tcl_Interp*, int argc, const char** argv) {
   DYGR_DIE_INFO* di = DMGR_UTILITY::get_current_device()->get_die_info();
-  DBCM_BUNDLE* b = DBCM_BUNDLE_SINGLETON::get_bundle();
-  fprintf(stderr, "bundle=%p\n", (void*)b);
-  const DBCM_DEVICE* dev = b ? b->get_device() : nullptr;
-  fprintf(stderr, "dbcm device=%p\n", (void*)dev);
-  if (!dev) return 1;
-  auto u = cut_dev_obtain_dygr_dbcm_util(di, dev);
+  auto* ub = reinterpret_cast<const DYGR_ROUTE_INFO_UDM_BASE*>(di->get_route_info());
   for (int i = 1; i < argc; i++) {
     unsigned g = ROUTER_BASE + strtoul(argv[i], 0, 0);
     std::string name; di->get_element_string_name({g}, name);
     std::vector<DEV_GLOBAL_ID> fi; di->get_fanin({g}, fi);
-    fprintf(stderr, "rtl %s %s fanin:", name.c_str(), u->get_blc_rtl_path({g}).c_str());
+    fprintf(stderr, "rtl %s %s fanin:", name.c_str(), ub->get_string_representation({g}).c_str());
     for (auto& f : fi) { std::string n; di->get_element_string_name(f, n); fprintf(stderr, " %s", n.c_str()); }
     fprintf(stderr, "\n");
+  }
+  return 0;
+}
+
+// rg_edge <gid offset>...: for each fanin edge of each node, the assembler's
+// view of it (block uid, mux path)
+static int edge(void*, Tcl_Interp*, int argc, const char** argv) {
+  DEV_DEVICE* dev = DMGR_UTILITY::get_current_device();
+  DYGR_DIE_INFO* di = dev->get_die_info();
+  bool flag = getenv("RG_QDL_FLAG") && atoi(getenv("RG_QDL_FLAG"));
+  auto em = DYGR_QDL::EMULATOR::obtain(dev, flag);
+  fprintf(stderr, "emulator=%p mode=%s\n", (void*)em.get(), em->get_mode_str().c_str());
+  for (int i = 1; i < argc; i++) {
+    unsigned g = ROUTER_BASE + strtoul(argv[i], 0, 0);
+    std::string name; di->get_element_string_name({g}, name);
+    std::vector<DEV_GLOBAL_ID> fi; di->get_fanin({g}, fi);
+    for (size_t k = 0; k < fi.size(); k++) {
+      std::string sn; di->get_element_string_name(fi[k], sn);
+      DYGR_QDL::EDGE_API e = em->get_edge_api(fi[k], {g});
+      bool v = e.valid();
+      fprintf(stderr, "edge %s <-[%zu] %s valid=%d", name.c_str(), k, sn.c_str(), v);
+      fprintf(stderr, " uid=%s path=%s", e.get_uid().c_str(), e.get_path().c_str());
+      if (v) {
+        fprintf(stderr, " config=[%s]", edge_config(e).c_str());
+      }
+      fprintf(stderr, "\n");
+    }
   }
   return 0;
 }
@@ -128,5 +226,6 @@ static int rtl(void*, Tcl_Interp*, int argc, const char** argv) {
 extern "C" int Rgdump_Init(Tcl_Interp* in) {
   Tcl_CreateCommand(in, "rg_dump", dump, nullptr, nullptr);
   Tcl_CreateCommand(in, "rg_rtl", rtl, nullptr, nullptr);
+  Tcl_CreateCommand(in, "rg_edge", edge, nullptr, nullptr);
   return 0;
 }

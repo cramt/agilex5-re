@@ -9,6 +9,6 @@ out=${1:-$here/../../specimens/rg/librgdump.so}
 mkdir -p "$(dirname "$out")"
 nix shell nixpkgs#gcc13 -c g++ -std=c++17 -O2 -fPIC -shared -o "$out" "$here/rgdump.cpp" \
     -L"$Q/qcore/linux64" -L"$Q/quartus/linux64" \
-    -l:libtcl8.6.so -l:libddb_dygr.so -l:libddb_dev.so -l:libddb_dmgr.so -l:libdb_cut_dev.so -l:libddb_dbcm.so \
+    -l:libtcl8.6.so -l:libddb_dygr.so -l:libddb_dev.so -l:libddb_dmgr.so -l:libddb_dygr_qdl.so \
     -Wl,-z,defs -Wl,--allow-shlib-undefined
 echo "$out"
