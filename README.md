@@ -1304,7 +1304,7 @@ Verified:
 
 **S4 flags, by watching pfg** [obs]. `quartus_pfg -c` was run under gdb (an
 `LD_PRELOAD` shim calls `prctl(PR_SET_PTRACER)` and waits, since
-`ptrace_scope` is 1; scripts in `/tmp/a5p4c/gdb`, not committed). The frame
+`ptrace_scope` is 1; scripts in `specimens/core/gdb`, git-ignored). The frame
 packets come from `FBGEN_ND_CRAM_FRAME_MGR`, not the `KM` manager or the
 repairer:
 
@@ -1389,8 +1389,9 @@ with clock routing), nine CRAM edits of fz0 and blinky (2,000 and 50,000
 random flips, 1 % random noise, half-random sectors, duplicated random
 groups that tie two libs, rows repeating every 18 frames, an all-zero and
 an all-one CRAM, a walking bit in sector 1) and the five sector-header
-specimens above. Specimens and gdb scripts are in `/tmp/a5p4c`, not
-committed. The board question of phase 3 (does the SDM take a literal
+specimens above. The 78 pairs are in `specimens/core/pairs/` (git-ignored),
+and `tools/rbfpairs.sh specimens/core/pairs.txt` reruns the comparison (8 min;
+78 of 78 identical after the merge into `phase4`). The board question of phase 3 (does the SDM take a literal
 `CORE`) no longer matters for a5db's own output.
 
 ### quartus_sta fails under chipsmith [obs]
