@@ -20,13 +20,7 @@ DESIGN_HASH = {'CORE': 0x1E0}
 
 
 def sections(d):
-    out, base = {}, 0
-    while base < len(d):
-        h = base + (0x400 if base == 0 else 0)
-        size = struct.unpack_from('<I', d, h + 8)[0]
-        out[d[h + 12:h + 16].rstrip(b'\0').decode()] = (base, size)
-        base += size
-    return out
+    return {t: (base, size) for t, base, size in bitstream.sections(d)}
 
 
 def resign(d, base):

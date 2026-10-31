@@ -3,6 +3,7 @@
 #   python3 -I tools/bitstream.py design.sof|design.rbf
 #   python3 -I tools/bitstream.py key            # once: derive the HMAC key
 #   python3 -I tools/bitstream.py check design.rbf
+#   python3 -I tools/bitstream.py cmp a.rbf b.rbf  # section by section
 # .sof: gzip of "SOF\0", u32 0, u32 record count, then (u16 tag, u32 len, data).
 # .rbf: 4 KiB-aligned SDM sections, each with header magic 0x97566593 (at
 #       +0x400 in the first, CMF, section; at +0 in the others), u32 size at
@@ -121,29 +122,56 @@ def sof(raw):
         p += 6 + ln
 
 
-def rbf(d):
+def sections(d):
+    """(type, offset, size) of every section. The first section's header is
+    at +0x400, behind the RBF magic block; a size of 0 is corrupt, and is
+    refused rather than looped on."""
     u = lambda o: struct.unpack_from('<I', d, o)[0]
     assert u(0) == RBF_MAGIC, 'not an RBF'
-    print(f'RBF, {len(d)} bytes')
-    base = 0
+    out, base = [], 0
     while base < len(d):
         h = base + (0x400 if base == 0 else 0)
         assert u(h) == SECTION_MAGIC, f'no section magic at {h:#x}'
         size, typ = u(h + 8), d[h + 12:h + 16].rstrip(b'\0').decode()
-        ver = u(h + 0x20)
+        assert 0 < size <= len(d) - base, f'bad section size {size:#x} at {h:#x}'
+        out.append((typ, base, size))
+        base += size
+    return out
+
+
+def rbf(d):
+    u = lambda o: struct.unpack_from('<I', d, o)[0]
+    print(f'RBF, {len(d)} bytes')
+    for typ, base, size in sections(d):
+        ver = u(base + (0x400 if base == 0 else 0) + 0x20)
         extra = ''
         if typ == 'CMF':
             build = d[0xfe0:0xffc].split(b'\0')[0].decode()
             extra = f' firmware {ver >> 24}.{ver >> 16 & 0xff}.{ver >> 8 & 0xff}, build id {build!r}'
         sha = hashlib.sha256(d[base:base + size]).hexdigest()[:16]
         print(f'  {typ:5s} at {base:#08x} size {size:#08x} ({size} bytes){extra}  sha256 {sha}...')
-        base += size
 
+
+def cmp(a, b):
+    """Section by section: same, or the size and first differing byte."""
+    sa, sb = sections(a), sections(b)
+    same = len(sa) == len(sb)
+    for (ta, pa, la), (tb, pb, lb) in zip(sa, sb):
+        x, y = a[pa:pa + la], b[pb:pb + lb]
+        if x == y:
+            print(f'  {ta:5s} identical ({la} bytes)')
+            continue
+        same = False
+        first = next((i for i, (u, v) in enumerate(zip(x, y)) if u != v), min(la, lb))
+        print(f'  {ta:5s}/{tb:5s} differ: {la} against {lb} bytes, first at +{first:#x}')
+    return same
 
 if __name__ == '__main__':
     if sys.argv[1] == 'key':
         os.makedirs(os.path.dirname(KEY_FILE), exist_ok=True)
         open(KEY_FILE, 'wb').write(derive_key(*sys.argv[2:3]))
+    elif sys.argv[1] == 'cmp':
+        sys.exit(0 if cmp(*(open(f, 'rb').read() for f in sys.argv[2:4])) else 1)
     elif sys.argv[1] == 'check':
         sys.exit(0 if check(open(sys.argv[2], 'rb').read()) else 1)
     else:

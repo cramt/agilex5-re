@@ -10,7 +10,7 @@
 //!   a5db join  <db> <graph>                       how many graph edges resolve to bits
 //!   a5db route <db> <graph> <in.sof> <out.sof> <hmac.key> <routes>
 //!                                                  write the routes' mux bits
-//!   a5db fanout <graph> <name prefix>             edges out of matching nodes
+//!   a5db fanout <graph> <name prefix>...          edges out of matching nodes
 //!   a5db routed <db> <graph> <in.sof>             edges the image's mux settings select
 //!   a5db net   <db> <graph> <in.sof> <out.sof> <hmac.key> '[clock:]from,from...>to;to...'...
 //!       route nets through free nodes (sources may be busy: they are the
@@ -341,10 +341,10 @@ fn main() -> Result<()> {
             blank::diff(&mut db, sof::Sof::read(a)?.image(), sof::Sof::read(b)?.image())
         }
         ["uncovered", dbdir, s] => blank::uncovered(&mut Db::open(dbdir)?, sof::Sof::read(s)?.image()),
-        ["fanout", g, prefix] => {
+        ["fanout", g, prefixes @ ..] if !prefixes.is_empty() => {
             let g = graph::Graph::load(std::path::Path::new(g))?;
             for (n, name) in g.names.iter().enumerate() {
-                if name.starts_with(prefix) {
+                if prefixes.iter().any(|p| name.starts_with(*p)) {
                     for e in g.fanout(n as u32) {
                         println!("{name}\t{}\t{}\t{}", g.names[g.dst[e] as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
                     }
