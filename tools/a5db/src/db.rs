@@ -90,6 +90,31 @@ pub fn read_table(path: &Path) -> Result<String> {
     Ok(text)
 }
 
+/// Write a database table, as `.tsv.xz` (`xz -9` equivalent) when it is
+/// bigger than 4 MiB (docs/db-format.md).
+pub fn write_table(path: &Path, text: &str) -> Result<()> {
+    if text.len() <= 4 << 20 {
+        let _ = std::fs::remove_file({ let mut x = path.as_os_str().to_owned(); x.push(".xz"); x });
+        return std::fs::write(path, text).with_context(|| format!("writing {}", path.display()));
+    }
+    let mut xz = path.as_os_str().to_owned();
+    xz.push(".xz");
+    let _ = std::fs::remove_file(path);
+    let status = std::process::Command::new("xz")
+        .args(["-9", "-c"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::fs::File::create(&xz)?)
+        .spawn()
+        .and_then(|mut c| {
+            use std::io::Write;
+            c.stdin.take().unwrap().write_all(text.as_bytes())?;
+            c.wait()
+        })
+        .with_context(|| format!("running xz for {}", path.display()))?;
+    anyhow::ensure!(status.success(), "xz failed for {}", path.display());
+    Ok(())
+}
+
 fn tsv(path: &Path) -> Result<Vec<Vec<String>>> {
     let text = read_table(path)?;
     Ok(text.lines().skip(1).map(|l| l.split('\t').map(str::to_owned).collect()).collect())
@@ -124,6 +149,21 @@ impl BlockMap {
 
     pub fn has(&self, uid: &str) -> bool {
         self.anchors.contains_key(uid)
+    }
+
+    /// Every instance, sorted.
+    pub fn uids(&self) -> Vec<&str> {
+        let mut u: Vec<&str> = self.anchors.keys().map(String::as_str).collect();
+        u.sort();
+        u
+    }
+
+    /// The named bits of an instance's layout, sorted.
+    pub fn bit_names(&self, uid: &str) -> Vec<&str> {
+        let Some(placed) = self.anchors.get(uid) else { return Vec::new() };
+        let mut b: Vec<&str> = self.layouts[placed.layout].keys().map(String::as_str).collect();
+        b.sort();
+        b
     }
 
     /// Image byte offsets of every mapped bit of an instance in one part.
@@ -336,6 +376,15 @@ impl Db {
             }
         }
         None
+    }
+
+    /// Every block type with a bit map.
+    pub fn types(&self) -> Result<Vec<String>> {
+        let mut types: Vec<String> = std::fs::read_dir(self.dir.join("bits"))?
+            .filter_map(|e| e.ok()?.file_name().into_string().ok()?.strip_suffix(".anchors.tsv").map(str::to_owned))
+            .collect();
+        types.sort();
+        Ok(types)
     }
 
     /// The block type of an instance uid: `<type>_r<y>_c<x>` or a bare name.

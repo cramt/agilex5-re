@@ -1,0 +1,13 @@
+# CLOCK1_50: ball V16, bank 6C (hvio_3_1 xx20_u1/xx4_u2/xx1_u1), 3.3-V LVCMOS input
+# routed to the clock network (P2C ioclk mux P1, clkordat demux u9 to the clock path).
+# Named bits that differ between idle0 (pin unused) and blinky (README (n)).
+uid	bit	value
+hvio_3_1	xif/xif_clk_mux/xif_p2c_ioclk_2to1_mux_u1/cr_pin_sel	1
+hvio_3_1	xx20_u1/xx20_clkordat_din_1to2_demux_u9/cr_clkordat	1
+hvio_3_1	xx20_u1/xx4_u2/xx1_u1/xiogpio_reg/xio_gpio_ireg_4to1_mux0/rb_mux_sel[0]	0
+hvio_3_1	xx20_u1/xx4_u2/xx1_u1/xiogpio_reg/xio_gpio_ireg_4to1_mux0/rb_mux_sel[1]	0
+hvio_3_1	xx20_u1/xx4_u2/xx1_u1/xx1_buffer_rxtx/xx1_buffer_rx/irxen	1
+hvio_3_1	xx20_u1/xx4_u2/xx1_u1/xx1_buffer_rxtx/xx1_buffer_rx/iio_config_[0]	0
+hvio_3_1	xx20_u1/xx4_u2/xx1_u1/xx1_buffer_rxtx/xx1_buffer_rx/iio_config_[1]	0
+hvio_3_1	xx20_u1/xx4_u2/xx1_u1/xx1_buffer_rxtx/xx1_buffer_tx/iio_config_[0]	0
+hvio_3_1	xx20_u1/xx4_u2/xx1_u1/xx1_buffer_rxtx/xx1_buffer_tx/iio_config_[1]	0

@@ -1,8 +1,8 @@
 //! `.rbf` writer: a `.sof` image to the bitstream quartus_pfg would make,
-//! without Quartus (README (l)). The CMF section is the install's signed
-//! `main.cmf` with one word and its block CRC patched; the IO section is
-//! pfg's byte for byte; the CORE section is an all-literal encoding of the
-//! same CRAM.
+//! without Quartus (README (l), (o)). The CMF section is the install's
+//! signed `main.cmf` with one word and its block CRC patched; the IO and
+//! CORE sections are pfg's byte for byte (CORE through pfg's own 2D
+//! compression, S4 flags and page interleave).
 
 pub mod core;
 pub mod deflate;
@@ -107,44 +107,40 @@ fn core_section(inst: &Install, img: &[u8], f: &Fields, key: &[u8]) -> Result<Ve
     let (s0, n) = io::part("sector0", "cram");
     let (s1, _) = io::part("sector1", "cram");
     ensure!(n == core::NF * core::FB);
-    let (libs, offs) = core::libs();
-    let lib_pages: Vec<Vec<u8>> = libs.chunks(PAGE).map(<[u8]>::to_vec).collect();
+    let enc = core::encode(&lay, [&img[s0..s0 + n], &img[s1..s1 + n]], &inst.s4_flags);
+    let offs = enc.offs;
+    let lib_pages: Vec<Vec<u8>> = enc.libs.chunks(PAGE).map(<[u8]>::to_vec).collect();
     let zero = section::stream_pages(&deflate::deflate(&core::zero_block())?);
     ensure!(zero.len() == 1, "the codebook block deflates to {} pages", zero.len());
-    // Per sector: codebook, zero block, second codebook, BBM, frame pages.
-    let mut rest: [Vec<Vec<u8>>; 2] = Default::default();
-    let mut frames = [0usize; 2];
-    for (s, base) in [(0, s0), (1, s1)] {
-        let fp = section::stream_pages(&deflate::deflate(&core::frame_stream(&lay, &img[base..base + n]))?);
-        frames[s] = fp.len();
-        rest[s] = [inst.cb1.clone(), zero[0].clone(), inst.cb2.clone(), core::bbm_page()].into_iter().chain(fp).collect();
-    }
-    // Lib pages sector by sector, then the two sectors' pages alternate.
+    // Per sector: codebook, zero block, second codebook, BBM, then the frame stream.
+    let setup: [Vec<Vec<u8>>; 2] = std::array::from_fn(|s| vec![inst.cb1.clone(), zero[0].clone(), inst.cb2.clone(), enc.bbm[s].clone()]);
+    let deflated: Vec<Vec<u8>> = enc.frames.iter().map(|f| deflate::deflate(f)).collect::<Result<_>>()?;
+    let fpages: Vec<Vec<Vec<u8>>> = deflated.iter().map(|d| section::stream_pages(d)).collect();
+    let frames = [fpages[0].len(), fpages[1].len()];
+    // Lib pages sector by sector, the setup pages alternating, then the frame
+    // pages in pfg's interleave.
     let mut data: Vec<Page> = Vec::new();
     for s in 0..2 {
         data.extend(hashed(lib_pages.clone(), s));
     }
-    let mut bitmap = Vec::new();
-    let (mut a, mut b) = (rest[0].clone().into_iter(), rest[1].clone().into_iter());
-    let mut k = 0;
-    loop {
-        let (x, y) = (a.next(), b.next());
-        if x.is_none() && y.is_none() {
-            break;
-        }
-        for (s, p) in [(0u32, x), (1, y)] {
-            if let Some(p) = p {
-                if k >= 8 {
-                    bitmap.push(s == 1);
-                }
-                data.push(Page::Hashed(p, s));
-                k += 1;
-            }
+    for k in 0..4 {
+        for s in 0..2 {
+            data.push(Page::Hashed(setup[s][k].clone(), s as u32));
         }
     }
+    let mut bitmap = Vec::new();
+    let mut next = [0usize; 2];
+    for s in interleave([deflated[0].len(), deflated[1].len()]) {
+        bitmap.push(s == 1);
+        data.push(Page::Hashed(fpages[s][next[s]].clone(), s as u32));
+        next[s] += 1;
+    }
+    ensure!(next == frames, "interleave placed {next:?} of {frames:?} frame pages");
     ensure!(bitmap.len() == frames[0] + frames[1]);
+    // With no libs pfg sends no lib pages and drops their 0x15 records.
     let recs: Vec<(u32, Vec<u32>)> = tables::CORE_ACT1
         .iter()
+        .filter(|(t, w)| !(*t == 0x15 && w[2] == 4 && lib_pages.is_empty()))
         .map(|(t, w)| {
             let mut w = w.to_vec();
             if *t == 0x1f {
@@ -171,6 +167,45 @@ fn core_section(inst: &Install, img: &[u8], f: &Fields, key: &[u8]) -> Result<Ve
     out.extend(hashed(shdr, 0));
     out.extend(section::module(inst.fw("enter_user_mode_fw.fw")?)?);
     section::assemble(out, f, key)
+}
+
+/// The order in which pfg sends the two sectors' frame pages
+/// (`BITASM_FAMILY_VAR1::get_group_data`, README (o)). The sector with more
+/// pages (R; sector 0 on a tie) sends on every turn; the other sends only
+/// while its bytes sent, scaled by the page-count ratio, stay within 4 KiB
+/// of R's. Turns alternate 0, 1, 0, … starting at R, for as many rounds as
+/// R has pages.
+fn interleave(sizes: [usize; 2]) -> Vec<usize> {
+    let n = sizes.map(|s| s.div_ceil(PAGE));
+    let r = if n[0] >= n[1] { n[0] as f64 / n[1] as f64 } else { n[1] as f64 / n[0] as f64 };
+    let big = usize::from(n[1] > n[0]);
+    let rounds = sizes[0].max(sizes[1]).div_ceil(PAGE);
+    let mut off = [0usize; 2];
+    let mut out = Vec::new();
+    let mut emit = |t: usize, off: &mut [usize; 2]| {
+        if off[t] < sizes[t] {
+            out.push(t);
+            off[t] = (off[t] + PAGE).min(sizes[t]);
+        }
+    };
+    let (mut t, mut round) = (big, 0);
+    emit(t, &mut off);
+    loop {
+        loop {
+            t += 1;
+            if t == 2 {
+                t = 0;
+                round += 1;
+                if round == rounds {
+                    return out;
+                }
+            }
+            if t == big || (off[t] as f64) * r - off[big] as f64 <= PAGE as f64 {
+                break;
+            }
+        }
+        emit(t, &mut off);
+    }
 }
 
 /// Byte sum of every object header and both sectors' CRAM (header +0x78).

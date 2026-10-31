@@ -55,6 +55,16 @@ half (X ≤ 60) and sector 1 the right half, mirrored.
 - `direct.tsv`: `type, attribute, bits_msb_first`. A DIRECT attribute's bit
   names in the order of its value string, MSB first (asm2's
   `get_attribute` format). Only LAB/MLAB `lut_mask` so far.
+- `idle.tsv` (`.tsv.xz`): `type, bit`. The named bits of a block type that
+  are 1 in the idle (unused) state; every other mapped bit idles at 0.
+  `idle_inst.tsv`: `uid, bit, value`, per-instance exceptions to that.
+  `idle_unnamed.tsv`: `object, part, offset`, image bits no named bit covers
+  that idle at 1 (offset in bits from the part's start). `a5db
+  idle-derive` writes all three from Quartus images; `a5db blank` builds the
+  idle image from them (README (n)).
+- `io/<pin>_<use>.tsv`: one pin feature as `uid, bit, value` rows over the
+  idle state (`#` lines are comments). A row whose uid is `@object/part`
+  sets an unnamed image bit at that offset. `a5db apply` writes them.
 
 ## Conventions worth knowing
 

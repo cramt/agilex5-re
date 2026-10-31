@@ -68,6 +68,12 @@ impl Sof {
         Ok(Sof { image: image.start + 4..image.end, raw })
     }
 
+    /// A `.sof` from its uncompressed bytes (`sofgen::build`).
+    pub fn from_raw(raw: Vec<u8>) -> Result<Sof> {
+        let image = records(&raw)?.into_iter().find(|r| r.tag == IMAGE_TAG).context("no image record")?.data;
+        Ok(Sof { image: image.start + 4..image.end, raw })
+    }
+
     /// Every record as (tag, data).
     pub fn records(&self) -> Vec<(u16, &[u8])> {
         records(&self.raw).map(|rs| rs.into_iter().map(|r| (r.tag, &self.raw[r.data])).collect()).unwrap_or_default()
@@ -81,8 +87,31 @@ impl Sof {
         &mut self.raw[self.image.clone()]
     }
 
-    /// Recompute the HMAC and CRC, then write gzip.
+    /// Where OPTIONS (the 0x3a record with index 3) keeps the IO hash, as
+    /// 64 hex digits in field 1.20.
+    fn io_hash_span(&self) -> Option<std::ops::Range<usize>> {
+        let base = self.raw.as_ptr() as usize;
+        let rec = records(&self.raw).ok()?.into_iter().find(|r| r.tag == IMAGE_TAG && self.raw[r.data.clone()].starts_with(&[3, 0, 0, 0]))?;
+        let pb = &self.raw[rec.data.start + 4..rec.data.end];
+        let opts = crate::rbf::install::pb_parse(pb)?.into_iter().find_map(|(f, v)| match v {
+            crate::rbf::install::Pb::Bytes(b) if f == 1 => Some(b),
+            _ => None,
+        })?;
+        let h = crate::rbf::install::pb_parse(opts)?.into_iter().find_map(|(f, v)| match v {
+            crate::rbf::install::Pb::Bytes(b) if f == 20 && b.len() == 64 => Some(b),
+            _ => None,
+        })?;
+        let start = h.as_ptr() as usize - base;
+        Some(start..start + 64)
+    }
+
+    /// Recompute the IO hash (a function of the image, README (n)), the
+    /// HMAC and the CRC, then write gzip.
     pub fn write(&mut self, path: &str, hmac_key: &[u8]) -> Result<()> {
+        if let Some(span) = self.io_hash_span() {
+            let hex: String = crate::sofgen::io_hash(self.image()).iter().map(|b| format!("{b:02X}")).collect();
+            self.raw[span].copy_from_slice(hex.as_bytes());
+        }
         let recs = records(&self.raw)?;
         let h = recs.iter().find(|r| r.tag == HMAC_TAG).context("no HMAC record")?;
         ensure!(h.data.len() == 40, "HMAC record is not 8 + 32 bytes");

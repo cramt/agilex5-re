@@ -1,0 +1,9 @@
+uid	bit	value
+hvio_1_1	xif/xif_c2p_clk_dcm_rb_2to1_mux/cr_hvioc	0
+hvio_1_1	xif/xif_c2p_data_dcm_rb_2to1_mux/cr_hvioc	0
+hvio_1_1	xif/xif_p2c_clk_dcm_rb_1to2_demux/cr_hvioc	0
+hvio_1_1	xif/xif_p2c_data_dcm_rb_1to2_demux/cr_hvioc	0
+hvio_2_1	xif/xif_c2p_clk_dcm_rb_2to1_mux/cr_hvioc	0
+hvio_2_1	xif/xif_c2p_data_dcm_rb_2to1_mux/cr_hvioc	0
+hvio_2_1	xif/xif_p2c_clk_dcm_rb_1to2_demux/cr_hvioc	0
+hvio_2_1	xif/xif_p2c_data_dcm_rb_1to2_demux/cr_hvioc	0

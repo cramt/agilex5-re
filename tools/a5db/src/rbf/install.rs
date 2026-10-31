@@ -1,7 +1,8 @@
 //! What the writer takes from the user's own Quartus install: the signed
 //! SDM firmware (`main.cmf` and the `.fw` modules), the CORE codebooks from
-//! the programming database, and the CRAM `s4` group list from `sof_meta.pb`.
-//! None of it is committed (README (l)).
+//! the programming database, the CRAM `s4` group list from `sof_meta.pb`,
+//! and the S4 flag lists from `fm_sector_bnxplv_rif_t*.ddb`. None of it is
+//! committed (README (l), (o)).
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -17,16 +18,35 @@ pub struct Install {
     pub cb2: Vec<u8>,
     /// Bit offsets of the `s4` groups of `sectorbnxplv_dr`.
     pub s4: Vec<usize>,
+    /// `devices/10nm/sm4revb/sof_meta.pb` as is.
+    pub sof_meta: Vec<u8>,
+    /// `programming_sequence.pb.enc` inflated: the .sof's PROGRAMMING_SEQUENCE.
+    pub programming_sequence: Vec<u8>,
+    /// "Quartus Prime Version 26.1.1 Build 130 …", from a database header.
+    pub version: String,
+    /// Per image frame, the S4 keys that flag a pair: (key bit, nibble).
+    pub s4_flags: Vec<Vec<(u16, u8)>>,
 }
 
 impl Install {
     pub fn open(root: &Path) -> Result<Install> {
         let zip = std::fs::read(root.join("devices/programmer/firmware/agilex5e.zip")).context("reading the firmware zip")?;
         let fw = unzip(&zip, "sm4revb/SHA_384/")?;
-        let npcf = ddb::container::Ddb::open(&root.join("devices/programmer/sm4revb_npcf.ddb"))?.body;
-        let (cb1, cb2) = codebooks(&npcf)?;
+        let npcf = ddb::container::Ddb::open(&root.join("devices/programmer/sm4revb_npcf.ddb"))?;
+        let version = format!("Quartus Prime {}", npcf.header.version_string);
+        let (cb1, cb2) = codebooks(&npcf.body)?;
         let meta = std::fs::read(root.join("devices/10nm/sm4revb/sof_meta.pb")).context("reading sof_meta.pb")?;
-        Ok(Install { fw, cb1, cb2, s4: s4_positions(&meta)? })
+        // An 8-byte `ac 0f` wrapper, then zlib.
+        let enc = std::fs::read(root.join("devices/10nm/sm4revb/programming_sequence.pb.enc")).context("reading programming_sequence.pb.enc")?;
+        ensure!(enc.len() > 10 && enc[..2] == [0xac, 0x0f], "programming_sequence.pb.enc: unexpected wrapper");
+        let mut programming_sequence = Vec::new();
+        std::io::Read::read_to_end(&mut flate2::read::ZlibDecoder::new(&enc[8..]), &mut programming_sequence)?;
+        let mut s4_flags = vec![Vec::new(); RIF_FILES * RIF_SLOTS];
+        for t in 0..RIF_FILES {
+            let body = ddb::container::Ddb::open(&root.join(format!("devices/programmer/fm_sector_bnxplv_rif_t{t}.ddb")))?.body;
+            rif_lists(&body, t, &mut s4_flags)?;
+        }
+        Ok(Install { fw, cb1, cb2, s4: s4_positions(&meta)?, s4_flags, sof_meta: meta, programming_sequence, version })
     }
 
     pub fn fw(&self, name: &str) -> Result<&[u8]> {
@@ -147,6 +167,49 @@ pub fn pb_parse(b: &[u8]) -> Option<Vec<(u64, Pb<'_>)>> {
         out.push((f, v));
     }
     Some(out)
+}
+
+const RIF_FILES: usize = 3;
+/// Frame slots per RIF file: file t covers image frames 1,568·t onwards.
+const RIF_SLOTS: usize = 1568;
+
+/// The `S4_SI (frame, bit, flag, value)` records of one RIF body. They are
+/// stored raw, 10 bytes each, in one run per frame slot with the bits
+/// ascending; the `S4_SII`/`S4_SII_BIT` objects around them only index the
+/// runs (README (o)). Every record's frame is its slot and its bit its own
+/// key, so its condition (that bit set in that frame) always holds and a
+/// key's presence alone flags the pair. The nibble pfg writes is
+/// `value << 2 | 1 << flag | 1` (`FBGEN_ND_CRAM_FRAME_MGR::fill_core_frame_data`).
+fn rif_lists(b: &[u8], t: usize, out: &mut [Vec<(u16, u8)>]) -> Result<()> {
+    let rec = |p: usize| (u32le(b, p), u32le(b, p + 4), b[p + 8], b[p + 9]);
+    let ok = |(f, bit, fl, v): (usize, usize, u8, u8)| f < RIF_FILES * RIF_SLOTS && bit < 4320 && fl <= 1 && v <= 3;
+    let mut p = 0;
+    while p + 10 <= b.len() {
+        let first = rec(p);
+        if ok(first) {
+            let (mut q, mut last, mut run) = (p, None, Vec::new());
+            while q + 10 <= b.len() {
+                let r = rec(q);
+                if !ok(r) || r.0 != first.0 || last.is_some_and(|l| r.1 <= l) {
+                    break;
+                }
+                run.push(r);
+                last = Some(r.1);
+                q += 10;
+            }
+            // Shorter runs are BIT records read out of step.
+            if run.len() >= 8 {
+                let f = first.0;
+                ensure!((RIF_SLOTS * t..RIF_SLOTS * (t + 1)).contains(&f), "RIF t{t}: frame {f} outside the file's slots");
+                ensure!(out[f].is_empty(), "RIF t{t}: frame {f} listed twice");
+                out[f] = run.iter().map(|&(_, bit, fl, v)| (bit as u16, v << 2 | 1 << fl | 1)).collect();
+                p = q;
+                continue;
+            }
+        }
+        p += 1;
+    }
+    Ok(())
 }
 
 /// sof_meta.pb field 4 → 2 (`sectorbnxplv_dr`) → each field 3 entry's field 2.
