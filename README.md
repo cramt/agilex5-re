@@ -1069,6 +1069,53 @@ belongs in chipsmith: add `brotli = pkgs.brotli.lib.outPath;` to that
 list. Fitter and assembler are unaffected, so blinky was assembled with a
 separate `quartus_asm blinky`.
 
+### Board test (prepared, not run: the board is off)
+
+Everything the SDM checks is now reproducible except what only the device
+can say: whether it takes an all-literal `CORE` (plain S4 nibbles), and
+whether it checks the IO and design hashes. The files are built from
+blinky's `.sof` (`specimens/board/`, git-ignored; regenerate as below), and
+each is meant to light LED0 at about 1.5 Hz the way pfg's blinky does.
+
+```
+B=specimens/board; Q=/pool/dev/altera_pro/quartus-pro/26.1.1
+cp <blinky run>/output_files/blinky.sof $B/blinky.sof
+tools/quartus.sh quartus_pfg -c $B/blinky.sof $B/blinky_pfg.rbf          # control, pfg's own
+tools/a5db/target/release/a5db rbf db/sm4revb $B/blinky.sof $B/blinky_a5db.rbf $Q specimens/rbf_keyed_hash.key
+for v in zero-io-hash zero-design-hash corrupt-core; do
+    python3 -I tools/rbf_patch.py $v $B/blinky_a5db.rbf $B/blinky_a5db_$v.rbf; done
+for f in $B/*.rbf; do python3 -I tools/bitstream.py check $f; done      # all pass but corrupt-core
+```
+
+SHA-256 of the files as built here (blinky from phase 1):
+`blinky_pfg.rbf` 8b490e78…, `blinky_a5db.rbf` 456d1276…,
+`blinky_a5db_zero-io-hash.rbf` 60767b4d…,
+`blinky_a5db_zero-design-hash.rbf` 80527719…,
+`blinky_a5db_corrupt-core.rbf` e56af076….
+
+On the board (DE25-Nano, on-board USB-Blaster III, JTAG; MSEL as shipped):
+
+1. `quartus_pgm -l` and `quartus_pgm -c 1 -a` (through `tools/quartus.sh`
+   with USB passed through) to see the cable and read the IDCODE. Add that
+   IDCODE for `A5EB013B` to openFPGALoader's `src/part.hpp` next to
+   `0x4369c0dd` (A5EC008B), as an Agilex 5 entry.
+2. Control: `quartus_pgm -c 1 -m jtag -o "p;blinky.sof"` → LED0 blinks.
+3. Loader check: `openFPGALoader -c usb-blasterIII blinky_pfg.rbf` → LED0
+   blinks. If not, the loader is the problem, not the bitstream; stop here.
+4. **`openFPGALoader -c usb-blasterIII blinky_a5db.rbf`**. Blinks: the SDM
+   accepts a CMF/IO section from a5db and an all-literal `CORE`; the open
+   writer works. Doesn't: try 5 and 6 to see whether it's the CORE.
+5. `blinky_a5db_zero-io-hash.rbf` and `blinky_a5db_zero-design-hash.rbf`:
+   blinks means the SDM ignores that hash.
+6. Negative control: `blinky_a5db_corrupt-core.rbf` must fail (one bit in a
+   hashed `CORE` page, hashes left stale); if it configures, the SDM isn't
+   checking section hashes and steps 4–5 prove less.
+
+Record for each: LED behaviour, openFPGALoader's exit status, and the SDM
+status it prints (`ISC_SR`). If 4 fails while 3 passes, the next suspects
+are the S4 flag rule (pfg sets it, a5db never does) and the lib/BBM layout
+(a5db uses one zero lib per IP and code 0 everywhere).
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
@@ -1089,10 +1136,19 @@ critical warning, which a real design should follow.
 
 **Phase 3 status** (branch `phase3`):
 
-- Step 1 (big tables compressed): **done**. `io96` and `sm_hssi_top`
-  layouts are `.tsv.xz` (318 MB + 45 MB → 2.7 MB + 0.9 MB); a5db and the
-  Python tools read either form, and every a5db `attrs`/`bits` output and
-  `coverage.py` on fz0 is byte-identical before and after.
+- Step 1 (big tables compressed): **done** (j). `io96` and `sm_hssi_top`
+  layouts are `.tsv.xz` (363 MB → 3.6 MB); every reader takes either form
+  and outputs are byte-identical.
+- Step 2 (routing graph → bits): **done** (k). `a5db join/route/routed/
+  routecheck`; on fz0 and `designs/rt` every routing bit Quartus set is the
+  join's from `report_routing`'s paths or a decoded FF data-in edge that
+  `report_routing` can't print, and the join sets none Quartus didn't.
+  "Direct links" are LAB_RE → LL.
+- Step 3 (`.rbf` writer): **done, CORE not byte-identical** (l). `a5db rbf`
+  writes CMF and IO byte-identical to pfg on 60 specimens and an all-literal
+  CORE that decodes to the same CRAM; pfg's `--check_integrity` accepts it.
+  Byte identity would need pfg's lib/code choice and the S4 flag rule
+  [unk]. SDM acceptance is [unk] until the board test below.
 
 **Phase 2 status** (branch `phase2`):
 
