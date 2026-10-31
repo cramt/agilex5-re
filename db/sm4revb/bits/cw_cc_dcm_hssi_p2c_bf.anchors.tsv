@@ -1,0 +1,5 @@
+uid	layout	object	part	frame	bdata
+cw_cc_dcm_hssi_p2c_bf_r4_c0	0	sector0	hdr	289	0
+cw_cc_dcm_hssi_p2c_bf_r4_c121	1	sector1	hdr	150	0
+cw_cc_dcm_hssi_p2c_bf_r51_c0	2	sector0	hdr	218	0
+cw_cc_dcm_hssi_p2c_bf_r51_c121	3	sector1	hdr	79	0

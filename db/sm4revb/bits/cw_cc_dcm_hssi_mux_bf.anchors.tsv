@@ -1,0 +1,13 @@
+uid	layout	object	part	frame	bdata
+cw_cc_dcm_hssi_mux_bf_r11_c0	0	sector0	hdr	285	0
+cw_cc_dcm_hssi_mux_bf_r11_c121	1	sector1	hdr	146	0
+cw_cc_dcm_hssi_mux_bf_r17_c0	0	sector0	hdr	281	0
+cw_cc_dcm_hssi_mux_bf_r17_c121	1	sector1	hdr	142	0
+cw_cc_dcm_hssi_mux_bf_r23_c0	0	sector0	hdr	277	0
+cw_cc_dcm_hssi_mux_bf_r23_c121	1	sector1	hdr	138	0
+cw_cc_dcm_hssi_mux_bf_r31_c0	2	sector0	hdr	241	0
+cw_cc_dcm_hssi_mux_bf_r31_c121	3	sector1	hdr	102	0
+cw_cc_dcm_hssi_mux_bf_r38_c0	2	sector0	hdr	237	0
+cw_cc_dcm_hssi_mux_bf_r38_c121	3	sector1	hdr	98	0
+cw_cc_dcm_hssi_mux_bf_r44_c0	2	sector0	hdr	233	0
+cw_cc_dcm_hssi_mux_bf_r44_c121	3	sector1	hdr	94	0
