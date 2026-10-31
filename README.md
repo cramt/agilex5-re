@@ -1248,6 +1248,23 @@ critical warning, which a real design should follow.
   written by `a5db set`/`net`; Quartus's asm2 reads every setting back as
   intended and pfg converts the `.sof`.
 
+Open after phase 3 [unk]:
+
+- SDM acceptance of an a5db `.rbf` (all-literal `CORE`, no S4 flags), and
+  whether the SDM checks the IO and design hashes: the board test above.
+- The S4 flag's image-frame → RIF-slot mapping (l), and pfg's lib and BBM
+  code choice; both are needed for a byte-identical `CORE`.
+- The DCM periphery clock muxes (`cw_cc_dcm_hssi_p2c_bf`, no edge API):
+  one instance mapped, the order of the other 31 isn't (k).
+- Redundancy and spare-row tiles have no bit maps (k).
+- The constant `0xc362c0dd` at +0x7C/+0x80 of the section header, the
+  eight perictrl0 control words pfg skips, and the first-pass bits of the
+  sector-header stream: copied, not understood (l).
+- A whole image from defaults rather than on top of a Quartus `.sof` (m).
+
+Next: the board test; then nextpnr (Plan step 7) on `a5db net`'s graph and
+join, with `a5db rbf` as the writer.
+
 **Phase 2 status** (branch `phase2`):
 
 - Step 1 (container hashes): **done** (g2).
