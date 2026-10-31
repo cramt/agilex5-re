@@ -1151,6 +1151,18 @@ quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
   values (I/O, HSSI, IO96 included) [unk]. Whether the logic works needs
   the board.
 
+### (n) Phase 4: a whole image from the database (Plan step 4, no Quartus base)
+
+- **The IO hash is SHA-256 over the two IO96 objects** [obs]: image bytes
+  `[4,195,206, 4,746,853)` then `[8,942,059, 9,493,706)`, that is `io96_0`
+  `hdr`, `t40`, `t41`, then the same for `io96_1`. It equals OPTIONS field
+  1.20 of blinky, fz0 and rt0 (two different values). The assembler's
+  `ASM2_INSTANCE::do_io_hash` (`libcomp_asm2.so`) hashes the sections of
+  every periphery sector it is given with `EVP_sha256`; on this part only
+  the IO96 objects take part. So the IO hash that (g2) found copied into the
+  `IO` and `CORE` headers is a function of the image, and a writer with no
+  Quartus `.sof` can compute it.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -1227,6 +1239,14 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 4 status** (branch `phase4`):
+
+- Step 1 (whole image from the database): in progress (n). The IO hash is
+  SHA-256 of the IO96 objects.
+- Step 2 (byte-identical CORE): in progress.
+- Step 3 (leftover [unk]s): not started.
+- Step 4 (board test with the from-scratch blinky): not started.
 
 **Phase 3 status** (branch `phase3`):
 

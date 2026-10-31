@@ -26,6 +26,7 @@
 //! (asm2's `get_attribute` format). `hmac.key` is the `.sof` HMAC key that
 //! `tools/sof.py key` derives from the local Quartus install.
 
+mod blank;
 mod db;
 mod graph;
 mod rbf;
@@ -246,6 +247,23 @@ fn main() -> Result<()> {
             set(dbdir, inp, out, key, uid, &args[6..])
         }
         ["join", dbdir, g] => join(dbdir, g),
+        ["survey", dbdir, sofs @ ..] if !sofs.is_empty() => {
+            let mut db = Db::open(dbdir)?;
+            let imgs = sofs.iter().map(|s| Ok((s.to_string(), sof::Sof::read(s)?.image().to_vec()))).collect::<Result<Vec<_>>>()?;
+            blank::survey(&mut db, &imgs)
+        }
+        ["idle-derive", dbdir, sofs @ ..] if !sofs.is_empty() => {
+            let mut db = Db::open(dbdir)?;
+            let imgs = sofs.iter().map(|s| Ok((s.to_string(), sof::Sof::read(s)?.image().to_vec()))).collect::<Result<Vec<_>>>()?;
+            let dir = db.dir.clone();
+            blank::derive(&mut db, &imgs, &dir)
+        }
+        ["idle-diff", dbdir, s] => {
+            let mut db = Db::open(dbdir)?;
+            let img = blank::image(&mut db)?;
+            blank::diff(&mut db, &img, sof::Sof::read(s)?.image())
+        }
+        ["uncovered", dbdir, s] => blank::uncovered(&mut Db::open(dbdir)?, sof::Sof::read(s)?.image()),
         ["fanout", g, prefix] => {
             let g = graph::Graph::load(std::path::Path::new(g))?;
             for (n, name) in g.names.iter().enumerate() {
