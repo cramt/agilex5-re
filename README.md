@@ -297,9 +297,9 @@ are from blinky (`/tmp/agilex5-re/pfg`, not committed).
   | `IO` | 0x06A000 | 413,696 | I/O configuration; "IO hash" from the pfg log sits at +0x348 |
   | `CORE` | 0x0CF000 | 122,880 | fabric; "Design hash" at +0x1E0 |
 
-  Each section's first two 4 KiB blocks end in a CRC-32 (MSB first, poly
-  0x04C11DB7, init and xorout 0xFFFFFFFF, i.e. CRC-32/BZIP2) over
-  `[block, block+0xFFC)`. The pfg log's two "Keyed hash" values are at
+  Each section's first two 4 KiB blocks end in a CRC-32/BZIP2 (MSB-first
+  poly 0x04C11DB7, init and xorout 0xFFFFFFFF) over `[block,
+  block+0xFFC)`, stored as a little-endian word [obs, phase 2]. The pfg log's two "Keyed hash" values are at
   +0xBB0 of `IO` and `CORE`. Which bytes the IO/design hashes cover is
   [unk]: plain SHA-256 of the section, of the `.sof` image and of 4 KiB
   sub-ranges don't match. The 19.75 MB image shrinks to 120 KB of `CORE`,
@@ -364,6 +364,31 @@ any protobuf (`sof_meta.pb`, the `.sof` 0x36 record) without a schema.
   bits set but only 55 distinct frames, 945 of them identical. Set bits
   repeat every 16 bytes (`ff` at byte 0, 14, 16, 30, …), so most of them
   are default values, not design bits [inf].
+
+### (g2) Phase 2: every `.rbf` integrity value is reproducible (Plan step 1)
+
+`python3 -I tools/bitstream.py check x.rbf` recomputes them all; it passes
+on blinky and on pfg's output for edited `.sof` files [obs]. Per design
+section (`IO`, `CORE`), in 4 KiB blocks:
+
+| where | what |
+|---|---|
+| block 0 (+0x000) | section header (TRM table 35); at +0xC0 the SHA-384 of the descriptor block |
+| block 0 +0xBB0 | **keyed hash**: HMAC-SHA256 over `[section, +0xBB0)`. The key is a 32-byte constant in `libpgm_bitasm.so` (`BITASM_COMMON::calculate_keyed_hash`); `bitstream.py key` derives it from the install into `specimens/`, and it isn't committed |
+| block 1 (+0x1000) | SHA-384 of block 0 at +0; the place a signature goes [inf] |
+| block 2 (+0x2000) | descriptor: `u32 1, u32 0x488, u32 count (22 in CORE)`, then per data block `u32 flags/route` + SHA-384 of the 4 KiB block |
+| end of blocks 0 and 1 | CRC-32/BZIP2, see (f) |
+
+- The "IO hash" (`IO` +0x348, `CORE` +0x234) and "Design hash" (`CORE`
+  +0x1E0) are **not computed by pfg**: they come from the assembler's
+  `.sof`, the IO hash as a hex string in the OPTIONS record (field 1.20)
+  and the design hash in record 0x36 field 2.10 [obs]. The IO hash in
+  `CORE` equalling the one in `IO` presumably ties a core image to its
+  periphery image [inf]. Whether the SDM checks either against the data
+  is [unk], and needs the board.
+- So an open writer can produce every hash and CRC itself. Only the
+  descriptor's per-entry flag word (0, 1, 0x80000002, …) is [unk] as to
+  meaning; it can be copied by position for now.
 
 ### (h) Phase 2: Quartus's own configuration model is scriptable
 
@@ -471,7 +496,8 @@ critical warning, which a real design should follow.
 
 ## Plan
 
-**Phase 2 status** (branch `phase2`): `.sof` re-signing works (g). Quartus's
+**Phase 2 status** (branch `phase2`): step 1 done (g2): every `.rbf` hash
+and CRC is reproducible. `.sof` re-signing works (g). Quartus's
 own assembler and configuration-model Tcl APIs are open (h), so step 4
 (config bits) becomes a dump rather than a fuzz. The `CORE` 2D compression
 (step 2) is being decoded separately. Next: a full bit map from asm2, then
