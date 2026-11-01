@@ -83,7 +83,20 @@ impl Graph {
         self.fanout(src).find(|&e| self.dst[e] == dst)
     }
 
-    pub fn index(&self) -> HashMap<&str, u32> {
+    /// The gids of just these names: one pass over the names, much cheaper
+    /// than `index` when a design names a few thousand nodes.
+    pub fn lookup<'a>(&self, want: impl IntoIterator<Item = &'a str>) -> rustc_hash::FxHashMap<&'a str, u32> {
+        let mut want: rustc_hash::FxHashMap<&'a str, u32> = want.into_iter().map(|n| (n, u32::MAX)).collect();
+        for (g, n) in self.names.iter().enumerate() {
+            if let Some(v) = want.get_mut(n.as_str()) {
+                *v = g as u32;
+            }
+        }
+        want.retain(|_, v| *v != u32::MAX);
+        want
+    }
+
+    pub fn index(&self) -> rustc_hash::FxHashMap<&str, u32> {
         self.names.iter().enumerate().filter(|(_, n)| !n.is_empty()).map(|(g, n)| (n.as_str(), g as u32)).collect()
     }
 }
@@ -194,6 +207,11 @@ impl<'a> Join<'a> {
     /// Bits of a clock-network edge that has no edge API but does select a
     /// mux input (`clock_rule`); `idle` gives the muxes' idle state instead.
     pub fn rule_edge(&mut self, e: usize, idle: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        self.rule_edge_in(e, idle, None)
+    }
+
+    /// `rule_edge`, or Ok(None) when the mux's instance isn't in `dirty`.
+    pub fn rule_edge_in(&mut self, e: usize, idle: bool, dirty: Option<&rustc_hash::FxHashSet<&str>>) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
         let Some((family, x, y, choices)) = clock_rule(self.graph, e) else { return Ok(None) };
         if !self.at.contains_key(&(family, x, y)) {
             let found = self.db.uid_at(family, x, y);
@@ -202,6 +220,9 @@ impl<'a> Join<'a> {
         let Some((uid, btype)) = self.at[&(family, x, y)].clone() else {
             return Ok(Some(Err(Miss::NoBitMap(format!("{family} at X{x} Y{y}")))));
         };
+        if dirty.is_some_and(|d| !d.contains(uid.as_str())) {
+            return Ok(None);
+        }
         let named = match self.resolve_choices(&btype, choices)? {
             Ok(n) => n,
             Err(m) => return Ok(Some(Err(m))),

@@ -16,7 +16,7 @@
 //! instance the attributes whose setting differs; `bit` and `raw` lines are
 //! what the vocabulary above doesn't cover.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 
 use anyhow::{bail, Context, Result};
@@ -25,18 +25,71 @@ use crate::db::{BitPos, Db, PARTS};
 use crate::graph::{Graph, Join};
 use crate::{blank, pins, route};
 
-/// Every named bit of every instance, by type, with its position.
-fn named(db: &mut Db) -> Result<Vec<(String, String, Vec<(String, BitPos)>)>> {
-    let mut out = Vec::new();
+/// Covered (named) image bits, as a per-byte mask.
+fn named_mask(db: &Db, len: usize) -> Result<Vec<u8>> {
+    let mut cov = vec![0u8; len];
     for t in db.types()? {
-        db.load(&t)?;
         let map = db.map(&t);
         for u in map.uids() {
-            let bits = map.bit_names(u).into_iter().map(|b| (b.to_owned(), map.pos(u, b).unwrap())).collect();
-            out.push((t.clone(), u.to_owned(), bits));
+            for (_, p) in map.bits(u) {
+                cov[p.byte] |= 1 << p.bit;
+            }
         }
     }
-    Ok(out)
+    Ok(cov)
+}
+
+/// One instance's attr, direct and bit lines: the CUSTOM settings that
+/// explain its differing bits best, then DIRECT values, then single bits.
+#[allow(clippy::too_many_arguments)]
+fn extract_instance(db: &Db, t: &str, u: &str, bits: &[(&str, BitPos)], q: &[u8], r: &mut [u8], text: &mut String, c: &mut [usize; 3]) -> Result<()> {
+    let pos: HashMap<&str, BitPos> = bits.iter().map(|(n, p)| (*n, *p)).collect();
+    for a in db.bcm.attributes(t) {
+        let settings = db.bcm.settings(&a);
+        if settings.is_empty() {
+            continue;
+        }
+        let full = |b: &str| format!("{}{b}", a.prefix);
+        // Attribute bits that differ; skip the attribute if none do.
+        let mine: Vec<BitPos> = settings[0].bits.iter().filter_map(|b| pos.get(full(b).as_str()).copied()).collect();
+        if mine.len() != settings[0].bits.len() || mine.iter().all(|p| p.get(q) == p.get(r)) {
+            continue;
+        }
+        // The setting whose written bits match the image best, all cared-for bits equal.
+        let best = settings
+            .iter()
+            .filter(|s| s.bits.iter().zip(&s.values).all(|(b, &(v, cares))| !cares || pos[full(b).as_str()].get(q) == v))
+            .max_by_key(|s| s.bits.iter().zip(&s.values).filter(|(b, &(v, _))| pos[full(b).as_str()].get(q) == v).count());
+        if let Some(s) = best {
+            for (b, &(v, _)) in s.bits.iter().zip(&s.values) {
+                pos[full(b).as_str()].set(r, v);
+            }
+            writeln!(text, "attr\t{u}\t{}\t{}", a.path, s.name)?;
+            c[0] += 1;
+        }
+    }
+    for d in direct_attrs(db, t) {
+        let names = db.bcm.direct_bits(t, &d).unwrap();
+        let ps: Option<Vec<BitPos>> = names.iter().map(|n| pos.get(n.as_str()).copied()).collect();
+        let Some(ps) = ps else { continue };
+        if ps.iter().all(|p| p.get(q) == p.get(r)) {
+            continue;
+        }
+        let v: String = ps.iter().map(|p| if p.get(q) { '1' } else { '0' }).collect();
+        for p in &ps {
+            p.set(r, p.get(q));
+        }
+        writeln!(text, "direct\t{u}\t{d}\t{v}")?;
+        c[1] += 1;
+    }
+    for (n, p) in bits {
+        if p.get(q) != p.get(r) {
+            p.set(r, p.get(q));
+            writeln!(text, "bit\t{u}\t{n}\t{}", p.get(q) as u8)?;
+            c[2] += 1;
+        }
+    }
+    Ok(())
 }
 
 fn direct_attrs(db: &Db, btype: &str) -> Vec<String> {
@@ -51,8 +104,8 @@ fn direct_attrs(db: &Db, btype: &str) -> Vec<String> {
 }
 
 /// Write a CUSTOM setting's bits (every bit the setting lists, as `a5db set`).
-fn write_setting(db: &Db, btype: &str, uid: &str, path: &str, setting: &str, img: &mut [u8]) -> Result<()> {
-    let a = db.bcm.attributes(btype).into_iter().find(|a| a.path == path).with_context(|| format!("{btype} has no attribute {path}"))?;
+fn write_setting(db: &mut Db, btype: &str, uid: &str, path: &str, setting: &str, img: &mut [u8]) -> Result<()> {
+    let a = db.attribute(btype, path).with_context(|| format!("{btype} has no attribute {path}"))?;
     let s = db.bcm.settings(&a).iter().find(|s| s.name == setting).with_context(|| format!("{uid} {path} has no setting {setting}"))?;
     let map = db.map(btype);
     for (b, &(v, _)) in s.bits.iter().zip(&s.values) {
@@ -94,7 +147,9 @@ fn write_edges(join: &mut Join, edges: &[usize], img: &mut [u8]) -> Result<()> {
 }
 
 pub fn extract(db: &mut Db, graph: &Graph, q: &[u8], pin_specs: &[String]) -> Result<String> {
-    let mut r = blank::image(db)?;
+    let t0 = std::time::Instant::now();
+    let idle = blank::image(db)?;
+    let mut r = idle.clone();
     let mut text = String::from("# a5db design (README (q))\n");
     let pins = pins::parse(db, pin_specs)?;
     for (u, b, v) in pins::table(db, &pins)? {
@@ -103,75 +158,29 @@ pub fn extract(db: &mut Db, graph: &Graph, q: &[u8], pin_specs: &[String]) -> Re
     for s in pin_specs {
         writeln!(text, "pin\t{s}")?;
     }
+    // Only instances that differ from the idle image can hold a decoded
+    // edge or attribute; the rest are skipped without touching their bits.
+    let dirty: Vec<String> = blank::dirty(db, &idle, q)?.into_iter().map(str::to_owned).collect();
+    let dirty_set: rustc_hash::FxHashSet<&str> = dirty.iter().map(String::as_str).collect();
+    eprintln!("extract: {} instances differ from idle ({:.1} s)", dirty.len(), t0.elapsed().as_secs_f64());
     let mut join = Join::new(db, graph);
-    let edges = route::decode(&mut join, graph, q)?;
+    let edges = route::decode_in(&mut join, graph, q, Some(&dirty_set))?;
     write_edges(&mut join, &edges, &mut r)?;
     drop(join);
-    let mut src = vec![0u32; graph.dst.len()];
-    for s in 0..graph.names.len() as u32 {
-        for e in graph.fanout(s) {
-            src[e] = s;
-        }
-    }
+    eprintln!("extract: {} edges decoded ({:.1} s)", edges.len(), t0.elapsed().as_secs_f64());
     for &e in &edges {
-        writeln!(text, "edge\t{}\t{}", graph.names[src[e] as usize], graph.names[graph.dst[e] as usize])?;
+        writeln!(text, "edge\t{}\t{}", graph.names[route::edge_src(graph, e) as usize], graph.names[graph.dst[e] as usize])?;
     }
-    let all = named(db)?;
-    let mut covered: HashSet<(usize, u8)> = HashSet::new();
+    let covered = named_mask(db, q.len())?;
     let mut counts: BTreeMap<String, [usize; 3]> = BTreeMap::new();
-    for (t, u, bits) in &all {
-        for (_, p) in bits {
-            covered.insert((p.byte, p.bit));
-        }
-        if !bits.iter().any(|(_, p)| p.get(q) != p.get(&r)) {
-            continue;
-        }
-        let c = counts.entry(t.clone()).or_default();
-        let pos: HashMap<&str, BitPos> = bits.iter().map(|(n, p)| (n.as_str(), *p)).collect();
-        for a in db.bcm.attributes(t) {
-            let settings = db.bcm.settings(&a);
-            if settings.is_empty() {
+    for t in db.types()? {
+        let map = db.map(&t);
+        for u in map.uids() {
+            if !map.bits(u).any(|(_, p)| p.get(q) != p.get(&r)) {
                 continue;
             }
-            let full = |b: &str| format!("{}{b}", a.prefix);
-            // Attribute bits that differ; skip the attribute if none do.
-            let mine: Vec<BitPos> = settings[0].bits.iter().filter_map(|b| pos.get(full(b).as_str()).copied()).collect();
-            if mine.len() != settings[0].bits.len() || mine.iter().all(|p| p.get(q) == p.get(&r)) {
-                continue;
-            }
-            // The setting whose written bits match the image best, all cared-for bits equal.
-            let best = settings
-                .iter()
-                .filter(|s| s.bits.iter().zip(&s.values).all(|(b, &(v, cares))| !cares || pos[full(b).as_str()].get(q) == v))
-                .max_by_key(|s| s.bits.iter().zip(&s.values).filter(|(b, &(v, _))| pos[full(b).as_str()].get(q) == v).count());
-            if let Some(s) = best {
-                for (b, &(v, _)) in s.bits.iter().zip(&s.values) {
-                    pos[full(b).as_str()].set(&mut r, v);
-                }
-                writeln!(text, "attr\t{u}\t{}\t{}", a.path, s.name)?;
-                c[0] += 1;
-            }
-        }
-        for d in direct_attrs(db, t) {
-            let names = db.bcm.direct_bits(t, &d).unwrap();
-            let ps: Option<Vec<BitPos>> = names.iter().map(|n| pos.get(n.as_str()).copied()).collect();
-            let Some(ps) = ps else { continue };
-            if ps.iter().all(|p| p.get(q) == p.get(&r)) {
-                continue;
-            }
-            let v: String = ps.iter().map(|p| if p.get(q) { '1' } else { '0' }).collect();
-            for p in &ps {
-                p.set(&mut r, p.get(q));
-            }
-            writeln!(text, "direct\t{u}\t{d}\t{v}")?;
-            c[1] += 1;
-        }
-        for (n, p) in bits {
-            if p.get(q) != p.get(&r) {
-                p.set(&mut r, p.get(q));
-                writeln!(text, "bit\t{u}\t{n}\t{}", p.get(q) as u8)?;
-                c[2] += 1;
-            }
+            let bits: Vec<(&str, BitPos)> = map.bits(u).collect();
+            extract_instance(db, &t, u, &bits, q, &mut r, &mut text, counts.entry(t.clone()).or_default())?;
         }
     }
     let mut raws = 0;
@@ -181,7 +190,7 @@ pub fn extract(db: &mut Db, graph: &Graph, q: &[u8], pin_specs: &[String]) -> Re
                 continue;
             }
             for bit in 0..8u8 {
-                if (q[i] ^ r[i]) >> bit & 1 == 1 && !covered.contains(&(i, bit)) {
+                if (q[i] ^ r[i]) >> bit & 1 == 1 && covered[i] >> bit & 1 == 0 {
                     writeln!(text, "raw\t{o}/{pt}\t{}\t{}", (i - start) * 8 + bit as usize, q[i] >> bit & 1)?;
                     raws += 1;
                 }
@@ -196,13 +205,16 @@ pub fn extract(db: &mut Db, graph: &Graph, q: &[u8], pin_specs: &[String]) -> Re
 }
 
 pub fn build(db: &mut Db, graph: &Graph, design: &str) -> Result<Vec<u8>> {
+    let t = std::time::Instant::now();
     let mut img = blank::image(db)?;
+    eprintln!("build: idle image {:.1} s", t.elapsed().as_secs_f64());
     let lines: Vec<Vec<&str>> = design.lines().filter(|l| !l.starts_with('#') && !l.is_empty()).map(|l| l.split('\t').collect()).collect();
     let specs: Vec<String> = lines.iter().filter(|f| f[0] == "pin").map(|f| f[1].to_owned()).collect();
     let pins = pins::parse(db, &specs)?;
     let rows = pins::table(db, &pins)?;
     crate::write_rows(db, &mut img, &rows)?;
-    let idx = graph.index();
+    let idx = graph.lookup(lines.iter().filter(|f| f[0] == "edge").flat_map(|f| [f[1], f[2]]));
+    eprintln!("build: pins and graph index {:.1} s", t.elapsed().as_secs_f64());
     let mut edges = Vec::new();
     for f in lines.iter().filter(|f| f[0] == "edge") {
         let (s, d) = (idx.get(f[1]).with_context(|| format!("no node {}", f[1]))?, idx.get(f[2]).with_context(|| format!("no node {}", f[2]))?);
@@ -211,6 +223,7 @@ pub fn build(db: &mut Db, graph: &Graph, design: &str) -> Result<Vec<u8>> {
     let mut join = Join::new(db, graph);
     write_edges(&mut join, &edges, &mut img)?;
     drop(join);
+    eprintln!("build: edges {:.1} s", t.elapsed().as_secs_f64());
     for kind in ["attr", "direct", "bit", "raw"] {
         for f in lines.iter().filter(|f| f[0] == kind) {
             match kind {

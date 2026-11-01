@@ -135,7 +135,7 @@ pub struct Applied {
 }
 
 /// Write the bits of every edge along the paths into `img`.
-pub fn apply(join: &mut Join, graph: &Graph, idx: &HashMap<&str, u32>, paths: &[Vec<String>], img: &mut [u8]) -> Result<Applied> {
+pub fn apply(join: &mut Join, graph: &Graph, idx: &FxHashMap<&str, u32>, paths: &[Vec<String>], img: &mut [u8]) -> Result<Applied> {
     let mut a = Applied { hops: 0, no_edge: Vec::new(), unknown_node: HashSet::new(), configured: 0, pass_through: 0, misses: BTreeMap::new() };
     let mut done: HashSet<usize> = HashSet::new();
     for path in paths {
@@ -189,16 +189,28 @@ pub fn bit_name(u: &Universe, graph: &Graph, at: (usize, u8)) -> String {
 /// the setting isn't the mux's idle state): the routing read back from a
 /// bitstream. Returns edge indices.
 pub fn decode(join: &mut Join, graph: &Graph, img: &[u8]) -> Result<Vec<usize>> {
+    decode_in(join, graph, img, None)
+}
+
+/// `decode`, looking only at muxes in `dirty`, the instances with a bit
+/// that differs from the idle image: a mux whose bits are all idle selects
+/// nothing, since the idle image selects no edge (a design's extract lists
+/// only its own edges).
+pub fn decode_in(join: &mut Join, graph: &Graph, img: &[u8], dirty: Option<&rustc_hash::FxHashSet<&str>>) -> Result<Vec<usize>> {
     let mut active: FxHashMap<(u32, u32), bool> = FxHashMap::default();
+    let in_dirty: Vec<bool> = graph.uids.iter().map(|u| dirty.is_none_or(|d| d.contains(u.as_str()))).collect();
     let mut out = Vec::new();
     for e in 0..graph.dst.len() {
         let (u, c) = (graph.uid[e], graph.cfg[e]);
         if c == 0 {
-            if let (Some(Ok(w)), Some(Ok(idle))) = (join.rule_edge(e, false)?, join.rule_edge(e, true)?) {
+            if let (Some(Ok(w)), Some(Ok(idle))) = (join.rule_edge_in(e, false, dirty)?, join.rule_edge_in(e, true, dirty)?) {
                 if w.iter().all(|(p, v)| p.get(img) == *v) && w.iter().zip(&idle).any(|(a, b)| a.1 != b.1) {
                     out.push(e);
                 }
             }
+            continue;
+        }
+        if !in_dirty[u as usize] {
             continue;
         }
         let on = match active.get(&(u, c)) {
@@ -289,11 +301,25 @@ pub fn edge_src(graph: &Graph, e: usize) -> u32 {
     lo as u32
 }
 
+/// The database, with every block map loaded, and the graph; the two load
+/// side by side (the io96 map's xz and the graph's 630 MB take about the
+/// same time).
 pub fn open(dbdir: &str, gdir: &str) -> Result<(Db, Graph)> {
     let t = std::time::Instant::now();
-    let g = Graph::load(std::path::Path::new(gdir))?;
-    eprintln!("graph: {} nodes, {} edges, {:.0} s", g.names.iter().filter(|n| !n.is_empty()).count(), g.dst.len(), t.elapsed().as_secs_f64());
-    Ok((Db::open(dbdir)?, g))
+    let (db, g) = std::thread::scope(|s| {
+        let db = s.spawn(|| -> Result<Db> {
+            let mut db = Db::open(dbdir)?;
+            for ty in db.types()? {
+                db.load(&ty)?;
+            }
+            Ok(db)
+        });
+        let g = Graph::load(std::path::Path::new(gdir));
+        (db.join().expect("database loader panicked"), g)
+    });
+    let (db, g) = (db?, g?);
+    eprintln!("graph: {} nodes, {} edges; database and graph loaded in {:.0} s", g.names.iter().filter(|n| !n.is_empty()).count(), g.dst.len(), t.elapsed().as_secs_f64());
+    Ok((db, g))
 }
 
 /// Router edge classes, one byte per graph edge (`a5db usable`, used by

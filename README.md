@@ -1976,6 +1976,34 @@ about 45 min, most of it `a5db extract` and asm2.
   is tied high (mm writes every cycle); a5pnr refuses any other. The clock
   enters through an RPI from the row clock, as a LAB's does.
 
+### (x) Phase 7: a5db fast enough to iterate
+
+Phase 6's `a5db build` took 190–276 s and `check.sh` about 45 min, so every
+change to a design cost the better part of an hour to check. Profiled with
+`perf` on acc (`specimens/p7/prof`) [obs]:
+
+- **build**: 245 s, of which the graph load was 10 s. The rest was the idle
+  image: `BlockMap::bit_names` sorted every instance's names on each call,
+  and every bit position was two SipHash lookups of `String` keys (io96's
+  318 MB layout alone is 5 M rows). The bit maps now keep each layout's rows
+  sorted once, index names with FxHash over slices of the (leaked) table
+  text, and hand out `(name, position)` per instance without lookups; the
+  graph and the database load on two threads; a design's few thousand node
+  names are found in one pass instead of indexing all 7.6 M; attribute and
+  type lookups are cached. **245 s → 38–41 s**, the `.sof` byte-identical.
+  What is left: 17–24 s of loading (the graph's 630 MB of text, io96's xz),
+  7–10 s for the idle image.
+- **extract**: 313 s → **58 s**, the design file identical. It decoded all
+  26.3 M graph edges and hashed every named bit of every instance into a
+  `HashSet`. Now it first finds the instances whose bits differ from the
+  idle image (130 for acc) and decodes only their muxes and attributes;
+  that is exact because the idle image selects no edge (every extract of a
+  design lists only its own edges).
+- **check.sh**: about 45 min → **3.5 min** on acc, every result identical.
+  `tools/readback.sh` ran `a5db attrs` once per instance (130 database loads
+  for acc); `a5db attrs-of` does them in one run. asm2's own part is about
+  80 s for 86 K attributes, not the bottleneck it looked like.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

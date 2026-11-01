@@ -13,7 +13,7 @@ pub fn values(db: &Db, btype: &str, img: &[u8]) -> Vec<(String, Vec<bool>)> {
     map.uids()
         .into_iter()
         .map(|u| {
-            let v = map.bit_names(u).iter().map(|b| map.pos(u, b).unwrap().get(img)).collect();
+            let v = map.bits(u).map(|(_, p)| p.get(img)).collect();
             (u.to_owned(), v)
         })
         .collect()
@@ -53,8 +53,7 @@ pub fn uncovered(db: &mut Db, img: &[u8]) -> Result<()> {
         db.load(&t)?;
         let map = db.map(&t);
         for u in map.uids() {
-            for b in map.bit_names(u) {
-                let p = map.pos(u, b).unwrap();
+            for (_, p) in map.bits(u) {
                 cov[p.byte] |= 1 << p.bit;
             }
         }
@@ -82,8 +81,7 @@ fn named_mask(db: &mut Db, len: usize) -> Result<Vec<u8>> {
         db.load(&t)?;
         let map = db.map(&t);
         for u in map.uids() {
-            for b in map.bit_names(u) {
-                let p = map.pos(u, b).unwrap();
+            for (_, p) in map.bits(u) {
                 cov[p.byte] |= 1 << p.bit;
             }
         }
@@ -183,19 +181,20 @@ pub fn derive(db: &mut Db, imgs: &[(String, Vec<u8>)], out: &std::path::Path) ->
 pub fn image(db: &mut Db) -> Result<Vec<u8>> {
     let len = PARTS.iter().map(|(_, _, s, n)| s + n).max().unwrap();
     let mut img = vec![0u8; len];
-    let mut ones: HashMap<String, std::collections::HashSet<String>> = HashMap::new();
-    for l in crate::db::read_table(&db.dir.join("idle.tsv"))?.lines().skip(1) {
+    let idle = crate::db::read_table(&db.dir.join("idle.tsv"))?;
+    let mut ones: HashMap<&str, rustc_hash::FxHashSet<&str>> = HashMap::new();
+    for l in idle.lines().skip(1) {
         let (t, b) = l.split_once('\t').unwrap_or((l, ""));
-        ones.entry(t.to_owned()).or_default().insert(b.to_owned());
+        ones.entry(t).or_default().insert(b);
     }
     for t in db.types()? {
         db.load(&t)?;
         let map = db.map(&t);
         let empty = Default::default();
-        let on = ones.get(&t).unwrap_or(&empty);
+        let on = ones.get(t.as_str()).unwrap_or(&empty);
         for u in map.uids() {
-            for b in map.bit_names(u) {
-                map.pos(u, b).unwrap().set(&mut img, on.contains(b));
+            for (b, p) in map.bits(u) {
+                p.set(&mut img, on.contains(b));
             }
         }
     }
@@ -218,14 +217,14 @@ pub fn image(db: &mut Db) -> Result<Vec<u8>> {
 /// own them (or "unnamed").
 pub fn diff(db: &mut Db, a: &[u8], b: &[u8]) -> Result<()> {
     let mut owner: HashMap<(usize, u8), String> = HashMap::new();
-    let changed: std::collections::HashSet<usize> = (0..a.len()).filter(|&i| a[i] != b[i]).collect();
+    let is_changed: Vec<bool> = a.iter().zip(b).map(|(x, y)| x != y).collect();
+    let changed: Vec<usize> = (0..a.len()).filter(|&i| is_changed[i]).collect();
     for t in db.types()? {
         db.load(&t)?;
         let map = db.map(&t);
         for u in map.uids() {
-            for n in map.bit_names(u) {
-                let p = map.pos(u, n).unwrap();
-                if changed.contains(&p.byte) && (a[p.byte] ^ b[p.byte]) >> p.bit & 1 == 1 {
+            for (n, p) in map.bits(u) {
+                if is_changed[p.byte] && (a[p.byte] ^ b[p.byte]) >> p.bit & 1 == 1 {
                     owner.insert((p.byte, p.bit), format!("{u}\t{n}"));
                 }
             }
@@ -247,4 +246,19 @@ pub fn diff(db: &mut Db, a: &[u8], b: &[u8]) -> Result<()> {
     }
     println!("total\t{}", by_inst.values().map(Vec::len).sum::<usize>());
     Ok(())
+}
+
+/// Instances with any named bit that differs between two images.
+pub fn dirty<'a>(db: &'a Db, a: &[u8], b: &[u8]) -> Result<rustc_hash::FxHashSet<&'a str>> {
+    let changed: Vec<bool> = a.iter().zip(b).map(|(x, y)| x != y).collect();
+    let mut out = rustc_hash::FxHashSet::default();
+    for t in db.types()? {
+        let map = db.map(&t);
+        for u in map.uids() {
+            if map.bits(u).any(|(_, p)| changed[p.byte] && p.get(a) != p.get(b)) {
+                out.insert(u);
+            }
+        }
+    }
+    Ok(out)
 }
