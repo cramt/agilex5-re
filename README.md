@@ -1714,8 +1714,8 @@ are in `specimens/board/` (git-ignored); to regenerate them:
 B=specimens/board; Q=/pool/dev/altera_pro/quartus-pro/26.1.1; A=tools/a5db/target/release/a5db
 cp <blinky run>/output_files/blinky.sof $B/blinky.sof
 tools/quartus.sh quartus_pfg -c $B/blinky.sof $B/blinky_pfg.rbf          # control, pfg's own
-tools/cap.sh 12G python3 -I designs/blinky_a5db/build.py specimens/b5/r4  # 10 min
-cp specimens/b5/r4/blinky_a5db.sof $B/scratch.sof
+tools/cap.sh 12G python3 -I designs/blinky_a5db/build.py specimens/b5/r5  # 10 min
+cp specimens/b5/r5/blinky_a5db.sof $B/scratch.sof
 $A rbf db/sm4revb $B/scratch.sof $B/scratch_a5db.rbf $Q specimens/rbf_keyed_hash.key
 tools/quartus.sh quartus_pfg -c $B/scratch.sof $B/scratch_pfg.rbf        # equals scratch_a5db.rbf
 for v in zero-io-hash zero-design-hash corrupt-core; do
@@ -1723,14 +1723,19 @@ for v in zero-io-hash zero-design-hash corrupt-core; do
 for f in $B/*.rbf; do python3 -I tools/bitstream.py check $f; done      # all pass but corrupt-core
 ```
 
-SHA-256 of the files as built here: `blinky_pfg.rbf` 8b490e78…,
-`scratch_a5db.rbf` = `scratch_pfg.rbf` 515440fe…,
-`scratch_a5db_zero-io-hash.rbf` 4933335c…,
-`scratch_a5db_zero-design-hash.rbf` 5203f7c4…,
-`scratch_a5db_corrupt-core.rbf` 8b8ac007…. `quartus_pfg --check_integrity`
-says OK for all but corrupt-core (`Section hash mismatch`). The phase-3
-files (the all-literal `CORE` of blinky) are kept in `specimens/board/old/`
-in case 4 fails.
+SHA-256 of the files as built here (phase 5, `specimens/b5/r5`):
+`blinky_pfg.rbf` 8b490e78…, `scratch_a5db.rbf` = `scratch_pfg.rbf`
+27642610…, `scratch_a5db_zero-io-hash.rbf` 8fb79437…,
+`scratch_a5db_zero-design-hash.rbf` 0a8364c3…,
+`scratch_a5db_corrupt-core.rbf` e2446c93…. `quartus_pfg --check_integrity`
+says OK for all but corrupt-core (`Section hash mismatch`), asm2 reads the
+scratch image back with 0 of 25,516 attributes differing, and the `.rbf`
+from a5db equals pfg's. **Phase 5 changed the scratch image** in exactly
+122 bits: `flop_mode = FAST_WIRE` on the 122 routing muxes it uses, which
+every Quartus image sets and phase 4's left at DIS (q). The phase-4 files
+are kept in `specimens/board/old_r4/` and the phase-3 ones (the all-literal
+`CORE` of blinky) in `specimens/board/old/`; if step 4 fails with the
+phase-5 file, the phase-4 one tells whether DIS was the reason.
 
 On the board (DE25-Nano, on-board USB-Blaster III, JTAG; MSEL as shipped):
 
@@ -1784,6 +1789,52 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 5 status** (branch `phase5`): coverage for a real toolchain. The
+summary for a toolchain author is [docs/toolchain.md](docs/toolchain.md).
+
+- Step 1 (pin tables): **done** (p). One template, fitted on 3 images and
+  held out on 334 pin uses (ph1, ph2: every other DE25-Nano pin as input and
+  output): 6 bits differ, all explained (input register mux choice, an
+  unloaded input). `db/sm4revb/io/de25_pins.tsv` for every DE25-Nano pin;
+  `a5db pins` for any set of pins on the package.
+- Step 2 (clocks): **done** (r). The HVIO clock entry (2 clock pins per bank
+  half) fitted on ck1 and held out on ck2 (all 32 clock pins, 0 bits
+  differ); 22 DCM P2C muxes decode by the rule; ck1, ck2 rebuilt bit for
+  bit; one clock network with per-sector trees (no separate regional
+  network); clock enables are LAB attributes; one IOPLL (50 → 100 MHz)
+  rebuilt bit for bit.
+- Step 3 (core features): **done** (q). Carry chains, shared arithmetic,
+  register controls, register-only cells, MLAB RAM, M20K and DSP: the
+  held-out hx and the development designs ar and mm are rebuilt bit for bit
+  from design files (pins, edges, attributes, DIRECT values), and asm2
+  reads every rebuilt image back with 0 attributes differing. Two
+  router-level rules came out of it: `flop_mode = FAST_WIRE` on used muxes,
+  and the HIOL `xleim` mux settings.
+- Step 4 (leftovers): record 0x13 is the JTAG USERCODE; the design hash is
+  the fitter's PR hash over the netlist cookie and LUT masks; the spare row
+  is a spare row 5 with no image address (s). The 8 perictrl0 words and
+  the sector-header forced bits stay [unk].
+- Step 5: [docs/toolchain.md](docs/toolchain.md).
+
+Open after phase 5 [unk]:
+
+- On the board (still off): everything; in particular whether a5db images
+  configure, and whether a used mux at `flop_mode` DIS (phase 4's
+  from-scratch blinky) passes its signal. The board files are rebuilt with
+  FAST_WIRE ("Board test").
+- The pin ↔ graph node map (which fabric node each pin's input register mux
+  and output feed), which a router needs to start and end nets at pins
+  without a Quartus route to copy.
+- IOPLL settings as a function of frequencies; I/O buffer options
+  (pull-ups, slew, drive, bus hold, open drain) and bidirectional pins;
+  differential I/O; IO96 lanes 0–3 and 6–7 and `pio_1_0`; the left DCMs.
+- Edge delays for timing-driven routing.
+- The 8 perictrl0 words pfg skips, the sector-header forced bits, the first
+  three words of record 0x13, the netlist cookie's origin.
+
+Next: the board test, then nextpnr (Plan step 7) writing design files
+through `a5db build` and `a5db rbf`, with the pin ↔ node map first.
 
 **Phase 4 status** (branch `phase4`):
 
