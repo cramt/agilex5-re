@@ -1,0 +1,23 @@
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY hx
+set_global_assignment -name VERILOG_FILE hx.v
+set_global_assignment -name SDC_FILE hx.sdc
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
+set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+
+# HVIO bank 6E/6F (hvio_1_1): a different bank and clock from designs/ar.
+set_location_assignment PIN_BF23 -to CLOCK2_50
+set_location_assignment PIN_AV19 -to RST_N
+set_location_assignment PIN_AT11 -to CLR_N
+set_location_assignment PIN_BE11 -to EN
+set_location_assignment PIN_AV14 -to UP
+set_location_assignment PIN_AT19 -to O[0]
+set_location_assignment PIN_AT14 -to O[1]
+set_location_assignment PIN_AV16 -to O[2]
+set_location_assignment PIN_AV11 -to O[3]
+set_location_assignment PIN_BE14 -to O[4]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to *

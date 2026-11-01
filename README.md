@@ -1394,6 +1394,304 @@ and `tools/rbfpairs.sh specimens/core/pairs.txt` reruns the comparison (8 min;
 78 of 78 identical after the merge into `phase4`). The board question of phase 3 (does the SDM take a literal
 `CORE`) no longer matters for a5db's own output.
 
+### (p) Phase 5: pin tables from a template
+
+The phase-4 tables (V16 in, DF35 and DJ32 out) are replaced by one template,
+`db/sm4revb/io/template.tsv`, that `tools/pins/derive.py` writes from the I/O
+bits of three training images (`designs/pt`, blinky, ho). `a5db pintable`
+expands it for any set of pins, `a5db pins` writes the result, and
+`db/sm4revb/io/de25_pins.tsv` holds the expansion for every DE25-Nano user pin
+as input and as output (`tools/pins/de25.sh`). `db/sm4revb/io/pins.tsv` lists
+the package's 351 HVIO and IO96 balls with their block and pad (`ddb pins`).
+The DE25-Nano pin list with the manual's standards is
+`designs/pins/de25_pins.tsv` (from the Terasic System Builder scripts in
+[spersvold/de25_nano](https://github.com/spersvold/de25_nano)): 159 HVIO pins
+in banks 6A–6H (6G and 6H at 1.8 V, the rest 3.3 V) and 22 IO96 pins in bank
+2A at 1.1 V, 6 of them the camera's D-PHY.
+
+- **Pad name → bits** [obs]: an HVIO pad `HVIO_B<b>_<g>_<k>` is
+  `xx20_u<b>/xx4_u<g>/xx1_u<k>` of its `hvio_*` instance (V16 is
+  `HVIO_B1_2_1` = `xx20_u1/xx4_u2/xx1_u1`), and an IO96 pad `P<n>` is lane
+  n / 12, pin n % 12 (DF35 is P61, lane 5 pin 1). The two hold for every pin
+  checked below.
+- **HVIO pins are self-contained** [obs]: a used pin changes only bits under
+  its own `xx1_u<k>`, with no bank or group bits. Output: `itxen` = 1, the
+  output and OE register muxes in bypass (`oreg` sel 00, `din3` 0). Input:
+  `irxen` = 1 and one input register mux in bypass (`ireg_4to1_mux1` sel 00
+  for data). The standard is `iio_config_[1:0]`: idle 11, 3.3-V LVCMOS 00,
+  1.8-V LVCMOS 10 (the rx and tx `iio_config_` bits are one image bit). A
+  clock input uses `ireg_4to1_mux0`, the bank's `clkordat` demux
+  `u<4g + k>` and an `xif` ioclk mux.
+- **IO96 pins have pin, lane and bank parts** [obs]:
+  - pin: output 12 bits (`txdigitop`/`txtop`/`drvstatctrl`/`x_gpio` of pin p:
+    data and OE bypass, slew, drive code), input 3 (`i_rx_tggpiorxen`,
+    `ireg_4to1_mux0` sel 00), plus their IOSSM bit below;
+  - lane: 56 bits once a lane has any used pin (ODT/sense-amp timing,
+    vref enables), plus 11 vref bits whose values depend on whether the lane
+    has an input: output-only lanes get `rxdatavref{l,u}` = 358 and
+    `i_vdac_sel` = 01, a lane with an input `rxdatavrefu` = 384,
+    `rxdatavrefl` = 0, `i_vdac_sel` idle, and all 12 `xp2c` bead selects of
+    its fabric adapter. So pin tables don't simply add up; `pintable`
+    composes them per lane;
+  - bank: 23 bits once per IO96 with any pin (`rd_training` in all 8 lanes,
+    the power controller, 8 IOSSM bits);
+  - the IOSSM init memory (`iossm_mem_init_122_bit[]`) is a pin map: lane L
+    has a 32-bit word at 28,992 + 32 (L − 4), inputs at bit p, outputs at
+    12 + p, and bit L of the bytes at 28,800, 28,808, 28,816 and 28,824 marks
+    a used lane;
+  - an output also clears one unnamed `io96_0` header bit,
+    45,136 + 229 L + p (seen in lanes 4 and 5; the stride is [inf] for the
+    others).
+- **Held out** [obs]: `designs/pins/gen.py` writes `pt` (training: 7 inputs,
+  7 outputs in all 8 HVIO banks and IO96 lanes 4–5, both HVIO voltages) and
+  `ph1`/`ph2`, every other DE25-Nano pin, ph1 with the even pins of the list
+  as outputs and the odd ones as inputs and ph2 the reverse (167 pins each,
+  outputs XOR two inputs, no clock). `tools/pins/check.sh` writes the idle
+  image plus `a5db pins` for the design's pins and compares every hviowr,
+  io96 and unnamed io96 bit with Quartus' image. pt: 0 bits differ. Of 334
+  held-out pin uses, **6 bits differ**, all in the input register mux:
+  - ph2's `DRAM_RAS_n` input has no load (the generator never used it), so
+    Quartus enabled the buffer but no `ireg` mux (2 bits);
+  - ph1's SW3 (lane 5 pin 7) leaves through `ireg_4to1_mux1` instead of mux0
+    (4 bits). Which of the two muxes an input uses goes with the fabric route
+    Quartus chose, so a pin spec can name it: `in0`/`in1` (`in` is the
+    usual one). Which graph node each mux reaches is [unk].
+  - The whole ph1 image, with SW3 as `in1`, rebuilds bit for bit from a
+    design file (q): 167 pins, 1,448 edges (the pin data through the HIOL
+    and VIO input muxes), 443 LAB/MLAB attributes and 60 LUT masks, 0 bits
+    differ.
+- **Not covered**: the D-PHY standard (used here single-ended at 1.1 V),
+  bidirectional pins, pull-ups, bus hold, current strength and slew
+  settings (the DE25-Nano manual sets none), IO96 lanes 0–3 and 6–7 and the
+  second IO96 bank (no DE25-Nano pins), differential I/O, and the pin ↔
+  routing-graph node map (which fabric node carries a pin's input or
+  output; phase 4 took V16's and DF35's from Quartus routes).
+
+### (q) Phase 5: core features, rebuilt from a design file
+
+`a5db extract` turns an image into a **design file**, the vocabulary a placer
+and router would write through a5db (`src/rebuild.rs`): `pin` lines (the
+template of (p)), `edge` lines (routing graph edges, decoded with `a5db
+routed`'s rules), then per instance `attr` (a CUSTOM setting) and `direct`
+(a DIRECT bit string: LUT masks, M20K contents, DSP inversion masks) for
+whatever the pins and edges leave different from the idle image. What that
+vocabulary can't express comes out as `bit` (a named bit) and `raw` (an
+image bit no named bit covers) lines. `a5db build` writes a design file over
+the idle image; `a5db rebuild` does both and diffs the result against the
+input. A design file names nothing from Quartus' image: every line is a
+setting, an edge or a table expansion.
+
+Designs (all compiled for this phase; `specimens/runs/*0`):
+
+- `designs/ar` (development): a 32-bit accumulator with enable and
+  synchronous clear (carry chain), a ternary adder (shared arithmetic), a
+  12-bit down counter with asynchronous clear and synchronous load, a
+  comparator and subtractor, an 8-bit register-only shift register and a
+  32 x 16 RAM in an MLAB;
+- `designs/mm` (development): a 512 x 32 simple dual-port M20K, a 1024 x 16
+  initialised ROM in M20K, a registered 18x18 signed multiply and a 27x27
+  multiply-accumulate in DSP blocks;
+- `designs/hx` (**held out**: written before the tools above and never used
+  to fix them): a 20-bit up/down counter with enable, asynchronous preset
+  value and synchronous clear, a four-input adder, a 16 x 8 MLAB RAM, a
+  2,048 x 10 true dual-port M20K with initial contents, and a 9x9 + 18x19
+  multiply-add, on another bank and clock (CLOCK2_50) than ar and mm.
+
+Results [obs]:
+
+| design | pins | edges | attr | direct | bit | raw | bits differing after the rebuild |
+|---|---|---|---|---|---|---|---|
+| ar | 9 | 1,888 | 1,198 | 98 | 0 | 0 | **0** |
+| mm | 5 | 1,760 | 712 | 577 | 1 → 0 | 0 | **0** |
+| hx (held out) | 10 | 1,675 | 917 | 591 | 1 → 0 | 0 | **0** |
+
+- Each image is rebuilt **bit for bit** in every part (CRAM, M20K content
+  RAM, I/O headers): the rebuild leaves 0 differing bits, so there are no
+  unmapped bits to exclude here.
+- The one `bit` line in mm and hx was `rmode[0]` of a DSP: `dsp_mode`, like
+  four others below, is a CUSTOM attribute that the Bcm_device dump has no
+  bits for. With it added (below), both are pure attr/direct.
+- The attributes these designs need, by feature [obs, names from the design
+  files]: LUT masks (`lut_mask`, DIRECT); carry chains and shared arithmetic
+  (`adder_mode` ENABLE_ADDER on the LUT, `adder_or_packed_mode` on the
+  adder; the register's `reg_input` picks ARITH_SUMOUT, LUTOUT_6LUT,
+  LUTOUT_5LUT or LEIM, the last one a register packed with unrelated logic,
+  fed straight from routing); registers (`register_comb` DFF_LATCH, REGIN,
+  or WIRE_MODE to bypass; four per ALM in `xcw_la_le_reg{0,1}/xreg{0,1}`);
+  register controls (`regclk` DFF_LABCLK0/1 picks one of the LAB's two
+  clocks, `regclr` CLR1/CLR2 one of its two clears, `ce_sel`/`clr_sel` per
+  half-LAB select the LAB's enable and clear lines, `sclr_sel` SCLR per
+  register, and the programmable inverter `iss/xclrb_rpi/sel` INV in the
+  routing tile for an active-low clear); MLAB RAM (`ram_mode`
+  LUTRAM_32DEEP/LUT_MODE on `xce_ml_le_din`, `xcw_ml_le_csel` and the LAB's
+  `lram_sigctrl`); M20K (CUSTOM settings for widths, ports and registers, 42 in mm,
+  plus `m20k_eram_add<k>`: row k/2, bits 40(k mod 2) .. +39 of the 256 x 80
+  `eram_array`); DSP (`dsp_mode`, input/output register and clock selects,
+  signedness, `dsp_proginv_{l,h}` DIRECT masks).
+- **Routing needs two more things than the mux settings** [obs]:
+  - every used routing mux with a hyper-register (LEIM, LEIM_WB, EDIM, the
+    H/V drivers, HIOL `xleim`/`xedim`) is set to `flop_mode = FAST_WIRE`
+    (bypass) by Quartus, 580 of 580 in ar; idle is DIS. The exception are
+    the LEIMs into a LAB's control inputs (`LEIM` I80 and up of a LAB
+    routing tile), which stay DIS. `a5db` now writes FAST_WIRE with every
+    edge it routes (`Join::edge`). **The phase-4 from-scratch blinky has
+    every routing mux at DIS**, which no Quartus image has; whether DIS
+    passes the signal is [unk], so its board files are rebuilt with
+    FAST_WIRE (see "Board test");
+  - the HIOL tiles' `xleim` input muxes (pin data into the fabric) had no
+    `sel` bits in the Bcm_device dump, so 1,565,476 graph edges resolved to
+    nothing. asm2's `set_attribute` gives them: MUXINk is the one-hot
+    `cram_mux{k/4}_hg[k mod 4]`, MUX_DIS all zero (`tools/bcm/
+    asm2_settings.tcl`). Data inputs from HVIO pins pass through them.
+- **CUSTOM attributes without bits in the Bcm_device dump** [obs]:
+  `tools/bcm/asm2_probe.sh` sets every value of each such attribute on one
+  instance through asm2 and records the named bits that change
+  (`probe2settings.py` writes them into `bcm_settings.tsv`). Of 1,008
+  probed (LAB, MLAB, M20K, DSP, routing, clock, HVIO), only three change
+  named bits: DSP `dsp_mode` (`rmode[4:0]`, a 5-bit code: TWO_18X19 0,
+  ONE_27X27 1, SUM_OF_2_18X19 2, … COMPLEX_MULT 22) and the HVIO input and
+  OE delay chains (`a_rb_dlychn_sel`, 64 and 16 steps). The rest (LAB
+  `lut_mode`, `carry_out`, `latch_mode`, MLAB `fastwrite`, M20K port
+  selects, the HVIO buffer's `io_standard`, `weak_pull_up`, `bus_hold`,
+  `slew_rate`, `open_drain`, `schmitt_trigger` …) change no named bit in
+  asm2: they are `<VIRTUAL>` there, so whatever they mean on silicon comes
+  through other attributes or the fitter [inf]. Three LAB/MLAB `lut_mode`
+  probes crash asm2 (`asm2_state.cpp:1140`).
+- **DIRECT attributes** (`db/sm4revb/direct.tsv`, `tools/bcm/direct.tcl`):
+  the bit order of every DIRECT attribute of the LAB, MLAB, M20K, DSP and
+  HVIO blocks (775), and of the IO96 (4,775 attributes, 4.28 M bits,
+  `direct_io96.tsv.xz`, not loaded by a5db).
+- **Readback** [obs]: `tools/readback.sh` on each rebuilt image (a5db's
+  decode against asm2's `get_attribute`, every attribute of every instance
+  that differs from idle): hx 35,563 attributes in 58 instances, 34,626
+  equal, 0 differ; ar 33,409 in 55, 32,557 equal, 0 differ; mm 37,021 in
+  61, 36,339 equal, 0 differ. The attributes a5db can't decode are DFT and scan settings
+  (`a_regscan`, `a_frzlogic`, `dft_mode`, `secmux_dftclk*`), whose bits are
+  among the unmapped ones of (h).
+
+### (r) Phase 5: clocks
+
+Designs: `designs/clocks/gen.py` writes `ck1` and `ck2`, which between them
+use every clock-capable HVIO pin of the DE25-Nano (pads `HVIO_B<b>_2_<k>`,
+4 per bank, 32 in all, CLOCK1_50 and CLOCK2_50 among them) as a global
+clock, each driving a 2-bit counter with a clock enable. ck1 adds CLOCK0_50
+(IO96, DJ35) and three IO registers. `designs/ck_all`, all 32 pins at once,
+doesn't fit (Error 24404: a pin's periphery-to-core clock path is taken by
+another pin), and that failure split the pins: ck1 got the 16 that placed,
+ck2 the other 16.
+
+- **How an HVIO clock pin enters the clock network** [obs on all 32 pins]:
+  each bank half b of an `hviowr` has two clock outputs toward the DCM, a
+  2:1 `xif_p2c_ioclk_2to1_mux_u<b>` that takes pin k = 0 or 1 of the
+  `xx4_u2` group (P0, P1) and a 4:1 `xif_p2c_ssclk_4to1_mux_u<b>` that takes
+  pin 2 or 3 of either half (`O_SSCLK_BANK<half>_P<k>`; Quartus always used
+  the one numbered like the pin's half). So at most two clock pins per bank
+  half reach the clock network at once, 16 per design on this board, which
+  is why ck_all can't fit. Besides that the pin needs its pin-level bits
+  (input buffer, `ireg_4to1_mux0` in bypass, the bank's `clkordat` demux
+  `u<4g + k>` toward the clock path). `a5db pins` writes all of it for
+  `<ball>=clock_in` (`src/pins.rs`).
+  - Fitted on ck1 (with pt, blinky and ho), **held out on ck2**: its 16
+    clock pins are exactly the other pin of each ioclk and ss clock mux.
+    `tools/pins/check.sh` on ck2: **0 I/O bits differ**, as on ck1.
+  - 1.8-V clock pins (6G, 6H) clear only `iio_config_[0]`, as 1.8-V data
+    pins do (p).
+- **CLOCK0_50 (IO96)** [obs]: an IO96 clock input sets the input's
+  `i_rx_tggpiorxen` and IOSSM bit but leaves `ireg_4to1_mux0` at its idle
+  SEL3; the lane gets the lane-with-input rows of (p). One pin seen
+  (`<ball>=clock_in` on IO96).
+- **The DCM P2C muxes** [obs]: the rule of (n) was checked on 2 muxes. ck1
+  and ck2 use **22 distinct P2C muxes** (10 in the DCM at X121 Y4, 12 at
+  X121 Y51) with 32 (mux, input) pairs covering inputs 0–3, and every one
+  decodes to an edge whose setting equals Quartus'. The DCMs at X0 Y4 and
+  X0 Y51 serve the left side, which has no DE25-Nano clock pins; the rule
+  there is [inf].
+- **Whole images** [obs]: `a5db rebuild` on ck1 (23 pins, 426 edges) and ck2
+  (18 pins, 395 edges) leaves **0 differing bits**. No clock-network block
+  needs an `attr` line: the P2C muxes, switchboxes, vertical-seam and spine
+  taps and row clocks all come from routing edges and the clock rules
+  (graph.rs). The LAB clock enables are LAB attributes (`ce_sel` CE and the
+  LAB's enable lines, (q)).
+- **Global and regional** [obs]: there is one clock network. Quartus builds
+  each clock's tree only into the sectors that have loads: every clock in
+  ck1, global or not, reports "Clock Region: Sector (1, 0)" (the right half,
+  `(61, 5)` to `(121, 51)`). `GLOBAL_SIGNAL "REGIONAL CLOCK"` is not a valid
+  value for Agilex 5 (Warning 125035); `CLOCK_REGION "SX1 SY0 SX1 SY0"` on
+  CLOCK2_50 is honoured ("Clock Region Constraint") and changes nothing
+  since the tree was one sector anyway. A placer chooses the sectors by
+  where it puts the loads; the routing is the same clock-network edges.
+- **Row-clock delay chains** [obs in mm, rule inf]: mm's DSP/M20K rows use a
+  row clock through its delay chain: `delay_chain_<side><j>/mux41` CLKIN0
+  and the predrive mux on input 0 instead of input 1. graph.rs now has rules
+  for the delay chain edges (tap k → CLKIN<k>, only k = 0 seen).
+- **IO registers** [obs, ck1]: FAST_INPUT_REGISTER and FAST_OUTPUT_REGISTER
+  on 1.8-V pins are the uses `in_reg` and `out_reg`: the input register's
+  clock inversion, clock and enable enables and `ireg_4to1_mux1` SEL1, and
+  the output's `oreg` clock and enable enables and `oreg` mux SEL1. The
+  register clock comes from the fabric through the HIOL tile, where
+  Quartus also set three `rpi_sel` INV programmable inverters (`attr`
+  lines). One design, so [obs] for those three pins and [inf] for others.
+
+- **IOPLL** [obs, one configuration]: `designs/pl` (CLOCK1_50 into an
+  IOPLL made by `ip-deploy`/`qsys-generate` in `prep.tcl`, 100 MHz out to a
+  24-bit counter on LED0, `locked` on LED1). Quartus placed it in
+  `hvio_3_1`'s `xpllwrap_top`, next to V16. `a5db rebuild` (4 pins, 95
+  edges) leaves **0 differing bits**; the PLL is 40 `attr` lines (enable,
+  reference from the I/O clock `PLL_CLKMUX_IOCLKIN_3`, VCO phases, charge
+  pump and loop filter trims, counter sources and bypasses, output enable),
+  10 `direct` lines (the C0/C1/M counters' hi/lo dividers, DCC timers) and
+  19 `bit` lines: lock-detector and VCO-calibration controls
+  (`cr_lockf_*`, `cr_vcocalsel_clk*`, `cr_dcs_clksel`) that no attribute
+  covers. V16 as a PLL reference leaves the ioclk mux at P0: the reference
+  doesn't use the clock-pin path. The PLL output enters the clock network
+  as an ordinary graph edge (`HVIOWR_RE … I16 → DCM_mux`). How counters and
+  trims follow from the requested frequencies is [unk]: one PLL was
+  compiled, so a writer can reproduce this 50 → 100 MHz PLL verbatim and
+  nothing else yet.
+
+### (s) Phase 5: leftover unknowns
+
+- **Record 0x13 is the JTAG USERCODE** [obs]: its 16 bytes are `u32 0,
+  0x00200020, 0x00010000` and the USERCODE (0xFFFFFFFF by default). An
+  assembler-only rerun of ar with `STRATIX_JTAG_USER_CODE 1234ABCD` changed
+  the last word to 0x1234ABCD and nothing else in the record. The first
+  three words are the same in every image here [unk]. `a5db`'s container
+  keeps 0xFFFFFFFF.
+- **Where the design hash comes from** [obs, decompiled]: the fitter, not the
+  assembler. `FITCC_DESIGN_HASH_UTILITY::apply_design_hash`
+  (`libfitter_fitcc.so`) runs `FITCC_PR_POF_HASH_GENERATOR` per
+  partition: SHA-256 over the partition's 8-byte netlist cookie
+  (`cdb_get_atom_netlist_cookie`, its child partitions' after it) and then
+  its LUT masks, and stores it as the partition's DESIGN_HASH assignment;
+  the assembler copies it into record 0x36 and the `.rbf`. It is the
+  partial-reconfiguration compatibility hash: a PR image must carry the
+  same hash as the static region it was compiled against [inf, from the
+  names]. The netlist cookie is a database value with no counterpart in the
+  image, so an open flow can't reproduce Quartus' hash and needn't: it has
+  to be consistent between its own images, which a5db's SHA-256 over the
+  sector objects is. An assembler rerun keeps the hash (ar: `3C76F86D…` in
+  both, also in `ar.asm.rpt`).
+- **The spare row is a spare row 5, outside the image** [obs/inf]: asm2's
+  `get_uids` lists `_rsp5_` instances for 8 block types: 52 LABs, 52 MLABs,
+  8 M20Ks, 4 DSPs, 104 LAB and 16 M20K/DSP routing tiles, 2 HIOL tiles and 2
+  row-clock tiles, a whole fabric row named after row 5. `get_bit` on any of
+  them aborts (`data < data_width`), so they have no image address [obs].
+  Every fabric row Y = 5..51 has a 98-frame group (Y = 5 group 0, Y = 6..51
+  groups 2..47) and group 1 holds no tile and is never stored by pfg (f),
+  so the spare row is that group: the SDM fills it itself when it repairs a
+  row through the redundancy muxes [inf]. The 94 `cw_rd_redtl_bf` tiles
+  (one per row at X = 0) and the `*_redt_bf` vertical-seam tiles are not
+  asm2 block types at all (asm2 has 26 types), so their settings don't come
+  from the user image either; `lsm_eram_redundancy.fw` is the likely owner
+  [inf]. A writer leaves both alone, as every Quartus image here does.
+- **The 8 perictrl0 words pfg skips** [unk, narrowed]: none of their CNOC
+  addresses (0xA1000, 0x20F000…0x20F128, alone or plus 0x300000 or
+  0x10300000) appears as a 32-bit word in `cssm.fw`, `cssm_ux_phy.fw`,
+  `io_config.fw`, `cssm_reset_release.fw` or `enable_pm.fw`, raw or
+  inflated. The "firmware owns them" inference of (l) stands untested.
+- **Sector-header forced bits**: no change since (o); classified, meaning
+  [unk].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -1420,8 +1718,8 @@ are in `specimens/board/` (git-ignored); to regenerate them:
 B=specimens/board; Q=/pool/dev/altera_pro/quartus-pro/26.1.1; A=tools/a5db/target/release/a5db
 cp <blinky run>/output_files/blinky.sof $B/blinky.sof
 tools/quartus.sh quartus_pfg -c $B/blinky.sof $B/blinky_pfg.rbf          # control, pfg's own
-tools/cap.sh 12G python3 -I designs/blinky_a5db/build.py specimens/b5/r4  # 10 min
-cp specimens/b5/r4/blinky_a5db.sof $B/scratch.sof
+tools/cap.sh 12G python3 -I designs/blinky_a5db/build.py specimens/b5/r5  # 10 min
+cp specimens/b5/r5/blinky_a5db.sof $B/scratch.sof
 $A rbf db/sm4revb $B/scratch.sof $B/scratch_a5db.rbf $Q specimens/rbf_keyed_hash.key
 tools/quartus.sh quartus_pfg -c $B/scratch.sof $B/scratch_pfg.rbf        # equals scratch_a5db.rbf
 for v in zero-io-hash zero-design-hash corrupt-core; do
@@ -1429,14 +1727,19 @@ for v in zero-io-hash zero-design-hash corrupt-core; do
 for f in $B/*.rbf; do python3 -I tools/bitstream.py check $f; done      # all pass but corrupt-core
 ```
 
-SHA-256 of the files as built here: `blinky_pfg.rbf` 8b490e78…,
-`scratch_a5db.rbf` = `scratch_pfg.rbf` 515440fe…,
-`scratch_a5db_zero-io-hash.rbf` 4933335c…,
-`scratch_a5db_zero-design-hash.rbf` 5203f7c4…,
-`scratch_a5db_corrupt-core.rbf` 8b8ac007…. `quartus_pfg --check_integrity`
-says OK for all but corrupt-core (`Section hash mismatch`). The phase-3
-files (the all-literal `CORE` of blinky) are kept in `specimens/board/old/`
-in case 4 fails.
+SHA-256 of the files as built here (phase 5, `specimens/b5/r5`):
+`blinky_pfg.rbf` 8b490e78…, `scratch_a5db.rbf` = `scratch_pfg.rbf`
+27642610…, `scratch_a5db_zero-io-hash.rbf` 8fb79437…,
+`scratch_a5db_zero-design-hash.rbf` 0a8364c3…,
+`scratch_a5db_corrupt-core.rbf` e2446c93…. `quartus_pfg --check_integrity`
+says OK for all but corrupt-core (`Section hash mismatch`), asm2 reads the
+scratch image back with 0 of 25,516 attributes differing, and the `.rbf`
+from a5db equals pfg's. **Phase 5 changed the scratch image** in exactly
+122 bits: `flop_mode = FAST_WIRE` on the 122 routing muxes it uses, which
+every Quartus image sets and phase 4's left at DIS (q). The phase-4 files
+are kept in `specimens/board/old_r4/` and the phase-3 ones (the all-literal
+`CORE` of blinky) in `specimens/board/old/`; if step 4 fails with the
+phase-5 file, the phase-4 one tells whether DIS was the reason.
 
 On the board (DE25-Nano, on-board USB-Blaster III, JTAG; MSEL as shipped):
 
@@ -1490,6 +1793,52 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 5 status** (branch `phase5`): coverage for a real toolchain. The
+summary for a toolchain author is [docs/toolchain.md](docs/toolchain.md).
+
+- Step 1 (pin tables): **done** (p). One template, fitted on 3 images and
+  held out on 334 pin uses (ph1, ph2: every other DE25-Nano pin as input and
+  output): 6 bits differ, all explained (input register mux choice, an
+  unloaded input). `db/sm4revb/io/de25_pins.tsv` for every DE25-Nano pin;
+  `a5db pins` for any set of pins on the package.
+- Step 2 (clocks): **done** (r). The HVIO clock entry (2 clock pins per bank
+  half) fitted on ck1 and held out on ck2 (all 32 clock pins, 0 bits
+  differ); 22 DCM P2C muxes decode by the rule; ck1, ck2 rebuilt bit for
+  bit; one clock network with per-sector trees (no separate regional
+  network); clock enables are LAB attributes; one IOPLL (50 → 100 MHz)
+  rebuilt bit for bit.
+- Step 3 (core features): **done** (q). Carry chains, shared arithmetic,
+  register controls, register-only cells, MLAB RAM, M20K and DSP: the
+  held-out hx and the development designs ar and mm are rebuilt bit for bit
+  from design files (pins, edges, attributes, DIRECT values), and asm2
+  reads every rebuilt image back with 0 attributes differing. Two
+  router-level rules came out of it: `flop_mode = FAST_WIRE` on used muxes,
+  and the HIOL `xleim` mux settings.
+- Step 4 (leftovers): record 0x13 is the JTAG USERCODE; the design hash is
+  the fitter's PR hash over the netlist cookie and LUT masks; the spare row
+  is a spare row 5 with no image address (s). The 8 perictrl0 words and
+  the sector-header forced bits stay [unk].
+- Step 5: [docs/toolchain.md](docs/toolchain.md).
+
+Open after phase 5 [unk]:
+
+- On the board (still off): everything; in particular whether a5db images
+  configure, and whether a used mux at `flop_mode` DIS (phase 4's
+  from-scratch blinky) passes its signal. The board files are rebuilt with
+  FAST_WIRE ("Board test").
+- The pin ↔ graph node map (which fabric node each pin's input register mux
+  and output feed), which a router needs to start and end nets at pins
+  without a Quartus route to copy.
+- IOPLL settings as a function of frequencies; I/O buffer options
+  (pull-ups, slew, drive, bus hold, open drain) and bidirectional pins;
+  differential I/O; IO96 lanes 0–3 and 6–7 and `pio_1_0`; the left DCMs.
+- Edge delays for timing-driven routing.
+- The 8 perictrl0 words pfg skips, the sector-header forced bits, the first
+  three words of record 0x13, the netlist cookie's origin.
+
+Next: the board test, then nextpnr (Plan step 7) writing design files
+through `a5db build` and `a5db rbf`, with the pin ↔ node map first.
 
 **Phase 4 status** (branch `phase4`):
 

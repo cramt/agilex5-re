@@ -21345,3 +21345,123 @@ ip7521serdes_uxs2t1r1pgd_pipe_registry_pcs_regblock_lane	ux_pcs_lane_q0_reg_10_c
 ip7521serdes_uxs2t1r1pgd_pipe_registry_pcs_regblock_lane	ux_pcs_lane_q0_reg_10_cfg_vpcsif_ovr_rxelecidle_disable_attr	UX_PCS_LANE_Q0_REG_10_CFG_VPCSIF_OVR_RXELECIDLE_DISABLE_ATTR_1	ux_pcs_lane_q0_reg_10_cfg_vpcsif_ovr_rxelecidle_disable	1
 ip7521serdes_uxs2t1r1pgd_pipe_registry_pcs_regblock_lane	ux_pcs_lane_q0_reg_10_cfg_vpcsif_ovr_rxelecidle_disable_ena_attr	UX_PCS_LANE_Q0_REG_10_CFG_VPCSIF_OVR_RXELECIDLE_DISABLE_ENA_ATTR_0	ux_pcs_lane_q0_reg_10_cfg_vpcsif_ovr_rxelecidle_disable_ena	0
 ip7521serdes_uxs2t1r1pgd_pipe_registry_pcs_regblock_lane	ux_pcs_lane_q0_reg_10_cfg_vpcsif_ovr_rxelecidle_disable_ena_attr	UX_PCS_LANE_Q0_REG_10_CFG_VPCSIF_OVR_RXELECIDLE_DISABLE_ENA_ATTR_1	ux_pcs_lane_q0_reg_10_cfg_vpcsif_ovr_rxelecidle_disable_ena	1
+ce_rt_xleim_inv	sel	MUX_DIS	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN0_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN1_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN2_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN3_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN4_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN5_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN6_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN7_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN8_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN9_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN10_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN11_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0
+ce_rt_xleim_inv	sel	MUXIN12_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0
+ce_rt_xleim_inv	sel	MUXIN13_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0
+ce_rt_xleim_inv	sel	MUXIN14_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0
+ce_rt_xleim_inv	sel	MUXIN15_	{cram_mux0_hg[0]} {cram_mux0_hg[1]} {cram_mux0_hg[2]} {cram_mux0_hg[3]} {cram_mux1_hg[0]} {cram_mux1_hg[1]} {cram_mux1_hg[2]} {cram_mux1_hg[3]} {cram_mux2_hg[0]} {cram_mux2_hg[1]} {cram_mux2_hg[2]} {cram_mux2_hg[3]} {cram_mux3_hg[0]} {cram_mux3_hg[1]} {cram_mux3_hg[2]} {cram_mux3_hg[3]}	0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
+cw_dssm_core	dsp_mode	TWO_18X19	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 0 0 0 0
+cw_dssm_core	dsp_mode	ONE_27X27	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 0 0 0 0
+cw_dssm_core	dsp_mode	SUM_OF_2_18X19	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 1 0 0 0
+cw_dssm_core	dsp_mode	ONE_18X19_PLUS_36	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 1 0 0 0
+cw_dssm_core	dsp_mode	FLOAT_MULT	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 0 1 0 0
+cw_dssm_core	dsp_mode	FLOAT_ADD	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 0 1 0 0
+cw_dssm_core	dsp_mode	FLOAT_MULTADD	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 1 1 0 0
+cw_dssm_core	dsp_mode	FLOAT_MULTACC	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 1 1 0 0
+cw_dssm_core	dsp_mode	FLOAT_MULTCHAIN	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 0 0 1 0
+cw_dssm_core	dsp_mode	FLOAT_VECONE	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 0 0 1 0
+cw_dssm_core	dsp_mode	FLOAT_VECTWO	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 1 0 1 0
+cw_dssm_core	dsp_mode	FP16_MULT	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 1 0 1 0
+cw_dssm_core	dsp_mode	FP16_MULT_FP32	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 0 1 1 0
+cw_dssm_core	dsp_mode	FP16_MULT_CHAIN	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 0 1 1 0
+cw_dssm_core	dsp_mode	FP16_MULT_ACC	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 1 1 1 0
+cw_dssm_core	dsp_mode	FP16_VECTOR1	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 1 1 1 0
+cw_dssm_core	dsp_mode	FP16_VECTOR2	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 0 0 0 1
+cw_dssm_core	dsp_mode	FP16_VECTOR3	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 0 0 0 1
+cw_dssm_core	dsp_mode	SUM_OF_6_9X9	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 1 0 0 1
+cw_dssm_core	dsp_mode	TENSOR_FP	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 1 0 0 1
+cw_dssm_core	dsp_mode	TENSOR_FXP	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 0 1 0 1
+cw_dssm_core	dsp_mode	TENSOR_FP_ACC	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	1 0 1 0 1
+cw_dssm_core	dsp_mode	COMPLEX_MULT	{rmode[0]} {rmode[1]} {rmode[2]} {rmode[3]} {rmode[4]}	0 1 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_0	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 0 0 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_1	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 0 0 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_2	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 0 0 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_3	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 0 0 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_4	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 1 0 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_5	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 1 0 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_6	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 1 0 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_7	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 1 0 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_8	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 0 1 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_9	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 0 1 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_10	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 0 1 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_11	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 0 1 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_12	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 1 1 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_13	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 1 1 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_14	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 1 1 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_15	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 1 1 0 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_16	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 0 0 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_17	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 0 0 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_18	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 0 0 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_19	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 0 0 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_20	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 1 0 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_21	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 1 0 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_22	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 1 0 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_23	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 1 0 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_24	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 0 1 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_25	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 0 1 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_26	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 0 1 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_27	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 0 1 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_28	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 1 1 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_29	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 1 1 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_30	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 1 1 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_31	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 1 1 1 0
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_32	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 0 0 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_33	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 0 0 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_34	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 0 0 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_35	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 0 0 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_36	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 1 0 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_37	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 1 0 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_38	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 1 0 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_39	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 1 0 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_40	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 0 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_41	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 0 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_42	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 0 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_43	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 0 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_44	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 1 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_45	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 1 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_46	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 1 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_47	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 1 1 0 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_48	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 0 0 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_49	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 0 0 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_50	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 0 0 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_51	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 0 0 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_52	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 1 0 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_53	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 1 0 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_54	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 1 0 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_55	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 1 0 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_56	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 0 1 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_57	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 0 1 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_58	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 0 1 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_59	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 0 1 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_60	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 0 1 1 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_61	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 0 1 1 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_62	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	0 1 1 1 1 1
+io75xddrfmxck_gpio_x64_delay_line	a_rb_dlychn_sel	DLY_SETTING_63	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]} {rb_dlychn_sel[4]} {rb_dlychn_sel[5]}	1 1 1 1 1 1
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_0	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	0 0 0 0
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_1	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	1 0 0 0
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_2	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	0 1 0 0
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_3	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	1 1 0 0
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_4	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	0 0 1 0
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_5	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	1 0 1 0
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_6	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	0 1 1 0
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_7	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	1 1 1 0
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_8	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	0 0 0 1
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_9	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	1 0 0 1
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_10	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	0 1 0 1
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_11	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	1 1 0 1
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_12	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	0 0 1 1
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_13	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	1 0 1 1
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_14	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	0 1 1 1
+io75xddrfmxck_gpio_x16_delay_line	a_rb_dlychn_sel	DLY_SETTING_15	{rb_dlychn_sel[0]} {rb_dlychn_sel[1]} {rb_dlychn_sel[2]} {rb_dlychn_sel[3]}	1 1 1 1

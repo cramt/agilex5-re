@@ -149,6 +149,9 @@ pub enum Miss {
 pub struct Named {
     writes: Vec<(String, bool)>,
     idle: Vec<(String, bool)>,
+    /// `flop_mode = FAST_WIRE` of a mux with a hyper-register: Quartus sets
+    /// it on every mux it uses, except LEIMs into LAB control inputs (README (q)).
+    flop: Vec<(String, bool)>,
 }
 
 /// Resolves edges to bit writes. Settings are resolved once per (block
@@ -181,7 +184,11 @@ impl<'a> Join<'a> {
         if self.graph.cfg[e] == 0 {
             return self.rule_edge(e, false);
         }
-        self.pair(self.graph.uid[e], self.graph.cfg[e])
+        // In a LAB's routing tile, LEIM I80 and up feed the LAB's control
+        // signals (clock enables, clears); their muxes keep flop_mode DIS.
+        let control = self.graph.uids[self.graph.uid[e] as usize].starts_with("cw_rt_lab_base")
+            && matches!(parse_node(&self.graph.names[self.graph.dst[e] as usize]), Some(("LEIM", _, _, _, i)) if i >= 80);
+        self.pair_full(self.graph.uid[e], self.graph.cfg[e], false, !control)
     }
 
     /// Bits of a clock-network edge that has no edge API but does select a
@@ -211,8 +218,13 @@ impl<'a> Join<'a> {
         Ok(Some(Ok(out)))
     }
 
+    /// The mux setting's bits alone (what decoding an image checks).
     pub fn pair(&mut self, u: u32, c: u32) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
         self.pair_with(u, c, false)
+    }
+
+    fn pair_with(&mut self, u: u32, c: u32, idle: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+        self.pair_full(u, c, idle, false)
     }
 
     /// The idle state of the bits an edge's setting writes.
@@ -220,7 +232,7 @@ impl<'a> Join<'a> {
         self.pair_with(u, c, true)
     }
 
-    fn pair_with(&mut self, u: u32, c: u32, idle: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
+    fn pair_full(&mut self, u: u32, c: u32, idle: bool, flop: bool) -> Result<Option<std::result::Result<Vec<(BitPos, bool)>, Miss>>> {
         if c == 0 {
             return Ok(None);
         }
@@ -240,7 +252,7 @@ impl<'a> Join<'a> {
         let map = self.db.map(&btype);
         let list = if idle { &named.idle } else { &named.writes };
         let mut out = Vec::with_capacity(list.len());
-        for (b, v) in list.iter() {
+        for (b, v) in list.iter().chain(if flop { &named.flop[..] } else { &[] }) {
             match map.pos(uid, b) {
                 Some(p) => out.push((p, *v)),
                 None => return Ok(Some(Err(Miss::UnmappedBit(format!("{btype} {}", generic(b)))))),
@@ -256,8 +268,14 @@ impl<'a> Join<'a> {
     }
 
     fn resolve_choices(&mut self, btype: &str, choices: Vec<Choice>) -> Result<std::result::Result<std::rc::Rc<Named>, Miss>> {
-        let (mut writes, mut idle) = (Vec::new(), Vec::new());
+        let (mut writes, mut idle, mut flop) = (Vec::new(), Vec::new(), Vec::new());
         for ch in choices {
+            let mux = ch.attr.strip_suffix("/sel").unwrap_or(&ch.attr).to_owned();
+            if let Some(f) = self.db.attribute(btype, &format!("{mux}/flop_mode")) {
+                if let Some(s) = self.db.bcm.settings(&f).iter().find(|s| s.name == "FAST_WIRE") {
+                    flop.extend(s.bits.iter().zip(&s.values).map(|(b, &(v, _))| (format!("{}{b}", f.prefix), v)));
+                }
+            }
             let Some(a) = self.db.attribute(btype, &ch.attr) else {
                 let mux = ch.attr.strip_suffix("/sel").unwrap_or(&ch.attr);
                 return Ok(Err(match self.db.bcm.leaf(btype, mux) {
@@ -288,7 +306,7 @@ impl<'a> Join<'a> {
                 idle.push((format!("{}{b}", a.prefix), v));
             }
         }
-        Ok(Ok(std::rc::Rc::new(Named { writes, idle })))
+        Ok(Ok(std::rc::Rc::new(Named { writes, idle, flop })))
     }
 }
 
@@ -386,6 +404,20 @@ pub fn clock_rule(g: &Graph, e: usize) -> Option<(&'static str, u32, u32, Vec<Ch
             let j = (si - 44) / 7;
             let m = format!("xrowclkmux/mux_predrive_{}{}/output_mux_dolsgn_delay_chain_dolsgn_0/sel", if j < 6 { 'l' } else { 'r' }, j % 6);
             Some(("cw_cc_ts_base", x, y, vec![ch(m, 1)]))
+        }
+        // Row clock j's delay chain (README (q)): from the mux output b = 44 + 7j
+        // through b + 1 to the taps b + 2 .. b + 4, whose 4:1 mux drives b + 5,
+        // which is the predrive mux's input 0. Tap k is CLKIN<k> [inf: only
+        // CLKIN0 seen].
+        ("SCLKMUX_RE", "SCLKMUX_RE") if si >= 46 && di >= 49 && (di - 49) % 7 == 0 && (di - 49) / 7 < 12 && (di - 3..di).contains(&si) => {
+            let j = (di - 49) / 7;
+            let m = format!("xrowclkmux/delay_chain_{}{}/mux41_dolsgn_delay_dolsgn_0/sel", if j < 6 { 'l' } else { 'r' }, j % 6);
+            Some(("cw_cc_ts_base", x, y, vec![ch(m, si + 3 - di)]))
+        }
+        ("SCLKMUX_RE", "SCLKMUX_RE") if si >= 49 && (si - 49) % 7 == 0 && di == si + 1 && (si - 49) / 7 < 12 => {
+            let j = (si - 49) / 7;
+            let m = format!("xrowclkmux/mux_predrive_{}{}/output_mux_dolsgn_delay_chain_dolsgn_0/sel", if j < 6 { 'l' } else { 'r' }, j % 6);
+            Some(("cw_cc_ts_base", x, y, vec![ch(m, 0)]))
         }
         _ => None,
     }

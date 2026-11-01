@@ -11,6 +11,7 @@
 //!   a5db route <db> <graph> <in.sof> <out.sof> <hmac.key> <routes>
 //!                                                  write the routes' mux bits
 //!   a5db fanout <graph> <name prefix>...          edges out of matching nodes
+//!   a5db fanin <graph> <name prefix>...           edges into matching nodes
 //!   a5db routed <db> <graph> <in.sof>             edges the image's mux settings select
 //!   a5db net   <db> <graph> <in.sof> <out.sof> <hmac.key> '[clock:]from,from...>to;to...'...
 //!       route nets through free nodes (sources may be busy: they are the
@@ -26,7 +27,18 @@
 //!       in.sof's image in a5db's own .sof container
 //!   a5db apply <db> <in.sof> <out.sof> <hmac.key> <table.tsv>...
 //!       write named bits from (uid, bit, value) tables (db/sm4revb/io/*)
+//!   a5db pintable <db> <ball>=<in|in0|in1|out|clock_in|in_reg|out_reg>[:<3.3|1.8|1.1>]...
+//!       the I/O bits of a set of used pins, from db/sm4revb/io/template.tsv
+//!   a5db pins <db> <in.sof> <out.sof> <hmac.key> <ball>=<use>[:<std>]...
+//!       write them
+//!   a5db extract <db> <graph> <in.sof> [<ball>=<use>[:<std>]...]
+//!       the image as a design file: pins, routing edges, attributes
+//!       (src/rebuild.rs)
+//!   a5db build <db> <graph> <quartus root> <hmac.key> <design> <out.sof>
+//!   a5db rebuild <db> <graph> <quartus root> <hmac.key> <in.sof> <out dir> [pins...]
+//!       extract, build from the written file, and print the bits that differ
 //!   a5db trace <graph> <node> <depth>              downstream edges, breadth first
+//!   a5db traceback <graph> <node> <depth>          upstream edges, breadth first
 //!   a5db idle-derive <db> <sof>...                 derive db/sm4revb/idle*.tsv
 //!   a5db idle-diff <db> <in.sof>                   bits of in.sof that differ from idle
 //!   a5db imgdiff <db> <a.sof> <b.sof>              bits that differ, by instance (b's values)
@@ -41,6 +53,8 @@
 mod blank;
 mod db;
 mod graph;
+mod pins;
+mod rebuild;
 mod rbf;
 mod route;
 mod sof;
@@ -251,6 +265,26 @@ fn route_cmd(dbdir: &str, gdir: &str, inp: &str, routes: &str, out: Option<(&str
     Ok(())
 }
 
+/// Write `uid, bit, value` rows (db/sm4revb/io tables, `pintable` output).
+/// A uid `@object/part` sets an image bit no named bit covers, at that bit
+/// offset of the part.
+pub fn write_rows(db: &mut Db, img: &mut [u8], rows: &[(String, String, String)]) -> Result<()> {
+    for (uid, bit, v) in rows {
+        if let Some(op) = uid.strip_prefix('@') {
+            let (o, pt) = op.split_once('/').with_context(|| format!("{op}: expected object/part"))?;
+            let (_, _, start, _) = db::PARTS.iter().find(|(a, b, ..)| *a == o && *b == pt).with_context(|| format!("no part {op}"))?;
+            let off: usize = bit.parse()?;
+            let (byte, m) = (start + off / 8, 1u8 << (off % 8));
+            img[byte] = if v == "1" { img[byte] | m } else { img[byte] & !m };
+            continue;
+        }
+        let ty = db.type_of(uid)?;
+        let p = db.map(&ty).pos(uid, bit).with_context(|| format!("{uid} {bit} is not mapped"))?;
+        p.set(img, v == "1");
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
@@ -293,26 +327,60 @@ fn main() -> Result<()> {
             let mut db = Db::open(dbdir)?;
             let mut sof = sof::Sof::read(inp)?;
             for t in tables {
-                for l in std::fs::read_to_string(t).with_context(|| format!("reading {t}"))?.lines() {
-                    let f: Vec<&str> = l.split('\t').collect();
-                    if f.len() < 3 || l.starts_with('#') || f[2] == "value" {
-                        continue;
-                    }
-                    // `@object/part  offset`: an image bit no named bit covers.
-                    if let Some(op) = f[0].strip_prefix('@') {
-                        let (o, pt) = op.split_once('/').with_context(|| format!("{op}: expected object/part"))?;
-                        let (_, _, start, _) = db::PARTS.iter().find(|(a, b, ..)| *a == o && *b == pt).with_context(|| format!("no part {op}"))?;
-                        let off: usize = f[1].parse()?;
-                        let (byte, m) = (start + off / 8, 1u8 << (off % 8));
-                        let img = sof.image_mut();
-                        img[byte] = if f[2] == "1" { img[byte] | m } else { img[byte] & !m };
-                        continue;
-                    }
-                    let ty = db.type_of(f[0])?;
-                    let p = db.map(&ty).pos(f[0], f[1]).with_context(|| format!("{} {} is not mapped", f[0], f[1]))?;
-                    p.set(sof.image_mut(), f[2] == "1");
-                }
+                let text = std::fs::read_to_string(t).with_context(|| format!("reading {t}"))?;
+                let rows = text
+                    .lines()
+                    .map(|l| l.split('\t').collect::<Vec<_>>())
+                    .filter(|f| f.len() >= 3 && !f[0].starts_with('#') && f[2] != "value")
+                    .map(|f| (f[0].to_owned(), f[1].to_owned(), f[2].to_owned()))
+                    .collect::<Vec<_>>();
+                write_rows(&mut db, sof.image_mut(), &rows)?;
             }
+            let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
+            sof.write(out, &key)
+        }
+        ["extract", dbdir, g, inp, ..] => {
+            let (mut db, g) = route::open(dbdir, g)?;
+            let q = sof::Sof::read(inp)?;
+            print!("{}", rebuild::extract(&mut db, &g, q.image(), &args[4..])?);
+            Ok(())
+        }
+        ["build", dbdir, g, root, key, design, out] => {
+            let (mut db, g) = route::open(dbdir, g)?;
+            let inst = rbf::install::Install::open(std::path::Path::new(root))?;
+            let text = std::fs::read_to_string(design).with_context(|| format!("reading {design}"))?;
+            let img = rebuild::build(&mut db, &g, &text)?;
+            let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
+            sof::Sof::from_raw(sofgen::build(&inst, &img)?)?.write(out, &key)
+        }
+        ["rebuild", dbdir, g, root, key, inp, outdir, ..] => {
+            let (mut db, g) = route::open(dbdir, g)?;
+            let inst = rbf::install::Install::open(std::path::Path::new(root))?;
+            let q = sof::Sof::read(inp)?;
+            std::fs::create_dir_all(outdir)?;
+            let text = rebuild::extract(&mut db, &g, q.image(), &args[7..])?;
+            let dpath = std::path::Path::new(outdir).join("design.txt");
+            std::fs::write(&dpath, &text)?;
+            let img = rebuild::build(&mut db, &g, &std::fs::read_to_string(&dpath)?)?;
+            let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
+            sof::Sof::from_raw(sofgen::build(&inst, &img)?)?.write(&std::path::Path::new(outdir).join("rebuilt.sof").to_string_lossy(), &key)?;
+            blank::diff(&mut db, &img, q.image())
+        }
+        ["pintable", dbdir, specs @ ..] if !specs.is_empty() => {
+            let mut db = Db::open(dbdir)?;
+            let pins = pins::parse(&db, &args[2..])?;
+            println!("uid\tbit\tvalue");
+            for (u, b, v) in pins::table(&mut db, &pins)? {
+                println!("{u}\t{b}\t{v}");
+            }
+            Ok(())
+        }
+        ["pins", dbdir, inp, out, key, specs @ ..] if !specs.is_empty() => {
+            let mut db = Db::open(dbdir)?;
+            let mut sof = sof::Sof::read(inp)?;
+            let pins = pins::parse(&db, &args[5..])?;
+            let rows = pins::table(&mut db, &pins)?;
+            write_rows(&mut db, sof.image_mut(), &rows)?;
             let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
             sof.write(out, &key)
         }
@@ -336,6 +404,31 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
+        ["traceback", g, node, depth] => {
+            let g = graph::Graph::load(std::path::Path::new(g))?;
+            let idx = g.index();
+            let mut rev: std::collections::HashMap<u32, Vec<(u32, usize)>> = Default::default();
+            for s in 0..g.names.len() as u32 {
+                for e in g.fanout(s) {
+                    rev.entry(g.dst[e]).or_default().push((s, e));
+                }
+            }
+            let mut frontier = vec![*idx.get(node).with_context(|| format!("no node {node}"))?];
+            let mut seen: std::collections::HashSet<u32> = frontier.iter().copied().collect();
+            for d in 0..depth.parse::<usize>()? {
+                let mut next = Vec::new();
+                for &n in &frontier {
+                    for &(s, e) in rev.get(&n).map(Vec::as_slice).unwrap_or(&[]) {
+                        println!("{d}\t{}\t{}\t{}\t{}", g.names[s as usize], g.names[n as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
+                        if seen.insert(s) {
+                            next.push(s);
+                        }
+                    }
+                }
+                frontier = next;
+            }
+            Ok(())
+        }
         ["imgdiff", dbdir, a, b] => {
             let mut db = Db::open(dbdir)?;
             blank::diff(&mut db, sof::Sof::read(a)?.image(), sof::Sof::read(b)?.image())
@@ -347,6 +440,18 @@ fn main() -> Result<()> {
                 if prefixes.iter().any(|p| name.starts_with(*p)) {
                     for e in g.fanout(n as u32) {
                         println!("{name}\t{}\t{}\t{}", g.names[g.dst[e] as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
+                    }
+                }
+            }
+            Ok(())
+        }
+        ["fanin", g, prefixes @ ..] if !prefixes.is_empty() => {
+            let g = graph::Graph::load(std::path::Path::new(g))?;
+            for s in 0..g.names.len() as u32 {
+                for e in g.fanout(s) {
+                    let name = &g.names[g.dst[e] as usize];
+                    if prefixes.iter().any(|p| name.starts_with(*p)) {
+                        println!("{name}\t{}\t{}\t{}", g.names[s as usize], g.uids[g.uid[e] as usize], g.cfgs[g.cfg[e] as usize]);
                     }
                 }
             }
