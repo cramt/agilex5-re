@@ -1,0 +1,76 @@
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY ck1
+set_global_assignment -name VERILOG_FILE ck1.v
+set_global_assignment -name SDC_FILE ck1.sdc
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
+set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+
+set_location_assignment PIN_V19 -to CK[0]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[0]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[0]
+set_location_assignment PIN_BJ23 -to CK[1]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[1]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[1]
+set_location_assignment PIN_CF2 -to CK[2]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[2]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[2]
+set_location_assignment PIN_V16 -to CK[3]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[3]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[3]
+set_location_assignment PIN_BF23 -to CK[4]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[4]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[4]
+set_instance_assignment -name CLOCK_REGION "SX1 SY0 SX1 SY0" -to CK[4]
+set_location_assignment PIN_C8 -to CK[5]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[5]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[5]
+set_location_assignment PIN_C11 -to CK[6]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[6]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[6]
+set_location_assignment PIN_CJ1 -to CK[7]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[7]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[7]
+set_location_assignment PIN_CH6 -to CK[8]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[8]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[8]
+set_location_assignment PIN_CH19 -to CK[9]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[9]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[9]
+set_location_assignment PIN_CR8 -to CK[10]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[10]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[10]
+set_location_assignment PIN_CE19 -to CK[11]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CK[11]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[11]
+set_location_assignment PIN_AE8 -to CK[12]
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to CK[12]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[12]
+set_location_assignment PIN_AE11 -to CK[13]
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to CK[13]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[13]
+set_location_assignment PIN_AU1 -to CK[14]
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to CK[14]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[14]
+set_location_assignment PIN_AP1 -to CK[15]
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to CK[15]
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CK[15]
+set_location_assignment PIN_DK24 -to EN
+set_instance_assignment -name IO_STANDARD "1.1-V" -to EN
+set_location_assignment PIN_Y1 -to O
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to O
+set_location_assignment PIN_DJ35 -to CLOCK0_50
+set_instance_assignment -name IO_STANDARD "1.1-V" -to CLOCK0_50
+set_instance_assignment -name GLOBAL_SIGNAL "GLOBAL CLOCK" -to CLOCK0_50
+set_location_assignment PIN_DF35 -to LED0
+set_instance_assignment -name IO_STANDARD "1.1-V" -to LED0
+set_location_assignment PIN_AJ1 -to DQ[0]
+set_location_assignment PIN_BA1 -to DQ[1]
+set_location_assignment PIN_AC1 -to DQO
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to DQ[*]
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to DQO
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to DQ[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DQO
