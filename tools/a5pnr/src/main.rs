@@ -14,6 +14,7 @@ mod netlist;
 mod place;
 mod readback;
 mod route;
+mod timing;
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -162,12 +163,15 @@ fn main() -> Result<()> {
                 }
             }
         };
-        let mut ss: Vec<u32> = sinks.iter().map(node).collect::<Result<_>>()?;
+        let ends: Vec<(End, u32)> = sinks.iter().map(|e| Ok((*e, node(e)?))).collect::<Result<_>>()?;
+        let mut ss: Vec<u32> = ends.iter().map(|e| e.1).collect();
         ss.sort();
         ss.dedup();
-        rnets.push(route::Net { name: nl.nets[*net as usize].clone(), source: node(d)?, sinks: ss, clock: Some(*net) == packed.clock });
+        rnets.push((route::Net { name: nl.nets[*net as usize].clone(), source: node(d)?, sinks: ss, clock: Some(*net) == packed.clock }, *net, ends));
     }
-    rnets.sort_by_key(|n| (!n.clock, std::cmp::Reverse(n.sinks.len())));
+    rnets.sort_by_key(|n| (!n.0.clock, std::cmp::Reverse(n.0.sinks.len())));
+    let net_ends: Vec<(u32, Vec<(End, u32)>)> = rnets.iter().map(|n| (n.1, n.2.clone())).collect();
+    let rnets: Vec<route::Net> = rnets.into_iter().map(|n| n.0).collect();
     let mut delay: HashMap<String, f32> = HashMap::new();
     for l in std::fs::read_to_string(delays).context("reading delays")?.lines().skip(1) {
         let f: Vec<&str> = l.split('\t').collect();
@@ -179,6 +183,29 @@ fn main() -> Result<()> {
     let routed = route::route(&g, &rnets, &route::base_costs(&g, &delay), 60)?;
     let hops: usize = routed.trees.iter().map(|t| t.len()).sum();
     eprintln!("route: {} nets, {} hops, {} iterations, {:.1} s", rnets.len(), hops, routed.iterations, t1.elapsed().as_secs_f64());
+
+    // Delay estimate (README (u)): each routed hop costs its node type's
+    // mean, cells their arcs' means.
+    let model = timing::Model { d: delay.clone() };
+    let mut routed_delay: HashMap<(u32, End), f32> = HashMap::new();
+    for (ni, tree) in routed.trees.iter().enumerate() {
+        let parent: HashMap<u32, u32> = tree.iter().map(|&(a, b)| (b, a)).collect();
+        let (net, ends) = &net_ends[ni];
+        for (e, n) in ends {
+            let mut d = 0.0f32;
+            let mut m = *n;
+            while let Some(&p) = parent.get(&m) {
+                d += delay.get(&format!("re:{}", g.type_name(m))).copied().unwrap_or(0.05);
+                m = p;
+            }
+            routed_delay.insert((*net, *e), d);
+        }
+    }
+    let mut tm = timing::Timing::new(&nl, &packed, &model, &routed_delay);
+    let (worst, at) = tm.worst();
+    if worst > 0.0 {
+        eprintln!("timing: longest path to a flop {worst:.3} ns ({at}), {:.0} MHz by the delay model", 1000.0 / worst);
+    }
 
     // The design file (README (q), docs/toolchain.md).
     let mut text = format!("# a5pnr design: {top} from {json}\n");

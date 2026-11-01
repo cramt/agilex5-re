@@ -27,7 +27,7 @@ pub enum Alm {
 }
 
 /// Where a net comes from or goes to, before placement.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum End {
     /// ALM a's output: half h, xreg0 (the flop) or xreg1 (combinational).
     Out { alm: usize, h: u8, ff: bool },

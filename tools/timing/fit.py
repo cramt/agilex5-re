@@ -75,6 +75,8 @@ def main():
         for d, hops in paths(sys.argv[2:]).values():
             for c, v in data_hops(hops):
                 acc[c].append(v)
+            # Setup is on the required side of the path.
+            acc['tsu'] += [v for c, v in hops if c == 'tsu']
         print('class\tn\tmean_ns\tmin_ns\tmax_ns')
         for c in sorted(acc):
             v = acc[c]
