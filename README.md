@@ -1817,6 +1817,66 @@ read from the device database.
 - a5pnr (w) uses the `re:` means as PathFinder base costs. Timing-driven
   placement and a path-delay report are not written yet.
 
+### (v) Phase 6: IOPLL settings from frequencies
+
+`python3 -I tools/pll/iopll.py <ref ball> <ref MHz> <out MHz>[,…]` writes an
+IOPLL's a5db design-file lines for any reference and output frequencies:
+the template every PLL here shares
+([`db/sm4revb/io/iopll.tsv`](db/sm4revb/io/iopll.tsv): 38 attributes, 5
+DIRECT values, 12 named bits, all equal in the five PLLs compiled) plus the
+counters, reference select, output enables and charge-pump trims below.
+`tools/pll/check.sh` builds them over the idle image and compares every
+named bit under `xpllwrap_top` with a Quartus image.
+
+- **Frequencies → N, M, C** (`tools/pll/compute.py`) [obs]: the
+  altera_iopll IP's own choice, learnt from a sweep that generates the IP
+  for many frequency sets with no fit (`tools/pll/ipsweep.py`: ip-deploy
+  and qsys-generate, then the `tennm_iopll` atom parameters; about 5 min per
+  set on this machine). The rule: the VCO candidates are the multiples of
+  the outputs' least common multiple from 3,200 MHz down to 600 MHz; for
+  each, the smallest N whose PFD frequency (reference / N) is at least
+  10 MHz and makes M = VCO / PFD an integer; the first candidate with such
+  an N wins, and C_i = VCO / out_i. For example 50 → 120 MHz gives VCO
+  3,120 MHz, N = 5, M = 312, C = 26 (3,000 MHz with N = 1 would also work,
+  but a higher VCO wins), and 50 → 13.5 MHz gives 3,037.5 MHz with N = 4.
+  - Training: 32 frequency sets (references 10–156.25 MHz, outputs 10 MHz
+    to 1 GHz, up to four outputs). 31 match; the other, 1 MHz, has no exact
+    solution, and the IP falls back to the nearest it can reach (600 MHz /
+    510).
+  - **Held out**: predictions written to `tools/pll/predictions.tsv` and
+    committed before the IPs were generated, for 6 sweep sets (50 → 125,
+    180, 48, 65, 16 and 200/100/50/25 MHz) and pb's four PLLs (50 → 64/160,
+    100/12.5, 270; 25 → 40/80): **10 of 10 match** the IP's N, M and C. A
+    seventh set, 50 → 1,200 MHz, is refused by ip-deploy itself, so there
+    is an output-frequency ceiling the rule doesn't model [unk].
+- **Counters → bits** [obs on pl and pa, five PLLs]: across the five, only
+  these PLL settings differ:
+  - C_k: `xccnt_iopll<k>` hi = ⌈C/2⌉ and lo = ⌊C/2⌋ (8-bit DIRECT), and
+    `dprio_c_m_cnt_even_duty_en` = ENABLED for odd C (C = 105 → 53 / 52);
+    an unused C1 is 255 / 255; counters 2–6 stay bypassed unless used;
+  - M: `gdiv/dprio_c_m_cnt_hi_div_user`, 9 bits, is M itself (63, 64, 125,
+    312);
+  - N: bypassed for N = 1; otherwise `pll_n_cnt_bypass_en` DIV_ENABLED, hi
+    and lo as for C, odd duty for odd N (N = 5 → 3 / 2);
+  - `xpllcoutbuf<k>/cnt_out_en` for each used output above 0;
+  - the reference mux `hviowr_pllwrap_clk_mux_sel` = PLL_CLKMUX_IOCLKIN_(2 + k)
+    for the bank-half 1 reference pad `HVIO_B1_2_<k>` (CE19 and V16 → 3, BF23
+    and AE11 → 2); bank-half 0 pads are [unk];
+  - charge-pump and lock-filter trims follow the PFD frequency [inf, three
+    values seen]: 50 MHz → `cpi_trim` 00110, `cpp_trim` 01001,
+    `cr_lockf_early` 1000; 25 MHz → 00011, 00011, 1000; 10 MHz → 00010,
+    00010, 1011. Other PFD frequencies are [unk] and iopll.py refuses them.
+- **Check** (`tools/pll/check.sh`): pa (training, four PLLs: 50 → 75/30,
+  120, 33.33/200; 25 → 125): 2,776 of 2,776 named bits equal Quartus'.
+  **pb (held out**: compiled after the rule and template were fixed; four
+  PLLs: 50 → 64/160, 50 → 100/12.5, 50 → 270 with N = 5 and M = 297,
+  25 → 40/80 with M = 128): **2,776 of 2,776 named bits equal Quartus'**,
+  the PFD-based trims included (10 MHz with a different M than training,
+  25 MHz likewise).
+- The PLL's input pin and output routing are not in these lines: the
+  reference pin needs its pin bits, and each output enters the clock
+  network as a graph edge (r).
+
 ### (w) Phase 6: an open flow (yosys, a5pnr, a5db)
 
 `tools/a5pnr/flow.sh <top> <pins.txt> <out> <design.v>` takes Verilog to a
