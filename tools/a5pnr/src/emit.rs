@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use anyhow::Result;
 
 use crate::netlist::{Cell, Netlist, Sig};
-use crate::pack::{Alm, Ctl, Logic, Packed, Slot, Src, LUT_IN};
+use crate::pack::{half_function, widen, Alm, Ctl, HalfLut, Logic, Packed, Slot, Src};
 use crate::place::{Lab, Placement};
 
 /// LAB_RE pins of a LAB's control lines (README (y), ct): clock 0, enables
@@ -44,10 +44,19 @@ pub fn alm_path(k: u8) -> String {
     }
 }
 
-/// asm2's DIRECT lut_mask (MSB first) for a 6-LUT whose WYSIWYG mask is w
-/// (bit i: index i = {F, E, D, C, B, A}): stored[j] = ¬w[j ^ 31] (README (h)).
-pub fn lut_stored(w: u64) -> String {
-    (0..64).rev().map(|j| if w >> (j ^ 31) & 1 == 1 { '0' } else { '1' }).collect()
+/// asm2's DIRECT lut_mask (MSB first) for a 6-LUT whose function is w (bit
+/// i: index i = {F, E, D, C, B, A}), as it comes out through `LUTOUT_6LUT`:
+/// out = ¬stored[32·¬F + {E, D, C, B, A}], so stored[j] = ¬w[j ^ 32]
+/// [obs, Quartus' fr image against its RTL: 27 of 27 LUTs, README (z3)].
+pub fn six_stored(w: u64) -> String {
+    (0..64).rev().map(|j| if w >> (j ^ 32) & 1 == 1 { '0' } else { '1' }).collect()
+}
+
+/// The lut_mask for two 5-LUTs as they come out through `LUTOUT_5LUT`:
+/// half h's function over its {E, D, C, B, A} is stored bits 32h..32h + 31
+/// as is [obs, fr: 55 of 55, README (z3)].
+pub fn five_stored(w: u64) -> String {
+    (0..64).rev().map(|j| if w >> j & 1 == 1 { '1' } else { '0' }).collect()
 }
 
 /// An arithmetic ALM's stored mask: half h's p at bits 32h..32h+15 and g at
@@ -58,15 +67,6 @@ pub fn arith_stored(pg: [(u16, u16); 2]) -> String {
         v |= (*p as u64) << (32 * h) | (*g as u64) << (32 * h + 16);
     }
     (0..64).rev().map(|j| if v >> j & 1 == 1 { '1' } else { '0' }).collect()
-}
-
-/// A LUT over its inputs (bit k of the index is input k) as a 64-entry
-/// WYSIWYG mask over A..F, input k on position pins[k].
-pub fn widen(mask: u64, pins: &[u8]) -> u64 {
-    (0..64u64).fold(0u64, |acc, j| {
-        let idx = pins.iter().enumerate().fold(0usize, |x, (k, &p)| x | ((j >> p & 1) as usize) << k);
-        acc | (mask >> idx & 1) << j
-    })
 }
 
 /// A LAB's control lines after placement.
@@ -128,11 +128,29 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
         let mut set = |path: String, v: &str| attrs.push((uid.clone(), path, v.to_owned()));
         let ll = &lines[&l];
         match &alm.logic {
-            Logic::Lut { cell, pins } => {
+            Logic::Six { cell, pos } => {
                 let Cell::Lut { mask, .. } = &nl.cells[*cell] else { unreachable!() };
-                // A constant-0 LUT's stored mask is all ones: the idle value,
-                // which an image doesn't show.
-                let stored = lut_stored(widen(*mask, pins));
+                // The idle stored mask is all ones (a constant-0 6-LUT), which
+                // an image doesn't show.
+                let stored = six_stored(widen(*mask, pos));
+                if stored.contains('0') {
+                    directs.push((uid.clone(), format!("{pa}/xcw_la_le_lut/lut_mask"), stored));
+                }
+            }
+            Logic::Five { halves } => {
+                let mut w = 0u64;
+                for (h, half) in halves.iter().enumerate() {
+                    let Some(half) = half else { continue };
+                    let m = match half.lut {
+                        HalfLut::Cell(c) => {
+                            let Cell::Lut { mask, .. } = &nl.cells[c] else { unreachable!() };
+                            *mask
+                        }
+                        HalfLut::Pass(_) => 0b10,
+                    };
+                    w |= (half_function(h, m, &half.pins) as u64) << (32 * h);
+                }
+                let stored = five_stored(w);
                 if stored.contains('0') {
                     directs.push((uid.clone(), format!("{pa}/xcw_la_le_lut/lut_mask"), stored));
                 }
@@ -149,7 +167,6 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
                 set(format!("{pa}/xce_la_le_adder/adder_or_packed_mode"), "ENABLE_ADDER_OR_PACKED");
                 directs.push((uid.clone(), format!("{pa}/xcw_la_le_lut/lut_mask"), arith_stored(pg)));
             }
-            Logic::None => {}
         }
         let mut ce_line = 0;
         for h in 0..2usize {
@@ -163,7 +180,8 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
                 };
                 // ARITH_SUMOUT is reg_input's idle setting (both bits 0).
                 match src {
-                    Src::Lut => set(format!("{base}/reg_input"), "LUTOUT_6LUT"),
+                    Src::Lut if matches!(alm.logic, Logic::Six { .. }) => set(format!("{base}/reg_input"), "LUTOUT_6LUT"),
+                    Src::Lut => set(format!("{base}/reg_input"), "LUTOUT_5LUT"),
                     Src::Leim => set(format!("{base}/reg_input"), "LEIM"),
                     Src::Sum => {}
                 }
@@ -172,12 +190,15 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
                     Slot::Ff { ff, .. } => {
                         let Cell::Ff(f) = &nl.cells[ff] else { unreachable!() };
                         set(format!("{base}/register_comb"), "DFF_LATCH");
+                        // xreg0's selects serve the whole half [obs, cql:
+                        // 391 of 391 enabled xreg1 flops alone in their half
+                        // have ce_sel on xreg0, README (z3)].
                         if let Some(ce) = f.ce {
-                            set(format!("{base}/ce_sel"), "CE");
+                            set(format!("{r0}/xreg0/ce_sel"), "CE");
                             ce_line = ll.ce.iter().position(|&m| m == ce).unwrap();
                         }
                         if f.sclr.is_some() {
-                            set(format!("{base}/sclr_sel"), "SCLR");
+                            set(format!("{r0}/xreg0/sclr_sel"), "SCLR");
                         }
                         half_ff = Some(f.clone());
                     }
@@ -247,11 +268,6 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
     attrs.sort();
     attrs.dedup();
     (attrs, directs)
-}
-
-/// The ALM input pin for LUT position p.
-pub fn lut_pin(p: u8) -> u8 {
-    LUT_IN[p as usize]
 }
 
 /// Which netlist register each image flop holds (for simulation only: the

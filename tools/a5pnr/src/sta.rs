@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use crate::netlist::{Cell, Netlist};
-use crate::pack::{Alm, End, Logic, Packed, Slot, Src, ARITH_IN, LEIM_POS, LUT_IN};
+use crate::pack::{pin_letter, six_pins, Alm, End, HalfLut, Logic, Packed, Slot, Src, ARITH_IN, LEIM_PIN};
 
 /// M20K read data comes out 1.43 ns after the clock (mm's report_path).
 pub const M20K_TCO: f32 = 1.429;
@@ -105,7 +105,7 @@ impl Sta {
                     Some(Slot::Ff { ff, .. }) => {
                         starts.push((src, get("tco"), ff_clock(nl, ff)));
                     }
-                    Some(Slot::Wire { src: Src::Lut }) => edges.push((id((2, alm, 0)), src, Arc::Fixed(0.0))),
+                    Some(Slot::Wire { src: Src::Lut }) => edges.push((id((2, alm, lut_key(&p.alms[alm], slot as usize))), src, Arc::Fixed(0.0))),
                     Some(Slot::Wire { src: Src::Sum }) => edges.push((id((3, alm, slot as u32 / 2)), src, Arc::Fixed(0.0))),
                     _ => {}
                 },
@@ -148,12 +148,21 @@ impl Sta {
         }
         for (a, alm) in p.alms.iter().enumerate() {
             match &alm.logic {
-                Logic::Lut { cell, pins } => {
-                    let Cell::Lut { ins, .. } = &nl.cells[*cell] else { unreachable!() };
-                    for k in 0..ins.len() {
-                        let pos = pins[k] as usize;
-                        let letter = b"abcdef"[pos] as char;
-                        edges.push((id((1, a, LUT_IN[pos] as u32)), id((2, a, 0)), Arc::Fixed(get(&format!("lut:data{letter}")))));
+                // LUT outputs: key (2, a, h) for half h's 5-LUT, (2, a, 0) for
+                // a 6-LUT; an arc from every pin the LUT reads.
+                Logic::Six { pos, .. } => {
+                    for &p in pos {
+                        for pin in six_pins(p) {
+                            edges.push((id((1, a, pin as u32)), id((2, a, 0)), Arc::Fixed(get(&format!("lut:data{}", pin_letter(pin))))));
+                        }
+                    }
+                }
+                Logic::Five { halves } => {
+                    for (h, half) in halves.iter().enumerate() {
+                        let Some(half) = half else { continue };
+                        for &pin in &half.pins {
+                            edges.push((id((1, a, pin as u32)), id((2, a, h as u32)), Arc::Fixed(get(&format!("lut:data{}", pin_letter(pin))))));
+                        }
                     }
                 }
                 Logic::Arith { halves } => {
@@ -176,14 +185,13 @@ impl Sta {
                         }
                     }
                 }
-                Logic::None => {}
             }
             for s in 0..4usize {
                 let Some(Slot::Ff { ff, src }) = alm.slots[s] else { continue };
                 let from = match src {
-                    Src::Lut => id((2, a, 0)),
+                    Src::Lut => id((2, a, lut_key(alm, s))),
                     Src::Sum => id((3, a, s as u32 / 2)),
-                    Src::Leim => id((1, a, LUT_IN[LEIM_POS[s / 2] as usize] as u32)),
+                    Src::Leim => id((1, a, LEIM_PIN[s / 2] as u32)),
                 };
                 let x = id((5, usize::MAX - a * 4 - s, 1));
                 edges.push((from, x, Arc::Fixed(get("reg_d"))));
@@ -291,16 +299,30 @@ impl Sta {
     }
 }
 
-/// Unused ALM count by kind, for reports.
-pub fn alm_kinds(p: &Packed) -> (usize, usize, usize) {
-    let (mut lut, mut arith, mut ffonly) = (0, 0, 0);
-    for a in &p.alms {
-        match a.logic {
-            Logic::Lut { .. } => lut += 1,
-            Logic::Arith { .. } => arith += 1,
-            Logic::None => ffonly += 1,
-        }
+/// The STA key of the LUT output slot s reads: half s / 2's 5-LUT, or the
+/// 6-LUT.
+fn lut_key(alm: &Alm, s: usize) -> u32 {
+    match alm.logic {
+        Logic::Six { .. } => 0,
+        _ => s as u32 / 2,
     }
-    let _: Option<&Alm> = None;
-    (lut, arith, ffonly)
+}
+
+/// ALM counts by kind, for reports: 6-LUT, two 5-LUTs, one 5-LUT (with
+/// or without a pass-through half), arithmetic, flops only.
+pub fn alm_kinds(p: &Packed) -> [usize; 5] {
+    let mut n = [0; 5];
+    for a in &p.alms {
+        let k = match &a.logic {
+            Logic::Six { .. } => 0,
+            Logic::Five { halves } => match halves.iter().filter(|h| matches!(h, Some(x) if matches!(x.lut, HalfLut::Cell(_)))).count() {
+                2 => 1,
+                1 => 2,
+                _ => 4,
+            },
+            Logic::Arith { .. } => 3,
+        };
+        n[k] += 1;
+    }
+    n
 }

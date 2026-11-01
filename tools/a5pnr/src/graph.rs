@@ -8,6 +8,7 @@ use anyhow::{ensure, Context, Result};
 use rustc_hash::FxHashMap;
 
 /// Edge classes, as `a5db usable` writes them (a5db src/route.rs).
+pub const NO: u8 = 0;
 pub const MUX: u8 = 1;
 pub const PASS: u8 = 2;
 pub const CLOCK: u8 = 3;
@@ -41,6 +42,19 @@ fn parse(n: &str) -> Option<(&str, u32, u32, u32, u32)> {
 }
 
 impl Graph {
+    /// Per node: whether exactly one graph edge enters it. An edge into such
+    /// a node with nothing to configure (class NO: the spare row's
+    /// redundancy tiles, which have no bit map, README (s)) passes its
+    /// signal with no choice involved, so the readback follows it
+    /// (README (z3)); the router doesn't take it.
+    pub fn single_fanin(&self) -> Vec<bool> {
+        let mut n = vec![0u8; self.len()];
+        for &d in &self.dst {
+            n[d as usize] = n[d as usize].saturating_add(1);
+        }
+        n.into_iter().map(|c| c == 1).collect()
+    }
+
     pub fn load(dir: &Path) -> Result<Graph> {
         let text = std::fs::read_to_string(dir.join("nodes.tsv")).context("reading nodes.tsv")?;
         let mut g = Graph {

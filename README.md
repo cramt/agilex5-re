@@ -725,7 +725,9 @@ forms were recovered from the binaries, since `-help` prints nothing.
   the 25 unmapped ones. Asm2's DIRECT `lut_mask` is the raw bits,
   `lut_mask[j] = rb{j>>5}lut[j & 31]` (10/10 ALMs). So the WYSIWYG/ECO mask
   is `W[i] = ¬BCM[i XOR 31]`: inputs A–E are inverted in silicon, and the
-  stored value too [inf]. fz0's original LUTs don't decode to their
+  stored value too [inf]. (Phase 8, README (z3): that is the WYSIWYG port
+  convention; what the silicon computes through `LUTOUT_6LUT` is
+  ¬BCM[i XOR 32], checked against Quartus' own image of a design.) fz0's original LUTs don't decode to their
   WYSIWYG masks (fitter input permutation [inf]); the ECO `-mask` values
   land as given.
   On blinky, a different fit, the database finds exactly the instances the
@@ -2222,6 +2224,102 @@ SW0 up; with SW0 down that is 12.6 M cycles, 0.25 s per count at 50 MHz.
   cells into one shared by six chains, so it now merges LUTs only; yosys
   keeps one of the four one-hot state bits as an inverted flop
   (`dfflegalize` flip_bits) and derives the RTL bit from it.
+
+### (z3) Phase 8: what an ALM computes, checked against Quartus' own image
+
+Every check so far compared a5pnr's images with a5pnr's intent: a5db
+extract, the readback, the simulation and asm2 all agree when writer and
+reader share a wrong rule. Phase 8's oracle is Quartus' own: `designs/fr`
+(`gen.py`: 192 registers, each the next state of a random 2- to 7-input
+function, a shift register, async clears; Quartus Pro packs it into 233
+ALMs, 31 LABs/MLABs, two LUTs per ALM where it can) is compiled by
+Quartus, its image decoded by `a5db extract`, rebuilt by `a5pnr readback`
+and simulated against `fr.v`. The fitted atoms (`tools/alm/atoms.tcl`, now
+with the right key `LUTMASK_LUT_MASK`; it still returns no mask) say which
+register sits where (`tools/alm/ffmap.py`) and which ports each LUT reads.
+Specimens: `specimens/p8/alm/fr0` (Quartus run), `specimens/p8/ex/fr.txt`
+(extract), `specimens/p8/oracle/fr` (readbacks, scripts).
+
+- **The ALM's pins** [obs, fr's atoms, `tools/alm/halves.py`]: of the
+  eight pins E0, D0, C0, A, B, C1, D1, E1 (offsets 0–7 of the ALM's
+  LAB_RE pins), half 0's 5-LUT reads A, B, C0, D0, E0 and half 1's A, B,
+  C1, D1, E1; a 6-input atom reads E on E0 and F on E1, and Quartus routes
+  its C and D to both C0, C1 and D0, D1. Every atom's flop fanins land on
+  exactly these pins.
+- **What the stored mask computes** [obs: every LUT of fr between two
+  registers, `tools/alm/lutrule.py`: 54 through `LUTOUT_5LUT` and 27
+  through `LUTOUT_6LUT` agree, none differ]: with S the DIRECT `lut_mask` (S[j] is
+  the j-th bit from the right of asm2's string) and idx = {E, D, C, B, A}
+  of the half,
+  - `LUTOUT_5LUT` of half h is **S[32h + idx]**, as stored;
+  - `LUTOUT_6LUT` is **¬S[32·¬F + idx]** (F = E1, E = E0): both the half
+    select and the output are inverted. Which half reads C0/D0 and which
+    C1/D1 is [inf] (the low stored half C0/D0); Quartus routes both, and
+    a5pnr now does too.
+
+  **Phase 2's rule W[i] = ¬S[i ^ 31] (README (h)) was wrong for the
+  function the silicon computes.** It came from ECO `-mask` values, i.e.
+  Quartus' WYSIWYG port convention, and differs from the truth by
+  complementing all six inputs: a 6-LUT written under it computes
+  W(¬inputs). a5pnr's writer and readback used it from phase 6 on, so
+  every check passed, but **every phase 6–7 image with a LUT in it
+  computes the wrong function on silicon** (blinky, a pure carry chain,
+  and the arithmetic halves are unaffected: their rule (w) came from
+  Quartus' stored masks directly). Phase 4's hand-made scratch blinky
+  (`designs/blinky_a5db`) has the same fault: its first counter bit never
+  toggles. Both are rebuilt with the rule above.
+- **The direct LUT outputs** [obs, the atoms behind 52 direct pins]:
+  `lut5_powerdown = LUT5_OUT` drives LAB_RE 129 + k (ALM k < 5) or
+  139 + k − 5 from the ALM's **half-1** 5-LUT, `lut6_powerdown = LUT6_OUT`
+  the pin 5 above from the 6-LUT. Quartus uses them for LUT outputs read
+  only by other LUTs, saving a register slot. The first readback guess
+  (half 0) built 24 combinational loops out of fr; that was the OOM below.
+- **The enable and synchronous clear serve the whole half** [obs, fr and
+  cql]: `xreg0`'s `ce_sel` and `sclr_sel` are the only selects, and they
+  gate `xreg1` too. In cql (designs/p8/cql, Quartus' fit of the CPU) all 391
+  halves with an enabled flop in `xreg1` alone have `ce_sel = CE` on
+  `xreg0` (empty or a wire), 10 of 10 likewise for `sclr_sel`, and the 255
+  halves with flops in both slots have the same enable in both; fr's
+  duplicated r[25] and r[38] keep their synchronous clear in `xreg1`.
+  a5pnr used to put a plain flop beside an enabled or cleared one, which
+  on silicon would have been gated too (acc, ctl, the CPU); now a half's
+  two flops share their enable and clear, and two flops with the same
+  enable may share a half, which is what lets a register file pack four
+  bits to an ALM.
+- **Register positions** [obs]: FF atom `N` = 6k + 3h + 1 + r is ALM k,
+  half h, `xreg{r}` (338 of 348 fr flops agree on `reg_input`; the rest are
+  pass-through LUTs the atom netlist doesn't show).
+- **The spare row** [obs]: Quartus routes vertical wires across row 5,
+  where the redundancy tiles sit (`*_rsp*`, `cw_rd_*`, README (s)), over
+  graph edges with no bit map (`V1:X107Y5Z0I57 → I98`); a5db's join
+  classes them NO. Each enters a node with no other fanin, so an
+  unrepaired device has nothing to select there, and the readback now
+  follows such edges (8 of fr's LUT inputs came out undriven without it).
+  The router still doesn't take them.
+- **Hyper-Retiming** [obs]: Quartus Pro retimed fr (`~ERTM` flops: state
+  moved across logic, not the named register) and made `lfsr`'s power-up
+  1 its own way. So the oracle runs from power-up, the RTL at its declared
+  initial values and the image at its 0s, with the retimed flops out of
+  the map.
+- **Result** [obs] (`tools/alm/oracle.sh specimens/p8/alm/fr0 fr
+  designs/fr/fr.pins <out> 5000 designs/fr/fr.v`, `SIMCHECK_HOLD=KEY0=1`):
+  the netlist rebuilt from Quartus' fr image runs like
+  `fr.v` for **5,000 cycles from power-up, 337 registers and 4 outputs
+  compared, 0 mismatches**, and 1,000 cycles with KEY0 held (the
+  asynchronous clear) likewise; under phase 2's rule it was 627,863
+  mismatches. This is the first check of the ALM model that a5pnr's own
+  assumptions can't pass by agreeing with themselves.
+
+**The OOM that killed the previous phase-8 run**: vvp reached 11 GB on fr's
+readback. The rebuilt netlist had combinational loops (the wrong direct-
+output guess above), so simulated time never advanced while vvp's event
+queue grew. simcheck now runs iverilog and vvp in their own memory cgroup
+(`tools/cap.sh`, `SIMCHECK_MEM`, default 8G) under a wall-clock limit
+(`SIMCHECK_TIMEOUT`, 3,600 s) and reports which one hit; the same run now
+dies at 4 GB in 90 s, alone. Two more simcheck fixes came out of the
+oracle: a register Quartus duplicated gets the same random value in every
+copy, and with 0 random cycles the power-up run leaves the RTL at its own
+initial values.
 
 ### quartus_sta fails under chipsmith [obs]
 

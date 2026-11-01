@@ -4,6 +4,9 @@
 //!     --seed N       placement seed (1)
 //!     --effort X     annealing moves per temperature, x N^(4/3) (1)
 //!     --no-timing    wire length only, no timing-driven placement or routing
+//!     --pack M       pairs (default): two LUTs of up to five inputs per ALM;
+//!                    related: only LUTs that share inputs or connect;
+//!                    single: one LUT per ALM in 6-LUT mode (phase 7)
 //!
 //! Reads a yosys netlist (tools/a5pnr/synth.sh), packs it into ALMs, places
 //! them by simulated annealing, routes every net with PathFinder over the
@@ -93,6 +96,19 @@ fn main() -> Result<()> {
             }
             return Ok(());
         }
+        if cmd == "fanin" {
+            // Debugging aid: each node's fanin with the edge classes.
+            let g = graph::Graph::load(std::path::Path::new(gdir))?;
+            let want: Vec<u32> = nodes.iter().map(|n| g.node(n).with_context(|| format!("no node {n}"))).collect::<Result<_>>()?;
+            for src in 0..g.len() as u32 {
+                for e in g.fanout(src) {
+                    if want.contains(&g.dst[e]) {
+                        println!("{} > {}\tclass {}", g.name(src), g.name(g.dst[e]), g.class[e]);
+                    }
+                }
+            }
+            return Ok(());
+        }
         if cmd == "fanout" {
             // Debugging aid: each node's fanout with the edge classes.
             let g = graph::Graph::load(std::path::Path::new(gdir))?;
@@ -106,25 +122,34 @@ fn main() -> Result<()> {
         }
     }
     let [_, db, gdir, delays, json, top, pins, out, rest @ ..] = args.as_slice() else {
-        bail!("usage: a5pnr <db> <graph> <delays.tsv> <netlist.json> <top> <pins.txt> <out design.txt> [--seed N] [--effort X] [--no-timing]");
+        bail!("usage: a5pnr <db> <graph> <delays.tsv> <netlist.json> <top> <pins.txt> <out design.txt> [--seed N] [--effort X] [--no-timing] [--pack pairs|related|single]");
     };
-    let (mut seed, mut effort, mut timing_driven) = (1u64, 1.0f64, true);
+    let (mut seed, mut effort, mut timing_driven, mut pack_mode) = (1u64, 1.0f64, true, pack::PackMode::Pairs);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--seed" => seed = it.next().context("--seed N")?.parse()?,
             "--effort" => effort = it.next().context("--effort X")?.parse()?,
             "--no-timing" => timing_driven = false,
+            "--pack" => {
+                pack_mode = match it.next().map(String::as_str) {
+                    Some("pairs") => pack::PackMode::Pairs,
+                    Some("related") => pack::PackMode::Related,
+                    Some("single") => pack::PackMode::Single,
+                    _ => bail!("--pack pairs|related|single"),
+                }
+            }
             x => bail!("unknown option {x}"),
         }
     }
     let t0 = std::time::Instant::now();
     let nl = netlist::read(json, top)?;
-    let packed = pack::pack(&nl)?;
-    let (n_lut, n_arith, n_ff) = sta::alm_kinds(&packed);
+    let packed = pack::pack(&nl, pack_mode)?;
+    let [n6, n55, n5, n_arith, n_ff] = sta::alm_kinds(&packed);
     let n_ffs = nl.cells.iter().filter(|c| matches!(c, netlist::Cell::Ff(_))).count();
+    let ff_alms = packed.alms.iter().filter(|a| a.slots.iter().any(|s| matches!(s, Some(pack::Slot::Ff { .. })))).count();
     eprintln!(
-        "pack: {} cells into {} ALMs ({n_lut} LUT, {n_arith} arithmetic in {} chains, {n_ff} flops only), {n_ffs} flops, {} M20Ks, {} clocks",
+        "pack: {} cells into {} ALMs ({n6} 6-LUT, {n55} two 5-LUTs, {n5} one 5-LUT, {n_arith} arithmetic in {} chains, {n_ff} flops only; {ff_alms} with flops), {n_ffs} flops, {} M20Ks, {} clocks",
         nl.cells.len(),
         packed.alms.len(),
         packed.chains.len(),

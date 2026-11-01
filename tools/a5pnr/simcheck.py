@@ -89,16 +89,25 @@ def assign_all(val):
     only after a delta, so each word is built in w and written once."""
     out, words = [], {}
     hot = {}
+    # A register Quartus duplicated (`~DUPLICATE`) is in the map once per
+    # copy; every copy gets the value the RTL register gets.
+    copies = {}
     for ref, flop in regs:
+        copies.setdefault(ref, []).append(flop)
+    done = set()
+    for ref, flop in regs:
+        if ref in done:
+            continue
+        done.add(ref)
         base = ref[4:].rsplit('[', 1)[0] if ref.endswith(']') else ref[4:]
         if base in onehot and 'random' in val:
             hot.setdefault(base, []).append((ref, flop))
             continue
         mw = mem_word(ref)
         if mw:
-            words.setdefault(mw[0], []).append((mw[1], flop))
+            words.setdefault(mw[0], []).append((mw[1], copies[ref]))
         else:
-            out.append(f'      v = {val}; {ref} = v; {put(flop, "v")}')
+            out.append(f'      v = {val}; {ref} = v; ' + ' '.join(put(f, "v") for f in copies[ref]))
     for base, bits in hot.items():
         # Every bit of the RTL register, also those yosys derives instead of
         # keeping a flop for (one of femtorv32's four state bits).
@@ -110,8 +119,8 @@ def assign_all(val):
             out.append(f'      v = (bias == {i}); dut.{base}[{k}] = v;' + (f' {put(flop_of[k], "v")}' if k in flop_of else ''))
     for word, bits in words.items():
         out.append(f'      w = {word};')
-        for b, flop in bits:
-            out.append(f'      v = {val}; w[{b}] = v; {put(flop, "v")}')
+        for b, flops in bits:
+            out.append(f'      v = {val}; w[{b}] = v; ' + ' '.join(put(f, "v") for f in flops))
         out.append(f'      {word} = w;')
     return out
 
@@ -170,7 +179,12 @@ if run:
     hold = dict(kv.split('=') for kv in os.environ.get('SIMCHECK_HOLD', '').split(',') if kv)
     outs = [n for n, d, w in ports if d == 'output']
     tb.append('    bad_run = bad;')
-    tb += assign_all("1'b0")
+    # After random cycles both sides restart from 0. With none, the RTL
+    # keeps its declared initial values and the image its power-up 0s, as
+    # the device does (a Quartus image implements a register that starts
+    # at 1 its own way, README (z3)).
+    if cycles:
+        tb += assign_all("1'b0")
     for n, d, w in ports:
         if d == 'input' and n not in clocks:
             tb.append(f'    i_{n} = {hold.get(n, 0)};')
@@ -201,12 +215,22 @@ with tempfile.TemporaryDirectory() as d:
     # CPU design no longer needs it.
     iv = 'github:NixOS/nixpkgs/b134951a4c9f3c995fd7be05f3243f8ecd65d798#verilog'
     inc = sorted({os.path.dirname(os.path.abspath(f)) for f in rtl})
-    c = subprocess.run(['nix', 'shell', iv, '-c', 'iverilog', '-g2012', *[f'-I{i}' for i in inc], '-o', sim, os.path.join(d, 'tb.v'), rb, cells, *rtl], capture_output=True, text=True)
+    # Both run in their own memory cgroup (tools/cap.sh): an uncapped vvp
+    # reached 11 GB and took the agent with it on 2026-11-01. vvp has no
+    # cycle bound of its own: a combinational loop in a rebuilt netlist
+    # never lets simulated time advance, so it gets a wall-clock bound too.
+    cap = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cap.sh'), os.environ.get('SIMCHECK_MEM', '8G')]
+    c = subprocess.run([*cap, 'nix', 'shell', iv, '-c', 'iverilog', '-g2012', *[f'-I{i}' for i in inc], '-o', sim, os.path.join(d, 'tb.v'), rb, cells, *rtl], capture_output=True, text=True)
     if c.returncode != 0:
         # The old nixpkgs' evaluation warnings come first; iverilog's errors after.
         print('\n'.join(l for l in c.stderr.splitlines() if 'error' in l.lower())[-4000:])
         sys.exit(1)
-    r = subprocess.run(['nix', 'shell', iv, '-c', 'vvp', '-n', sim], capture_output=True, text=True)
+    limit = int(os.environ.get('SIMCHECK_TIMEOUT', '3600'))
+    r = subprocess.run([*cap, 'timeout', str(limit), 'nix', 'shell', iv, '-c', 'vvp', '-n', sim], capture_output=True, text=True)
+    if r.returncode in (124, 137) or (r.returncode != 0 and 'mismatches' not in r.stdout):
+        print(f'simcheck: vvp ended with status {r.returncode} (124: over {limit} s; 137: over the memory cap) before finishing')
+        print('\n'.join(r.stdout.strip().splitlines()[-12:]))
+        sys.exit(1)
     out = r.stdout.strip().splitlines()
     print('\n'.join(out[:12] + (['...'] if len(out) > 24 else []) + out[max(12, len(out) - 12):]))
     sys.exit(0 if 'mismatches' in r.stdout and ', 0 mismatches' in r.stdout else 1)

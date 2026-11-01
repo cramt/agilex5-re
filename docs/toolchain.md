@@ -64,8 +64,8 @@ Verification kinds, strongest first:
 
 | feature | modelled as | verified |
 |---|---|---|
-| LUTs | `lut_mask` DIRECT; WYSIWYG mask W relates as `W[i] = ¬stored[i XOR 31]`; LUT input A–F of ALM k is `LAB_RE` pin 8k + 3, 4, 2, 1, 0, 7 | rebuilt (ar, mm, hx), held out (hx), readback; fitter ECO runs (h) |
-| registers | 4 per ALM (`xcw_la_le_reg{0,1}/xreg{0,1}`); `reg_input` LUTOUT_6LUT/5LUT, ARITH_SUMOUT or LEIM (packed with unrelated logic); `register_comb` DFF_LATCH, REGIN, WIRE_MODE (bypass) | rebuilt, held out, readback |
+| LUTs | `lut_mask` DIRECT. Pins E0, D0, C0, A, B, C1, D1, E1 are `LAB_RE` 8k + 0..7. Half h's 5-LUT (`LUTOUT_5LUT`) is stored[32h + {E_h, D_h, C_h, B, A}]; the 6-LUT (`LUTOUT_6LUT`) is ¬stored[32·¬F + {E, D, C, B, A}] with E = E0, F = E1, C and D on both halves' pins. Direct outputs `LAB_RE` 129 + k / 139 + k − 5 (half 1's 5-LUT) and 5 above (6-LUT) | **Quartus' own fr image simulated against its RTL** (z3); rebuilt (ar, mm, hx); phases 2–7 used the WYSIWYG relation W[i] = ¬stored[i XOR 31], which is not what the silicon computes |
+| registers | 4 per ALM (`xcw_la_le_reg{0,1}/xreg{0,1}`); `reg_input` LUTOUT_6LUT/5LUT, ARITH_SUMOUT or LEIM (packed with unrelated logic); `register_comb` DFF_LATCH, REGIN, WIRE_MODE (bypass); `xreg0`'s `ce_sel` and `sclr_sel` gate both registers of the half | rebuilt, held out, readback; Quartus' fr and cql (z3) |
 | register controls | two LAB clocks (`regclk`), two clears (`regclr`), enables (`ce_sel`), synchronous clear (`sclr_sel`), inverted clears through the routing tile's `iss/xclrb_rpi` | rebuilt (ar: async + sync clear, enable, load; hx: up/down, enable, async preset value, sync clear), held out |
 | carry chains, shared arithmetic | `adder_mode` ENABLE_ADDER, `adder_or_packed_mode`, `reg_input` ARITH_SUMOUT | rebuilt (32-bit accumulator, ternary and 4-input adders), held out |
 | MLAB RAM | `ram_mode` LUTRAM_32DEEP on the MLAB's `din`, `csel` and `lram_sigctrl` | rebuilt (32 x 16, 16 x 8), held out |
@@ -115,7 +115,8 @@ Verification kinds, strongest first:
   through the LAB's 20 halves and on into the LAB one row down (README (w)).
 - **Arithmetic LUT masks** are stored as written: half h's p (propagate) in
   bits 32h..32h + 15 and g (generate) in 32h + 16..32h + 31, with
-  sum = cin ^ p, cout = p ? cin : g; only the 6-LUT is stored inverted.
+  sum = cin ^ p, cout = p ? cin : g. A 5-LUT is stored as written too;
+  the 6-LUT output is inverted, with its half select inverted (README (z3)).
 - **Never route over** an edge whose mux setting is the mux's idle state
   (`usable` class 4), and don't enter a non-LAB node with several
   pass-through fanins over one of them: neither shows in an image, and

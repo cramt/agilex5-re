@@ -2,7 +2,7 @@
 # Dump quartus_sta's detailed setup paths of a compiled run (README (u)):
 #   tools/timing/sta.sh <run dir> <out dir> [npaths]
 # Copies the run to <out dir>/run, writes <out dir>/paths.txt (report_timing
-# -detail full_path -show_routing, slow model). quartus_sta needs libbrotlidec,
+# -detail full_path -show_routing, slow model) and fmax.txt (the Fmax summary). quartus_sta needs libbrotlidec,
 # which the install doesn't bundle and chipsmith's compat set lacks (README,
 # "quartus_sta fails under chipsmith"); it is passed in on LD_LIBRARY_PATH.
 set -euo pipefail
@@ -15,6 +15,7 @@ project_open $rev
 create_timing_netlist -model slow
 read_sdc
 update_timing_netlist
+report_clock_fmax_summary -file "$out/fmax.txt"
 foreach_in_collection c [get_clocks] {
     set name [get_clock_info -name \$c]
     report_timing -setup -to_clock \$name -npaths $n -detail full_path -show_routing -file "$out/paths_\$name.txt"
