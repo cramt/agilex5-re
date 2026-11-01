@@ -27,7 +27,7 @@
 //!       in.sof's image in a5db's own .sof container
 //!   a5db apply <db> <in.sof> <out.sof> <hmac.key> <table.tsv>...
 //!       write named bits from (uid, bit, value) tables (db/sm4revb/io/*)
-//!   a5db pintable <db> <ball>=<in|in0|in1|out|clock_in>[:<3.3|1.8|1.1>]...
+//!   a5db pintable <db> <ball>=<in|in0|in1|out|clock_in|in_reg|out_reg>[:<3.3|1.8|1.1>]...
 //!       the I/O bits of a set of used pins, from db/sm4revb/io/template.tsv
 //!   a5db pins <db> <in.sof> <out.sof> <hmac.key> <ball>=<use>[:<std>]...
 //!       write them
@@ -367,10 +367,10 @@ fn main() -> Result<()> {
             blank::diff(&mut db, &img, q.image())
         }
         ["pintable", dbdir, specs @ ..] if !specs.is_empty() => {
-            let db = Db::open(dbdir)?;
+            let mut db = Db::open(dbdir)?;
             let pins = pins::parse(&db, &args[2..])?;
             println!("uid\tbit\tvalue");
-            for (u, b, v) in pins::table(&db, &pins)? {
+            for (u, b, v) in pins::table(&mut db, &pins)? {
                 println!("{u}\t{b}\t{v}");
             }
             Ok(())
@@ -379,7 +379,7 @@ fn main() -> Result<()> {
             let mut db = Db::open(dbdir)?;
             let mut sof = sof::Sof::read(inp)?;
             let pins = pins::parse(&db, &args[5..])?;
-            let rows = pins::table(&db, &pins)?;
+            let rows = pins::table(&mut db, &pins)?;
             write_rows(&mut db, sof.image_mut(), &rows)?;
             let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
             sof.write(out, &key)

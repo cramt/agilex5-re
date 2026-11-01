@@ -13,6 +13,10 @@ pub enum Use {
     In,
     Out,
     ClockIn,
+    /// An input or output with its IO register (FAST_INPUT_REGISTER,
+    /// FAST_OUTPUT_REGISTER), clocked from the fabric.
+    InReg,
+    OutReg,
 }
 
 impl Use {
@@ -21,6 +25,8 @@ impl Use {
             Use::In => "in",
             Use::Out => "out",
             Use::ClockIn => "clock_in",
+            Use::InReg => "in_reg",
+            Use::OutReg => "out_reg",
         }
     }
 }
@@ -45,7 +51,7 @@ pub struct Pin {
     ireg: Option<u32>,
 }
 
-/// `<ball>=<in|in0|in1|out|clock_in>[:<standard>]`; the standard is 3.3, 1.8
+/// `<ball>=<in|in0|in1|out|clock_in|in_reg|out_reg>[:<standard>]`; the standard is 3.3, 1.8
 /// or 1.1 (or the full Quartus name) and defaults to 1.1-V on IO96 pins.
 /// `in0`/`in1` pick the input register mux the fabric route leaves through
 /// (`in` is mux0 on IO96 pins and mux1 on HVIO pins, Quartus' usual choice).
@@ -69,7 +75,9 @@ pub fn parse(db: &Db, specs: &[String]) -> Result<Vec<Pin>> {
             "in" | "in0" | "in1" => Use::In,
             "out" => Use::Out,
             "clock_in" => Use::ClockIn,
-            _ => bail!("{s}: use must be in, out or clock_in"),
+            "in_reg" => Use::InReg,
+            "out_reg" => Use::OutReg,
+            _ => bail!("{s}: use must be in, in0, in1, out, clock_in, in_reg or out_reg"),
         };
         let (uid, pad) = balls.get(ball).with_context(|| format!("{ball} is not an HVIO or IO96 ball"))?;
         let num = |t: &str| -> Result<u32> { Ok(t.parse()?) };
@@ -125,7 +133,7 @@ fn expand(t: &str, vars: &[(&str, String)]) -> Result<String> {
 
 /// The `uid, bit, value` rows for a set of pins, sorted; fails if two rows
 /// disagree on a bit.
-pub fn table(db: &Db, pins: &[Pin]) -> Result<Vec<(String, String, String)>> {
+pub fn table(db: &mut Db, pins: &[Pin]) -> Result<Vec<(String, String, String)>> {
     let text = std::fs::read_to_string(db.dir.join("io/template.tsv")).context("reading io/template.tsv")?;
     let rows: Vec<Vec<&str>> = text.lines().filter(|l| !l.starts_with('#') && !l.starts_with("block\t")).map(|l| l.split('\t').collect()).collect();
     let mut out: BTreeMap<(String, String), (String, String)> = BTreeMap::new();
@@ -166,8 +174,6 @@ pub fn table(db: &Db, pins: &[Pin]) -> Result<Vec<(String, String, String)>> {
             }
             match r[1] {
                 "pin" => {}
-                // A clock pin's ioclk mux: only the pins seen so far (README (r)).
-                "clock" if r[4] == p.uid => {}
                 _ => continue,
             }
             hit = true;
@@ -180,11 +186,31 @@ pub fn table(db: &Db, pins: &[Pin]) -> Result<Vec<(String, String, String)>> {
         if !hit {
             bail!("{} ({} {}): no template rows for {} {}", p.ball, block, p.uid, p.usage.name(), p.std);
         }
+        // An HVIO clock pin reaches the DCM through its bank half's clock
+        // muxes (README (r)): pins 0 and 1 of the xx4_u2 group through the
+        // 2:1 ioclk mux, pins 2 and 3 through the 4:1 ss clock mux, the one
+        // numbered like the bank half (Quartus' choice; either ss mux takes
+        // either half).
+        if let (Use::ClockIn, Site::Hvio { b, g: 2, k }) = (p.usage, &p.site) {
+            let (path, setting) = if *k < 2 {
+                (format!("xif/xif_clk_mux/xif_p2c_ioclk_2to1_mux_u{b}/hviowr_if_p2c_ioclk_mux_sel"), format!("P2C_IOCLK_2TO1_MUX_P{k}"))
+            } else {
+                (format!("xif/xif_clk_mux/xif_p2c_ssclk_4to1_mux_u{b}/hviowr_if_p2c_ssclk_mux_sel"), format!("O_SSCLK_BANK{b}_P{k}"))
+            };
+            let a = db.attribute("hviowr", &path).with_context(|| format!("hviowr has no {path}"))?;
+            let s = db.bcm.settings(&a).iter().find(|s| s.name == setting).with_context(|| format!("{path} has no {setting}"))?;
+            let rows: Vec<(String, bool)> = s.bits.iter().zip(&s.values).map(|(b, &(v, _))| (format!("{}{b}", a.prefix), v)).collect();
+            for (bit, v) in rows {
+                put(p.uid.clone(), bit, if v { "1" } else { "0" }, &p.ball)?;
+            }
+        } else if p.usage == Use::ClockIn && matches!(p.site, Site::Hvio { .. }) {
+            bail!("{}: not a clock pin (HVIO clock pins are HVIO_B<b>_2_<k>)", p.ball);
+        }
     }
     let banks: BTreeSet<String> = lanes.keys().map(|(u, _)| u.clone()).collect();
     for ((uid, lane), uses) in &lanes {
         let vars = vec![("L", lane.to_string()), ("uid", uid.clone()), ("obj", obj(uid))];
-        let scopes = ["lane_any", if uses.contains(&Use::In) || uses.contains(&Use::ClockIn) { "lane_in" } else { "lane_out_only" }];
+        let scopes = ["lane_any", if uses.iter().any(|u| matches!(u, Use::In | Use::ClockIn | Use::InReg)) { "lane_in" } else { "lane_out_only" }];
         for r in rows.iter().filter(|r| r[0] == "io96" && scopes.contains(&r[1])) {
             put(expand(r[4], &vars)?, expand(r[5], &vars)?, r[6], &format!("{uid} lane {lane}"))?;
         }

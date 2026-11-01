@@ -5,8 +5,8 @@
 #
 #   python3 -I tools/pins/derive.py <out.tsv> <idle-diff>:<pin>=<use>[,<pin>=<use>...] ...
 #
-# <pin> is a DE25-Nano ball (designs/pins/de25_pins.tsv), <use> in, out or
-# clock_in. Every I/O bit of every training image must be explained by exactly
+# <pin> is a DE25-Nano ball (designs/pins/de25_pins.tsv), <use> in, out,
+# clock_in, in_reg or out_reg (an I/O register on the pin). Every I/O bit of every training image must be explained by exactly
 # one template row, and the rows must agree between pins of the same kind;
 # the script stops otherwise.
 #
@@ -20,7 +20,7 @@
 #   io96   bank  once per IO96 bank with any used pin
 # {obj} is the bank's image object (io96_0 for pio_0_0, io96_1 for pio_1_0)
 # for rows that set an unnamed header bit (uid @{obj}/hdr, bit = offset).
-# hviowr clock rows: the clock mux a clock pin uses (README (r)).
+# An HVIO clock pin's ioclk/ss clock mux is a rule in a5db (src/pins.rs).
 # A bit field like `iossm_mem_init_122_bit[{28992+32*L+p}]` is evaluated with
 # the pin's L, p (integers, + and *, no parentheses).
 import os
@@ -88,8 +88,8 @@ def classify_io96(uid, bit, used):
         i = int(m.group(1))
         for u in used:
             w = LANE_WORD + 32 * (u['L'] - 4)
-            if u['use'] == 'in' and i == w + u['p']:
-                return 'pin', 'in', IOSSM + '[{28864+32*L+p}]'
+            if u['use'] in ('in', 'clock_in', 'in_reg') and i == w + u['p']:
+                return 'pin', u['use'], IOSSM + '[{28864+32*L+p}]'
             if u['use'] == 'out' and i == w + 12 + u['p']:
                 return 'pin', 'out', IOSSM + '[{28876+32*L+p}]'
         for L in lanes:
@@ -151,8 +151,8 @@ def main():
                     add(('hviowr', 'pin', 'clock_in', '*', '{uid}', '{bank}/xx20_clkordat_din_1to2_demux_u{n}/cr_clkordat'), v, path)
                     continue
                 if bit.startswith('xif/xif_clk_mux/') and any(u['use'] == 'clock_in' for u in hv):
-                    # Which ioclk mux a clock pin takes is fixed by the ck design (README (r)).
-                    add(('hviowr', 'clock', 'clock_in', '*', uid, bit), v, path)
+                    # The bank's ioclk and ss clock muxes: a rule in a5db's
+                    # pins.rs, checked by tools/pins/check.sh (README (r)).
                     continue
                 sys.exit(f'{path}: {uid} {bit}={v} is not a used pin\'s')
             io = [u for u in used if u['kind'] == 'io96']
