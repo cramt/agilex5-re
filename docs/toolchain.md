@@ -16,7 +16,7 @@ Section letters refer to the README's findings. File formats are in
 | idle state | `db/sm4revb/idle*.tsv` | the value of every bit when a block is unused |
 | I/O | `db/sm4revb/io/template.tsv`, `pins.tsv`, `de25_pins.tsv` | pin use (in, out, clock, IO register) → bits, for every HVIO and IO96 ball |
 | routing graph | `tools/rgdump` → `specimens/rg/full` (not committed: it is Quartus' graph, regenerate it from your install in 13 min) | 7.6 M nodes, 26.3 M edges, each edge's mux setting |
-| router edge classes | `a5db usable` → `specimens/rg/full/usable.bin` (8 min) | which edges a router may take: fabric and clock muxes with bits, pass-throughs (README (w)) |
+| router edge classes | `a5db usable` → `specimens/rg/full/usable.bin` (5 min) | which edges a router may take: fabric and clock muxes with bits, pass-throughs; edges at their mux's idle setting are class 4, not taken (README (w), (y)) |
 | pin ↔ graph nodes | `db/sm4revb/io/pin_nodes.tsv` (`a5db pinmap`) | where each ball's input leaves for fabric routing (`in0`, `in1`, `clock`) and where its output is entered (`out`) (README (t)) |
 | delays | `db/sm4revb/timing/delays.tsv` (`tools/timing`) | mean delay per routing node type and per cell arc, from quartus_sta paths (README (u)) |
 | IOPLL | `db/sm4revb/io/iopll.tsv`, `tools/pll/iopll.py` | an IOPLL's lines for any reference and output frequencies (README (v)) |
@@ -80,6 +80,12 @@ Verification kinds, strongest first:
 | IOPLL | a common template plus N, M and C counters, output enables, reference select and charge-pump trims (`tools/pll/iopll.py`) | counters from frequencies: 10 held-out IP configurations; bits: pa (four PLLs) exact, pb held out (README (v)) |
 | carry chains | tennm_lcell_comb's p/g masks, stored as written; chain order N0 → N57, then the LAB below | 87 arithmetic halves of ar; a5pnr designs read back and simulated (README (w)) |
 | M20K, 512 x 32 simple dual port | 20 settings and the port ↔ `MEDIUM_EAB_RE` pin map from mm's paths, write enable tied | a5pnr's `ram` design (README (w)) |
+| M20K enables, output register, contents | WE 37, RE 39, byte enables 55, 56, 22, 21; data in 10-bit byte lanes; output register = both `outreg_byp` idle; WE held low = `xwe0/m20k_invsel` INV_LEIM_SEL; contents `m20k_eram_add<a>` = word a in the lane layout | from mq's quartus_sta paths and contents (512 of 512 words); a5pnr's rom, ramx and CPU designs read back and simulated (README (y)) |
+| M20K contents in the `.rbf` | per stored row group and M20K column a 2,568-byte record in each sector's CORE stream | byte-identical to pfg on mq, rom, CPU and held-out mm, hx (README (y)) |
+| LAB control lines | CLKEN0/1 = LAB_RE 80/81 (`regclk_ens` per ALM), synchronous clear 82, clock 0 83, CLR1 86 (`regclr` idle, through `iss/xclrb`, inverted by `iss/xclrb_rpi` INV); per-flop `ce_sel`/`sclr_sel` on `xreg0` only; enable gates the clear | ct (README (y)); a5pnr's ctl design read back and simulated |
+| LEIM flops | `reg_input` LEIM reads ALM pin A (half 0) or B (half 1) | hx and mm quartus_sta paths (README (y)) |
+| carry-chain start | DISABLE_BTO where a chain runs ALM 4 → 5, COMB_PATH where it leaves ALM 9 for the LAB below; the hardware carry-in at a chain start is 0 | 13 LABs of ar, hx, ct, mq; hardware carry-in [inf] (README (y)) |
+| IOPLL in the flow | output 0 of V16's PLL enters the DCM at `HVIOWR_RE:X121Y30Z500I16` | pl; a5pnr's pll design (README (y)) |
 | idle state | majority over five Quartus images, three per-instance exceptions | every image here differs from it only in its own blocks (n) |
 | `.rbf` | a5db's writer | byte-identical to pfg on 78 pairs (o) |
 
@@ -110,6 +116,12 @@ Verification kinds, strongest first:
 - **Arithmetic LUT masks** are stored as written: half h's p (propagate) in
   bits 32h..32h + 15 and g (generate) in 32h + 16..32h + 31, with
   sum = cin ^ p, cout = p ? cin : g; only the 6-LUT is stored inverted.
+- **Never route over** an edge whose mux setting is the mux's idle state
+  (`usable` class 4), and don't enter a non-LAB node with several
+  pass-through fanins over one of them: neither shows in an image, and
+  what such a node passes is unknown (README (y)).
+- **LABs**: one clock, two enables (one per ALM), one synchronous clear, one
+  routed asynchronous clear; a chain starts at ALM 0 or 5.
 - **Group 1 / spare row**: never write the spare row (`_rsp5_` instances)
   or the redundancy tiles; the image has no place for them (s).
 
@@ -127,8 +139,12 @@ Verification kinds, strongest first:
   HSSI, HPS.
 - Timing: the delay model is per node type, fitted to Quartus' paths
   (README (u)); Quartus' own RC model (`DYGR_ROUTE_TIMING_INFO`, the
-  `timing_routing_delays_*` databases) is not decoded, and there is no
-  static timing analysis of a5pnr's output.
+  `timing_routing_delays_*` databases) is not decoded. a5pnr's own STA
+  uses the model (README (z)); quartus_sta has not seen an a5pnr result.
+- I/O registers from a5pnr (their clock enters through the HIOL's
+  `GLOBAL_LOCAL_SEL` I5 and RPI I29; Quartus inverts their data RPIs, why
+  is [unk]), MLAB RAM from yosys, LAB clock 1, the second asynchronous
+  clear line, PLL outputs other than V16's output 0 (README (y)).
 - Hyper-registers used as registers (`flop_mode` FLOP), clock gating in the
   clock network, LAB `lut_mode`/`latch_mode` (no bits in asm2).
 - Any check on silicon: the DE25-Nano was off for all of phase 5; see the
