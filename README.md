@@ -2333,7 +2333,7 @@ file in two M20Ks):
 |---|---|---|---|---|
 | phase 7 (one LUT per ALM) | 2,628 / 395 | 2,036 | 128 MHz | yes |
 | two 5-LUTs per ALM, half's flops share enable and clear (r3) | 1,557 / 228 | 2,036 | 121 MHz | yes |
-| + 4:1 muxes as 6-LUTs (`muxcover`), chains from ALM 0 (r5) | **1,396 / 203** | 1,395 | 125 MHz | yes |
+| + 4:1 muxes as 6-LUTs (`muxcover`), chains from ALM 0 (r6) | **1,393 / 215** | 1,392 | 120 MHz | yes |
 | Quartus Pro, register file in flops (cql) | 1,082 | (1,171 LUT + 195 arithmetic cells) | 300.7 MHz (quartus_sta) | |
 | Quartus Pro, its own choice (cq) | 334 + 2 M20K | | | |
 
@@ -2349,7 +2349,7 @@ file in two M20Ks):
   abc, with each `$_MUX4_` a 6-LUT (`yosys/mux4_map.v`), takes the CPU
   from 2,036 to 1,395 LUTs; abc's area scripts (`dch`, `if -a`, `mfs2`)
   change it by < 1 % either way [obs, /tmp bench of 6 variants].
-- What is left (1,396 vs 1,082): Quartus' LUT count is still lower
+- What is left (1,393 vs 1,082): Quartus' LUT count is still lower
   (extended 7-input LUTs, `shared_arith`, its own synthesis), and a5pnr
   doesn't yet put a LUT with its unrelated flops in one ALM half when the
   flop needs the half's LEIM pin.
@@ -2654,7 +2654,7 @@ should work). The steps below test the fix directly; run them first. Each
     and the enable logic, are on inverted inputs).
 20. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `arith.rbf`, `rom.rbf`,
     `ramx.rbf`, `pll.rbf`: as steps 11–16, now with two LUTs per ALM.
-21. **`cpu.rbf`** (FemtoRV32, 1,396 ALMs): as step 17.
+21. **`cpu.rbf`** (FemtoRV32, 1,393 ALMs): as step 17.
 22. If step 18 passes but 20 or 21 fail: suspect what only phase 8 added,
     in this order: a 5-LUT's output (`LUTOUT_5LUT`, which no earlier image
     used), two flops sharing a half's enable (the CPU's register file),
@@ -2665,7 +2665,12 @@ against a 25-bit counter in `specimens/p8/scratch/check`: 1,000 cycles from
 random states and 3,000 from power-up, 0 mismatches), `tools/a5pnr/suite.sh
 specimens/p8/s4 designs/p6/<d> …`, `designs/p7/cpu/go.sh r6` with
 `OUT=specimens/p8/cpu`; `ctl_p7.rbf` is `specimens/board/p7/ctl.rbf`.
-SHA-256: in the next commit, once the files are built.
+SHA-256 (phase 8, each a5db `.rbf` equal to its `_pfg.rbf`): `scratch_p8.rbf`
+55d574d2…, `scratch_a5db.rbf` 27642610… (phase 5's), `ctl_p7.rbf` bd4d0148…
+(phase 7's), `blinky.rbf` 18e90707…, `leds.rbf` bc7ce2aa…, `acc.rbf`
+1f7771d7…, `ram.rbf` e40b3676…, `ctl.rbf` 9a5d9a58…, `arith.rbf` 2fc8e316…,
+`rom.rbf` 6870707f…, `ramx.rbf` c44717e9…, `pll.rbf` f4e2caf7…, `cpu.rbf`
+3e3dd91c….
 
 ## Oracle
 
@@ -2706,7 +2711,7 @@ images, two LUTs per ALM, and quartus_sta on a5pnr's placement.
   board file with a LUT in it is wrong; phase 8's replace them.
 - Step 1 (density): **done for LUTs and flops** (z4). Two 5-LUTs per ALM,
   four register-file bits per ALM, 4:1 muxes as 6-LUTs: the CPU 2,628 →
-  1,396 ALMs (Quartus: 1,082 for the same RTL). Every design passes every
+  1,393 ALMs (Quartus: 1,082 for the same RTL). Every design passes every
   check.
 - Step 2 (timing truth): **placement only** (z4). `a5pnr --quartus` writes
   the placement as Quartus atoms with locations, and Quartus keeps it; it
