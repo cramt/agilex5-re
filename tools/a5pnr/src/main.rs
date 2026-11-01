@@ -153,6 +153,7 @@ fn main() -> Result<()> {
     eprintln!("graph: {} nodes, {} edges, {:.0} s", g.len(), g.dst.len(), t0.elapsed().as_secs_f64());
     let mut port_node: HashMap<usize, u32> = HashMap::new();
     let mut pin_lines = Vec::new();
+    let mut pll_ball: HashMap<usize, String> = HashMap::new();
     for (pi, p) in nl.ports.iter().enumerate() {
         let Some((ball, std)) = pin_of.get(&p.name) else {
             if matches!(p.net, Sig::Net(n) if packed.nets.contains_key(&n)) {
@@ -160,6 +161,13 @@ fn main() -> Result<()> {
             }
             continue;
         };
+        let pll_ref = p.input && nl.cells.iter().any(|c| matches!((c, p.net), (netlist::Cell::Pll { refclk, .. }, Sig::Net(n)) if *refclk == n));
+        if pll_ref {
+            // A PLL's reference stays in its I/O bank: a clock pin, no route.
+            pll_ball.insert(pi, ball.clone());
+            pin_lines.push(format!("pin\t{ball}=clock_in:{std}"));
+            continue;
+        }
         let is_clock = p.input && matches!(p.net, Sig::Net(n) if packed.clocks.contains(&n));
         let (role, usage) = if is_clock {
             ("clock", "clock_in")
@@ -171,6 +179,29 @@ fn main() -> Result<()> {
         let node = nodes_of.get(&(ball.clone(), role.to_owned())).with_context(|| format!("{ball} has no {role} node"))?;
         port_node.insert(pi, g.node(node).with_context(|| format!("no node {node}"))?);
         pin_lines.push(format!("pin\t{ball}={usage}:{std}"));
+    }
+    // PLL k: its reference ball, output node and iopll.py's lines. Output 0
+    // of V16's PLL enters the DCM from HVIOWR_RE I16 (pl) [obs]; the other
+    // reference pins' PLLs aren't wired up yet.
+    let mut pll_node: Vec<u32> = Vec::new();
+    let mut pll_text = String::new();
+    for &ci in &packed.plls {
+        let netlist::Cell::Pll { refclk, ref_khz, out_khz, .. } = nl.cells[ci] else { unreachable!() };
+        let pi = nl.ports.iter().position(|p| p.net == Sig::Net(refclk)).context("a PLL's reference must be an input port")?;
+        let ball = pll_ball.get(&pi).with_context(|| format!("PLL reference {} has no pin", nl.ports[pi].name))?;
+        let node = match ball.as_str() {
+            "V16" => "HVIOWR_RE:X121Y30Z500I16",
+            b => bail!("a PLL on reference pin {b}: only V16's is modelled"),
+        };
+        pll_node.push(g.node(node).with_context(|| format!("no node {node}"))?);
+        let repo = std::path::Path::new(db).parent().and_then(|p| p.parent()).context("db path")?;
+        let mhz = |k: u64| format!("{}", k as f64 / 1000.0);
+        let o = std::process::Command::new("python3")
+            .args(["-I", &repo.join("tools/pll/iopll.py").to_string_lossy(), ball, &mhz(ref_khz), &mhz(out_khz)])
+            .output()
+            .context("running tools/pll/iopll.py")?;
+        anyhow::ensure!(o.status.success(), "iopll.py: {}", String::from_utf8_lossy(&o.stderr));
+        pll_text.push_str(&String::from_utf8(o.stdout)?);
     }
     let port_xy: HashMap<usize, (u32, u32)> = port_node.iter().map(|(&p, &n)| (p, (g.x[n as usize] as u32, g.y[n as usize] as u32))).collect();
     let labs = place::labs(db)?;
@@ -223,6 +254,7 @@ fn main() -> Result<()> {
                 let name = format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{pin}");
                 g.node(&name).with_context(|| format!("no node {name}"))
             }
+            End::Pll(k) => Ok(pll_node[k]),
         }
     };
     // Nets as source and sink nodes; per sink the connections it serves.
@@ -320,6 +352,7 @@ fn main() -> Result<()> {
     for (u, a, v) in &directs {
         writeln!(text, "direct\t{u}\t{a}\t{v}")?;
     }
+    text.push_str(&pll_text);
     std::fs::write(out, text)?;
     std::fs::write(format!("{out}.ffmap"), emit::ffmap(&nl, &packed, &labs, &pl)?)?;
     let labs_used: std::collections::BTreeSet<usize> = pl.at.iter().map(|a| a.0).collect();

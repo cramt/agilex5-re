@@ -23,3 +23,12 @@ module A5_M20K #(parameter [16383:0] INIT = 16384'h0, parameter OUTREG = 0) (
     output [31:0] RDATA
 );
 endmodule
+
+// An IOPLL (README (y)): the PLL of the reference clock pin's I/O bank,
+// output 0 only, frequencies in kHz (tools/pll/iopll.py picks N, M, C).
+(* blackbox *)
+module A5_IOPLL #(parameter REF_KHZ = 50000, parameter OUT_KHZ = 100000) (
+    input REFCLK,
+    output OUTCLK
+);
+endmodule

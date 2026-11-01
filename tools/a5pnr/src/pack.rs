@@ -80,6 +80,8 @@ pub enum End {
     Port(usize),
     /// Pin of M20K m (`MEDIUM_EAB_RE` index), input or output by context.
     M20k { m: usize, pin: u16 },
+    /// IOPLL k's output.
+    Pll(usize),
 }
 
 /// The M20K's pins in its 512 x 32 simple dual-port use (README (w), (y)):
@@ -107,6 +109,8 @@ pub struct Packed {
     pub nets: BTreeMap<u32, (End, Vec<End>)>,
     /// Clock nets.
     pub clocks: Vec<u32>,
+    /// IOPLL cells, by netlist index.
+    pub plls: Vec<usize>,
 }
 
 impl Alm {
@@ -290,6 +294,9 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
                     add(Sig::Net(n), "ctl");
                 }
             }
+            Cell::Pll { out, .. } => {
+                driver.insert(*out, i);
+            }
             Cell::M20k(m) => {
                 for s in m.waddr.iter().chain(&m.wdata).chain(&m.raddr).chain(&m.be).chain([&m.we, &m.re]) {
                     add(*s, "m20k");
@@ -339,7 +346,9 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
                 if port != "ci" {
                     bail!("a carry out feeds something other than a carry in");
                 }
-                next.insert(i, l);
+                if next.insert(i, l).is_some() {
+                    bail!("a carry out feeds more than one carry in");
+                }
                 has_prev.insert(l);
             }
         }
@@ -413,12 +422,37 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
         }
     }
     let mut open: Vec<usize> = (0..alms.len()).collect();
+    // Flops with an enable go into flop-only ALMs kept per enable: spread
+    // over logic ALMs, each enable would cost every LAB it touches one of
+    // its two enable lines (a register file's 31 enables left the CPU at
+    // four ALMs per LAB).
+    let mut by_ce: HashMap<u32, Vec<usize>> = HashMap::new();
     for (i, c) in nl.cells.iter().enumerate() {
         let Cell::Ff(f) = c else { continue };
         if placed.contains(&i) {
             continue;
         }
         let Sig::Net(d) = f.d else { bail!("flop with a constant D") };
+        if let Some(ce) = f.ce {
+            let list = by_ce.entry(ce).or_default();
+            let mut done = false;
+            for &a in list.iter().rev().take(4) {
+                if alms[a].try_leim(nl, i, d).is_some() {
+                    alm_of_cell.insert(i, a);
+                    done = true;
+                    break;
+                }
+            }
+            if !done {
+                let mut alm = Alm { logic: Logic::None, slots: [None; 4] };
+                alm.try_leim(nl, i, d).expect("an empty ALM takes any flop");
+                alm_of_cell.insert(i, alms.len());
+                list.push(alms.len());
+                alms.push(alm);
+            }
+            placed.insert(i);
+            continue;
+        }
         let mut near: Vec<usize> = Vec::new();
         if let Some(&dc) = driver.get(&d) {
             near.extend(alm_of_cell.get(&dc));
@@ -561,6 +595,11 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
             }
         }
     }
+    let plls: Vec<usize> = nl.cells.iter().enumerate().filter(|(_, c)| matches!(c, Cell::Pll { .. })).map(|(i, _)| i).collect();
+    for (k, &ci) in plls.iter().enumerate() {
+        let Cell::Pll { out, .. } = nl.cells[ci] else { unreachable!() };
+        nets.entry(out).or_insert((none, vec![])).0 = End::Pll(k);
+    }
     for (pi, p) in nl.ports.iter().enumerate() {
         match (p.input, p.net) {
             (true, Sig::Net(n)) => nets.entry(n).or_insert((End::Port(pi), vec![])).0 = End::Port(pi),
@@ -575,5 +614,5 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
         }
     }
     nets.retain(|_, (_, s)| !s.is_empty());
-    Ok(Packed { alms, chains, m20ks, nets, clocks })
+    Ok(Packed { alms, chains, m20ks, nets, clocks, plls })
 }

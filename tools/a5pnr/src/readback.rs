@@ -33,6 +33,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     let mut active: HashSet<(u32, u32)> = HashSet::new();
     let mut attr: HashMap<(String, String), String> = HashMap::new();
     let mut balls: Vec<(String, String)> = Vec::new();
+    let mut plls: std::collections::BTreeSet<String> = Default::default();
     for l in text.lines() {
         let f: Vec<&str> = l.split('\t').collect();
         match f[0] {
@@ -42,6 +43,10 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             }
             "edge" => {
                 active.insert((g.node(f[1]).with_context(|| f[1].to_owned())?, g.node(f[2]).with_context(|| f[2].to_owned())?));
+            }
+            // An IOPLL's settings (tools/pll/iopll.py): its bank's PLL is on.
+            "attr" | "direct" | "bit" if f[1].starts_with("hvio") && f[2].starts_with("xpllwrap_top/") => {
+                plls.insert(f[1].to_owned());
             }
             "attr" | "direct" => {
                 attr.insert((f[1].to_owned(), f[2].to_owned()), f[3].to_owned());
@@ -130,6 +135,16 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     }
     for (k, (_, n)) in inputs.iter().enumerate() {
         sources.push((Src::Port(k), *n));
+    }
+    // A PLL passes its reference clock on (for this check its frequency
+    // doesn't matter): V16's PLL output 0 is HVIOWR_RE I16 (README (y)).
+    for u in &plls {
+        let (ball, node) = match u.as_str() {
+            "hvio_3_1" => ("V16", "HVIOWR_RE:X121Y30Z500I16"),
+            _ => bail!("PLL in {u}: outside the model"),
+        };
+        let k = inputs.iter().position(|(n, _)| port_of.get(ball) == Some(n)).with_context(|| format!("PLL reference {ball} isn't an input"))?;
+        sources.push((Src::Port(k), g.node(node).context("PLL output node")?));
     }
     for &(x, y) in m20ks.keys() {
         for pin in 83..123u32 {

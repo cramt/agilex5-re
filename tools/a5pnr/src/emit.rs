@@ -130,7 +130,12 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
         match &alm.logic {
             Logic::Lut { cell, pins } => {
                 let Cell::Lut { mask, .. } = &nl.cells[*cell] else { unreachable!() };
-                directs.push((uid.clone(), format!("{pa}/xcw_la_le_lut/lut_mask"), lut_stored(widen(*mask, pins))));
+                // A constant-0 LUT's stored mask is all ones: the idle value,
+                // which an image doesn't show.
+                let stored = lut_stored(widen(*mask, pins));
+                if stored.contains('0') {
+                    directs.push((uid.clone(), format!("{pa}/xcw_la_le_lut/lut_mask"), stored));
+                }
             }
             Logic::Arith { halves } => {
                 let mut pg = [(0u16, 0u16); 2];
@@ -259,7 +264,23 @@ pub fn ffmap(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement) -> Result<S
         for s in 0..4u32 {
             if let Some(Slot::Ff { ff, .. }) = alm.slots[s as usize] {
                 let Cell::Ff(f) = &nl.cells[ff] else { unreachable!() };
-                writeln!(map, "{}\tl{}_{}_o{}", nl.nets[f.q as usize], l.x, l.y, 89 + 4 * k + s)?;
+                // A flop yosys keeps inverted (dfflegalize's flip_bits for an
+                // init value of 1) has no name of its own: the register is
+                // the inverter's output, written `!name`.
+                let inverted = || {
+                    nl.cells.iter().find_map(|c| match c {
+                        Cell::Lut { ins, mask: 1, out } if ins.as_slice() == [f.q] => nl.aliases.get(out),
+                        _ => None,
+                    })
+                };
+                let names = match nl.aliases.get(&f.q) {
+                    Some(v) => v.join("|"),
+                    None => match inverted() {
+                        Some(v) => v.iter().map(|n| format!("!{n}")).collect::<Vec<_>>().join("|"),
+                        None => nl.nets[f.q as usize].clone(),
+                    },
+                };
+                writeln!(map, "{names}\tl{}_{}_o{}", l.x, l.y, 89 + 4 * k + s)?;
             }
         }
     }

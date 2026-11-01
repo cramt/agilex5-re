@@ -230,7 +230,7 @@ pub fn place(
     let alm_of = |e: &End| -> Option<usize> {
         match e {
             End::Out { alm, .. } | End::In { alm, .. } | End::Ctl { alm, .. } => Some(*alm),
-            End::Port(_) | End::M20k { .. } => None,
+            End::Port(_) | End::M20k { .. } | End::Pll(_) => None,
         }
     };
     let mut alm_nets: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -305,7 +305,18 @@ pub fn place(
     if n == 0 || nets.is_empty() {
         return Ok(Placement { at, m20k_at });
     }
-    let mut wl: f64 = (0..nets.len()).map(|i| net_cost(&at, i)).sum();
+    // Wire length plus a cost per LAB in use: wire length alone doesn't
+    // mind ALMs spread thinly between their nets' ends (the CPU's 2,127
+    // ALMs took 522 LABs without it).
+    const LAB_COST: f64 = 1.5;
+    let mut ln = vec![0u32; labs.len()];
+    for &(l, _) in &at {
+        if l != usize::MAX {
+            ln[l] += 1;
+        }
+    }
+    let lab_term = |ln: &[u32]| LAB_COST * ln.iter().filter(|&&c| c > 0).count() as f64;
+    let mut wl: f64 = (0..nets.len()).map(|i| net_cost(&at, i)).sum::<f64>() + lab_term(&ln);
     let mut tcost: f64 = if tc.is_some() { (0..tc.unwrap().conns.len()).map(|i| conn_cost(&at, i)).sum() } else { 0.0 };
     // Normalise the two terms by their starting values (VPR's
     // timing-driven cost).
@@ -324,7 +335,8 @@ pub fn place(
                         temp: f64,
                         rlim: f64,
                         wl: &mut f64,
-                        tcost: &mut f64|
+                        tcost: &mut f64,
+                        ln: &mut Vec<u32>|
      -> Option<bool> {
         let a = if !p.chains.is_empty() && rng.below(8) == 0 {
             p.chains[rng.below(p.chains.len())][0]
@@ -382,7 +394,20 @@ pub fn place(
         for &(m, _, to) in &moved {
             at[m] = to;
         }
-        let after: f64 = touched.iter().map(|&i| net_cost(at, i)).sum();
+        // LABs emptied and newly used.
+        let mut dl: HashMap<usize, i32> = HashMap::new();
+        for &(_, from, to) in &moved {
+            *dl.entry(from.0).or_default() -= 1;
+            *dl.entry(to.0).or_default() += 1;
+        }
+        let lab_delta: f64 = dl
+            .iter()
+            .map(|(&l, &d)| {
+                let (o, n) = (ln[l] as i32, ln[l] as i32 + d);
+                LAB_COST * ((n > 0) as i32 - (o > 0) as i32) as f64
+            })
+            .sum();
+        let after: f64 = touched.iter().map(|&i| net_cost(at, i)).sum::<f64>() + lab_delta;
         let tafter: f64 = ttouched.iter().map(|&i| conn_cost(at, i)).sum();
         let delta = total(*wl + after - before, *tcost + tafter - tbefore) - total(*wl, *tcost);
         if delta <= 0.0 || rng.unit() < (-delta / temp).exp() {
@@ -397,6 +422,9 @@ pub fn place(
             }
             *wl += after - before;
             *tcost += tafter - tbefore;
+            for (l, d) in dl {
+                ln[l] = (ln[l] as i32 + d) as u32;
+            }
             Some(true)
         } else {
             for &(m, from, _) in &moved {
@@ -409,7 +437,7 @@ pub fn place(
     let mut deltas = Vec::new();
     for _ in 0..(n.min(500)).max(50) {
         let before = total(wl, tcost);
-        if try_move(&mut at, &mut occ, &mut uses, &mut rng, f64::INFINITY, rlim, &mut wl, &mut tcost).is_some() {
+        if try_move(&mut at, &mut occ, &mut uses, &mut rng, f64::INFINITY, rlim, &mut wl, &mut tcost, &mut ln).is_some() {
             deltas.push(total(wl, tcost) - before);
         }
     }
@@ -422,7 +450,7 @@ pub fn place(
     loop {
         let (mut acc, mut tried) = (0usize, 0usize);
         for _ in 0..inner {
-            match try_move(&mut at, &mut occ, &mut uses, &mut rng, temp, rlim, &mut wl, &mut tcost) {
+            match try_move(&mut at, &mut occ, &mut uses, &mut rng, temp, rlim, &mut wl, &mut tcost, &mut ln) {
                 Some(true) => {
                     acc += 1;
                     tried += 1
@@ -447,7 +475,7 @@ pub fn place(
         rounds += 1;
         // Recompute from scratch now and then: the running sums drift.
         if rounds % 10 == 0 {
-            wl = (0..nets.len()).map(|i| net_cost(&at, i)).sum();
+            wl = (0..nets.len()).map(|i| net_cost(&at, i)).sum::<f64>() + lab_term(&ln);
             if tc.is_some() {
                 tcost = (0..tc.unwrap().conns.len()).map(|i| conn_cost(&at, i)).sum();
             }
@@ -458,7 +486,7 @@ pub fn place(
     }
     // A last greedy pass at zero temperature.
     for _ in 0..inner {
-        try_move(&mut at, &mut occ, &mut uses, &mut rng, 1e-12, 3.0, &mut wl, &mut tcost);
+        try_move(&mut at, &mut occ, &mut uses, &mut rng, 1e-12, 3.0, &mut wl, &mut tcost, &mut ln);
     }
     let labs_used: std::collections::BTreeSet<usize> = at.iter().map(|a| a.0).collect();
     eprintln!(

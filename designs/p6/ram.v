@@ -10,7 +10,7 @@ module ram (
     reg [31:0] c = 0;
     always @(posedge CLOCK1_50) c <= c + 1'b1;
     wire [31:0] q;
-    A5_M20K m (.CLK(CLOCK1_50), .WE(1'b1), .WADDR(c[8:0]), .WDATA({c[4:0], c[8:0], c[8:0], c[8:0]}),
+    A5_M20K m (.CLK(CLOCK1_50), .WE(1'b1), .BE(4'b1111), .RE(1'b1), .WADDR(c[8:0]), .WDATA({c[4:0], c[8:0], c[8:0], c[8:0]}),
                .RADDR(c[31:23]), .RDATA(q));
     assign LED = q[7:0];
 endmodule

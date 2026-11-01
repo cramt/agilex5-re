@@ -109,7 +109,7 @@ impl Sta {
                     Some(Slot::Wire { src: Src::Sum }) => edges.push((id((3, alm, slot as u32 / 2)), src, Arc::Fixed(0.0))),
                     _ => {}
                 },
-                End::Port(_) => starts.push((src, 0.0, u32::MAX)),
+                End::Port(_) | End::Pll(_) => starts.push((src, 0.0, u32::MAX)),
                 End::M20k { m, .. } => {
                     let Cell::M20k(c) = &nl.cells[p.m20ks[m]] else { unreachable!() };
                     starts.push((src, M20K_TCO, c.clk));
@@ -141,7 +141,7 @@ impl Sta {
                         ends.push((x, 0.0, None, format!("output {}", nl.ports[pi].name)));
                         x
                     }
-                    End::Out { .. } => continue,
+                    End::Out { .. } | End::Pll(_) => continue,
                 };
                 edges.push((src, dst, Arc::Conn(ci)));
             }

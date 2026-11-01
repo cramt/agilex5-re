@@ -21,6 +21,8 @@ pub enum Cell {
     Arith { p: u16, g: u16, c: Option<u32>, d: Option<u32>, ci: Sig, so: Option<u32>, co: Option<u32> },
     Ff(Ff),
     M20k(M20k),
+    /// An IOPLL: output 0 of the reference pin's PLL (yosys/cells.v).
+    Pll { refclk: u32, out: u32, ref_khz: u64, out_khz: u64 },
 }
 
 /// An M20K as a 512 x 32 simple dual-port RAM (yosys/cells_sim.v).
@@ -68,6 +70,8 @@ pub struct Port {
 
 pub struct Netlist {
     pub nets: Vec<String>,
+    /// Every visible name of a net (simcheck picks the RTL's register).
+    pub aliases: HashMap<u32, Vec<String>>,
     pub cells: Vec<Cell>,
     pub ports: Vec<Port>,
 }
@@ -137,14 +141,24 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
     // yosys' own `$` names (simcheck sets registers by these names).
     let ports_obj = m["ports"].as_object().context("ports")?;
     let mut names: HashMap<u32, (u8, String)> = HashMap::new();
+    let mut aliases: HashMap<u32, Vec<String>> = HashMap::new();
     for (n, v) in m["netnames"].as_object().context("netnames")? {
         let hidden = v.get("hide_name").and_then(Value::as_u64) == Some(1) || n.starts_with('$');
         let rank = if hidden { 2 } else if ports_obj.contains_key(n) { 1 } else { 0 };
+        // Bit i of a netname is index offset + i (offset - i when upto),
+        // as the RTL declares it (femtorv32's instr is [31:2]).
+        let offset = v.get("offset").and_then(Value::as_i64).unwrap_or(0);
+        let upto = v.get("upto").and_then(Value::as_u64) == Some(1);
+        let width = v["bits"].as_array().map_or(0, |a| a.len()) as i64;
         for (i, b) in bits(&v["bits"])?.iter().enumerate() {
+            let idx = if upto { offset + width - 1 - i as i64 } else { offset + i as i64 };
             if let Sig::Net(id) = b {
+                if !hidden {
+                    aliases.entry(*id).or_default().push(format!("{n}[{idx}]"));
+                }
                 let e = names.entry(*id).or_insert((u8::MAX, String::new()));
                 if rank < e.0 {
-                    *e = (rank, format!("{n}[{i}]"));
+                    *e = (rank, format!("{n}[{idx}]"));
                 }
             }
         }
@@ -263,8 +277,9 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
                 cells.push(Cell::M20k(M20k {
                     clk: net(one("CLK")?)?,
                     we: one("WE")?,
-                    be: bits(&conn["BE"])?,
-                    re: one("RE")?,
+                    // Unconnected enables are high (phase 6's instances have none).
+                    be: if conn.get("BE").is_some() { bits(&conn["BE"])? } else { vec![Sig::Const(true); 4] },
+                    re: if conn.get("RE").is_some() { one("RE")? } else { Sig::Const(true) },
                     waddr: bits(&conn["WADDR"])?,
                     wdata: bits(&conn["WDATA"])?,
                     raddr: bits(&conn["RADDR"])?,
@@ -272,6 +287,10 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
                     outreg,
                     init,
                 }));
+            }
+            "A5_IOPLL" => {
+                let khz = |k: &str| -> Result<u64> { Ok(param(p, k)?.iter().enumerate().fold(0u64, |a, (i, &b)| a | (b as u64) << i)) };
+                cells.push(Cell::Pll { refclk: net(one("REFCLK")?)?, out: net(one("OUTCLK")?)?, ref_khz: khz("REF_KHZ")?, out_khz: khz("OUT_KHZ")? });
             }
             _ => bail!("{name}: cell type {t} is not supported"),
         }
@@ -327,5 +346,8 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
         }
         cells[k] = Cell::M20k(m);
     }
-    Ok(Netlist { nets, cells, ports })
+    for v in aliases.values_mut() {
+        v.sort();
+    }
+    Ok(Netlist { nets, aliases, cells, ports })
 }

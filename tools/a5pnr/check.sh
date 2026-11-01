@@ -31,7 +31,7 @@ r=$out/check.txt; : > "$r"
 ) &
 specs=$(grep '^pin' "$out/$top.design.txt" | cut -f2)
 "$repo/tools/cap.sh" 14G "$A" extract "$db" "$graph" "$out/$top.sof" $specs > "$out/extract.txt" 2> "$out/extract.log"
-python3 -I - "$out/$top.design.txt" "$out/extract.txt" >> "$r" <<'PY'
+python3 -I - "$out/$top.design.txt" "$out/extract.txt" "$db/idle.tsv" >> "$r" <<'PY'
 import sys
 def load(p):
     s = {}
@@ -41,6 +41,16 @@ def load(p):
             s.setdefault(f[0], set()).add('\t'.join(f[1:]))
     return s
 a, b = load(sys.argv[1]), load(sys.argv[2])
+# A design's `bit` lines at their idle value (iopll.py writes whole fields)
+# change nothing an image can show.
+import lzma, os
+db = os.path.join(os.path.dirname(os.path.abspath(sys.argv[3])), '')
+idle_path = sys.argv[3]
+txt = lzma.open(idle_path + '.xz', 'rt').read() if not os.path.exists(idle_path) else open(idle_path).read()
+ones = {tuple(l.split('\t')[:2]) for l in txt.splitlines()[1:]}
+def btype(uid):
+    return uid.rsplit('_r', 1)[0] if '_r' in uid and uid.rsplit('_r', 1)[1].split('_c')[0].isdigit() else 'hviowr' if uid.startswith('hvio') else uid
+a['bit'] = {x for x in a.get('bit', set()) if (x.split('\t')[2] == '1') != ((btype(x.split('\t')[0]), x.split('\t')[1]) in ones)}
 # a5pnr writes only edges and settings that have bits, so the sets must be equal.
 for k in ('pin', 'edge', 'attr', 'direct', 'bit', 'raw'):
     x, y = a.get(k, set()), b.get(k, set())

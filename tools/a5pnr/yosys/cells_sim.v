@@ -32,3 +32,23 @@ module A5_M20K #(parameter [16383:0] INIT = 16384'h0, parameter OUTREG = 0) (
     end
     assign RDATA = OUTREG ? q : mem[ra];
 endmodule
+
+// A5_IOPLL as simcheck sees it: the output follows the reference. The
+// check is of logic, and every clock ticks together there anyway.
+module A5_IOPLL #(parameter REF_KHZ = 50000, parameter OUT_KHZ = 100000) (
+    input REFCLK,
+    output OUTCLK
+);
+    assign OUTCLK = REFCLK;
+endmodule
+
+// A5_ARITH as tennm_lcell_comb's arithmetic mode (yosys/cells.v), for
+// simulating yosys' own netlist (simcheck's netlist mode).
+module A5_ARITH #(parameter [15:0] P = 16'h0, parameter [15:0] G = 16'h0) (
+    input A, B, C, D, CI,
+    output SO, CO
+);
+    wire p = P[{D, C, B, A}], g = G[{D, C, B, A}];
+    assign SO = CI ^ p;
+    assign CO = p ? CI : g;
+endmodule

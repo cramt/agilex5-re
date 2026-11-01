@@ -45,8 +45,25 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
     let lab_re = g.type_id("LAB_RE");
     let mut trees: Vec<Vec<(u32, u32)>> = vec![Vec::new(); nets.len()];
     let mut pres = 0.5f32;
+    // A* lower bound per column and row: the fastest wire per unit length
+    // (H12, V8 in the delay model), times 2 (VPR's astar_fac, a little greedier).
+    let per = |pre: char| -> f32 {
+        g.types
+            .iter()
+            .enumerate()
+            .filter_map(|(k, t)| t.strip_prefix(pre).and_then(|l| l.parse::<f32>().ok()).filter(|&l| l > 0.0).map(|l| base_by_type[k] / l))
+            .fold(f32::INFINITY, f32::min)
+    };
+    let (hx, hy) = (2.0 * per('H').min(0.05), 2.0 * per('V').min(0.05));
+    let mut reroute = vec![true; nets.len()];
     for iter in 1..=max_iter {
+        let t_iter = std::time::Instant::now();
+        let mut routed_n = 0;
         for (ni, net) in nets.iter().enumerate() {
+            if !reroute[ni] {
+                continue;
+            }
+            routed_n += 1;
             // Rip up.
             for &(_, d) in &trees[ni] {
                 occ[d as usize] -= 1;
@@ -57,6 +74,12 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
             trees[ni].clear();
             occ[net.source as usize] += 1;
             let mut in_tree: Vec<u32> = vec![net.source];
+            const MARGIN: i32 = 3;
+            let pts = std::iter::once(net.source).chain(net.sinks.iter().copied());
+            let bb = pts.fold((i32::MAX, i32::MIN, i32::MAX, i32::MIN), |b, m| {
+                let (x, y) = (g.x[m as usize] as i32, g.y[m as usize] as i32);
+                (b.0.min(x - MARGIN), b.1.max(x + MARGIN), b.2.min(y - MARGIN), b.3.max(y + MARGIN))
+            });
             // Most critical sinks first, then the nearest.
             let mut sinks: Vec<(u32, f32)> = net.sinks.iter().copied().zip(crit[ni].iter().copied()).collect();
             let (sx, sy) = (g.x[net.source as usize] as i32, g.y[net.source as usize] as i32);
@@ -66,52 +89,71 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
                 if in_tree.contains(&t) {
                     continue;
                 }
-                stamp_now += 1;
                 let (tx, ty) = (g.x[t as usize] as i32, g.y[t as usize] as i32);
-                let h = |m: u32| 0.006 * ((g.x[m as usize] as i32 - tx).abs() + (g.y[m as usize] as i32 - ty).abs()) as f32;
-                let mut heap = BinaryHeap::new();
-                for &m in &in_tree {
-                    stamp[m as usize] = stamp_now;
-                    cost[m as usize] = 0.0;
-                    prev[m as usize] = u32::MAX;
-                    heap.push((Reverse(h(m).to_bits()), m));
-                }
+                let h = |m: u32| hx * (g.x[m as usize] as i32 - tx).abs() as f32 + hy * (g.y[m as usize] as i32 - ty).abs() as f32;
+                // Search inside the net's bounding box plus a margin first
+                // (VPR's bb_factor); clock nets and misses search everywhere.
                 let mut found = false;
                 let mut expanded = 0usize;
-                while let Some((Reverse(fb), m)) = heap.pop() {
-                    if m == t {
-                        found = true;
-                        break;
-                    }
-                    let gm = cost[m as usize];
-                    if f32::from_bits(fb) > gm + h(m) + 1e-6 {
+                for bounded in [!net.clock, false] {
+                    if found || (bounded && net.clock) {
                         continue;
                     }
-                    expanded += 1;
-                    if expanded > 4_000_000 {
-                        break;
+                    stamp_now += 1;
+                    let mut heap = BinaryHeap::new();
+                    // Seed with the tree's nodes near the sink only: big
+                    // nets' trees made every sink's search start from
+                    // thousands of nodes.
+                    let dist = |m: u32| (g.x[m as usize] as i32 - tx).abs() + (g.y[m as usize] as i32 - ty).abs();
+                    let dmin = in_tree.iter().map(|&m| dist(m)).min().unwrap_or(0);
+                    for &m in in_tree.iter().filter(|&&m| !bounded || dist(m) <= dmin + 6) {
+                        stamp[m as usize] = stamp_now;
+                        cost[m as usize] = 0.0;
+                        prev[m as usize] = u32::MAX;
+                        heap.push((Reverse(h(m).to_bits()), m));
                     }
-                    // LAB_RE pins are cell ports: never pass through one.
-                    if Some(g.ty[m as usize]) == lab_re && m != net.source {
-                        continue;
-                    }
-                    for e in g.fanout(m) {
-                        let c = g.class[e];
-                        let d = g.dst[e];
-                        let ok = if net.clock { c == CLOCK || ((c == PASS || c == MUX) && !g.is_wire(d)) } else { c == MUX || c == PASS };
-                        let ok = ok && !(c == PASS && g.ambiguous[d as usize]);
-                        if !ok {
+                    expanded = 0;
+                    while let Some((Reverse(fb), m)) = heap.pop() {
+                        if m == t {
+                            found = true;
+                            break;
+                        }
+                        let gm = cost[m as usize];
+                        if f32::from_bits(fb) > gm + h(m) + 1e-6 {
                             continue;
                         }
-                        let du = d as usize;
-                        let over = occ[du] as f32;
-                        let b = base_by_type[g.ty[du] as usize];
-                        let nc = gm + cr * b + (1.0 - cr) * (b + hist[du]) * (1.0 + pres * over);
-                        if stamp[du] != stamp_now || nc < cost[du] {
-                            stamp[du] = stamp_now;
-                            cost[du] = nc;
-                            prev[du] = m;
-                            heap.push((Reverse((nc + h(d)).to_bits()), d));
+                        expanded += 1;
+                        if expanded > 4_000_000 {
+                            break;
+                        }
+                        // LAB_RE pins are cell ports: never pass through one.
+                        if Some(g.ty[m as usize]) == lab_re && m != net.source {
+                            continue;
+                        }
+                        for e in g.fanout(m) {
+                            let c = g.class[e];
+                            let d = g.dst[e];
+                            let ok = if net.clock { c == CLOCK || ((c == PASS || c == MUX) && !g.is_wire(d)) } else { c == MUX || c == PASS };
+                            let ok = ok && !(c == PASS && g.ambiguous[d as usize]);
+                            if !ok {
+                                continue;
+                            }
+                            let du = d as usize;
+                            if bounded {
+                                let (x, y) = (g.x[du] as i32, g.y[du] as i32);
+                                if x < bb.0 || x > bb.1 || y < bb.2 || y > bb.3 {
+                                    continue;
+                                }
+                            }
+                            let over = occ[du] as f32;
+                            let b = base_by_type[g.ty[du] as usize];
+                            let nc = gm + cr * b + (1.0 - cr) * (b + hist[du]) * (1.0 + pres * over);
+                            if stamp[du] != stamp_now || nc < cost[du] {
+                                stamp[du] = stamp_now;
+                                cost[du] = nc;
+                                prev[du] = m;
+                                heap.push((Reverse((nc + h(d)).to_bits()), d));
+                            }
                         }
                     }
                 }
@@ -129,7 +171,7 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
             }
         }
         let over: Vec<usize> = (0..n).filter(|&k| occ[k] > 1).collect();
-        eprintln!("route: iteration {iter}: {} overused nodes", over.len());
+        eprintln!("route: iteration {iter}: {routed_n} nets routed, {} overused nodes, {:.1} s", over.len(), t_iter.elapsed().as_secs_f64());
         if over.is_empty() {
             return Ok(Routed { trees, iterations: iter });
         }
@@ -137,6 +179,12 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
             hist[k] += 0.05 * (occ[k] - 1) as f32;
         }
         pres *= 1.8;
+        // Next time only the nets on an overused node (VPR's incremental
+        // rerouting).
+        let hot: std::collections::HashSet<u32> = over.iter().map(|&k| k as u32).collect();
+        for (ni, net) in nets.iter().enumerate() {
+            reroute[ni] = hot.contains(&net.source) || trees[ni].iter().any(|&(_, d)| hot.contains(&d));
+        }
     }
     bail!("routing did not converge in {max_iter} iterations")
 }
@@ -174,6 +222,7 @@ impl DelayTable {
                 }
                 End::Port(k) => port_xy.get(&k).map(|&(x, y)| (x as i64, y as i64)),
                 End::M20k { m, .. } => Some((pl.m20k_at[m].0 as i64, pl.m20k_at[m].1 as i64)),
+                End::Pll(_) => None,
             }
         };
         let _ = p;
