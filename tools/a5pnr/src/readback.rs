@@ -156,6 +156,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     writeln!(head, "    begin a = i[5] ? (i[4] ? m[63:48] : m[47:32]) : (i[4] ? m[31:16] : m[15:0]); lut6 = lut4(a, i[3:0]); end")?;
     writeln!(head, "  endfunction")?;
     let alm = |k: u32| if k < 5 { format!("xtophalf/xale{k}") } else { format!("xbothalf/xale{}", k - 5) };
+    let is_arith = |x: u32, y: u32, k: u32| attr.get(&(format!("cw_la_lab_r{y}_c{x}"), format!("{}/xcw_la_le_lut/adder_mode", alm(k)))).map(String::as_str) == Some("ENABLE_ADDER");
     // Declarations first: cells refer to each other in any order.
     let mut d = String::new();
     let mut nffs = 0;
@@ -185,7 +186,8 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     let bits = |off: usize| -> String { (0..16).rev().map(|i| (b'0' + stored[off + i]) as char).collect() };
                     let cin = if h == 0 {
                         // From the previous ALM, or ALM 9 of the LAB above.
-                        if k == 0 { if labs.contains_key(&(x, y + 1)) { format!("l{x}_{}_a9_co1", y + 1) } else { "1'bx".into() } } else { format!("l{x}_{y}_a{}_co1", k - 1) }
+                        let (py, pk) = if k == 0 { (y + 1, 9) } else { (y, k - 1) };
+                        if is_arith(x, py, pk) { format!("l{x}_{py}_a{pk}_co1") } else { "1'bx".into() }
                     } else {
                         format!("{n}_co0")
                     };
