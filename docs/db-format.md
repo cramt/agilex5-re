@@ -54,7 +54,8 @@ half (X ≤ 60) and sector 1 the right half, mirrored.
   when decoding and is written as `v`.
 - `direct.tsv`: `type, attribute, bits_msb_first`. A DIRECT attribute's bit
   names in the order of its value string, MSB first (asm2's
-  `get_attribute` format). Only LAB/MLAB `lut_mask` so far.
+  `get_attribute` format): every DIRECT attribute of the LAB, MLAB, M20K,
+  DSP and HVIO blocks (`tools/bcm/direct.tcl`).
 - `idle.tsv` (`.tsv.xz`): `type, bit`. The named bits of a block type that
   are 1 in the idle (unused) state; every other mapped bit idles at 0.
   `idle_inst.tsv`: `uid, bit, value`, per-instance exceptions to that.
@@ -62,9 +63,33 @@ half (X ≤ 60) and sector 1 the right half, mirrored.
   that idle at 1 (offset in bits from the part's start). `a5db
   idle-derive` writes all three from Quartus images; `a5db blank` builds the
   idle image from them (README (n)).
-- `io/<pin>_<use>.tsv`: one pin feature as `uid, bit, value` rows over the
-  idle state (`#` lines are comments). A row whose uid is `@object/part`
-  sets an unnamed image bit at that offset. `a5db apply` writes them.
+- `io/template.tsv`: the I/O pin template (README (p)), `block, scope, use,
+  std, uid, bit, value`. `scope` is `pin` (once per used pin), `lane_any`,
+  `lane_in`, `lane_out_only` (once per IO96 lane with any pin, with an
+  input, with outputs only) or `bank` (once per IO96 with any pin); `use` is
+  in, out, clock_in, in_reg or out_reg (`*` any); `std` the I/O standard
+  (`*` any). In `uid` and `bit`, `{uid}`, `{obj}` (io96_0/io96_1), `{pin}`
+  (`xx20_u<b>/xx4_u<g>/xx1_u<k>`), `{bank}` (`xx20_u<b>`) and `{n}` (4g + k)
+  are substituted and other `{…}` fields are sums of products of integers
+  and L (lane), p (pin in lane). A uid `@object/part` is an unnamed image bit
+  at that offset. Written by `tools/pins/derive.py`; `a5db pintable`
+  expands it (plus the HVIO clock-mux rule in `src/pins.rs`).
+- `io/pins.tsv`: `ball, uid, pad, function` for every HVIO and IO96 ball of
+  the package.
+- `io/de25_pins.tsv`: `signal, ball, use, uid, bit, value`, the template
+  expanded for each DE25-Nano pin alone, as input and as output.
+- A table of `uid, bit, value` rows (`#` lines are comments, `@object/part`
+  uids as above) is what `a5db apply` writes and `a5db pintable` prints.
+- `direct_io96.tsv.xz`: `direct.tsv`'s format for the IO96's 4,775 DIRECT
+  attributes (4.28 M bits); a5db doesn't load it.
+
+## Design files
+
+`a5db extract`/`build`/`rebuild` read and write a design: tab-separated
+lines `pin <spec>`, `edge <src> <dst>`, `attr <uid> <attribute> <setting>`,
+`direct <uid> <attribute> <bits MSB first>`, `bit <uid> <bit> <0|1>`, `raw
+<object/part> <offset> <0|1>`, applied over the idle image in that order
+(README (q), [toolchain.md](toolchain.md)).
 
 ## Conventions worth knowing
 

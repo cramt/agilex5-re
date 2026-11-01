@@ -1520,7 +1520,7 @@ Results [obs]:
   register, and the programmable inverter `iss/xclrb_rpi/sel` INV in the
   routing tile for an active-low clear); MLAB RAM (`ram_mode`
   LUTRAM_32DEEP/LUT_MODE on `xce_ml_le_din`, `xcw_ml_le_csel` and the LAB's
-  `lram_sigctrl`); M20K (42 CUSTOM settings for widths, ports and registers,
+  `lram_sigctrl`); M20K (CUSTOM settings for widths, ports and registers, 42 in mm,
   plus `m20k_eram_add<k>`: row k/2, bits 40(k mod 2) .. +39 of the 256 x 80
   `eram_array`); DSP (`dsp_mode`, input/output register and clock selects,
   signedness, `dsp_proginv_{l,h}` DIRECT masks).
