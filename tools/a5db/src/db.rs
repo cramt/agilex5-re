@@ -7,6 +7,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+use rustc_hash::FxHashMap;
 
 pub const FRAME_BYTES: usize = 540;
 
@@ -57,6 +58,7 @@ impl BitPos {
 
 /// One image part of an instance: CRAM is addressed by (frame, bdata),
 /// anything else by a bit offset in `frame` (README, docs/db-format.md).
+#[derive(Clone, Copy)]
 struct Anchor {
     start: usize,
     cram: bool,
@@ -64,16 +66,47 @@ struct Anchor {
     bdata: i64,
 }
 
+impl Anchor {
+    fn pos(&self, df: i32, dd: i32, equal: bool) -> BitPos {
+        let (f, d) = ((self.frame + df as i64) as usize, (self.bdata + dd as i64) as usize);
+        if self.cram {
+            BitPos { byte: self.start + f * FRAME_BYTES + d / 8, bit: (d % 8) as u8, equal }
+        } else {
+            BitPos { byte: self.start + f / 8, bit: (f % 8) as u8, equal }
+        }
+    }
+}
+
 struct Placed {
     layout: usize,
-    parts: HashMap<String, Anchor>,
+    /// Indexed by the map's part number.
+    parts: Vec<Option<Anchor>>,
 }
 
+/// One named bit of a layout, relative to its part's anchor.
+struct Row {
+    name: &'static str,
+    part: u8,
+    df: i32,
+    dd: i32,
+    equal: bool,
+}
+
+/// A layout's rows, sorted by name, and a name → row index.
+struct Layout {
+    rows: Vec<Row>,
+    index: FxHashMap<&'static str, u32>,
+}
+
+/// A block type's bit map. Layout tables reach 318 MB (io96), so names are
+/// slices of the table text, which is leaked: a map lives as long as the
+/// process anyway, and per-name Strings and SipHash made loading and the
+/// idle image the bulk of `a5db build` (README (x)).
 pub struct BlockMap {
-    layouts: Vec<HashMap<String, (String, i64, i64, bool)>>,
-    anchors: HashMap<String, Placed>,
+    parts: Vec<String>,
+    layouts: Vec<Layout>,
+    anchors: FxHashMap<String, Placed>,
 }
-
 /// A database table: `path` itself, or `path.xz` when the table is stored
 /// compressed (the big io96 and HSSI layouts).
 pub fn read_table(path: &Path) -> Result<String> {
@@ -122,29 +155,55 @@ fn tsv(path: &Path) -> Result<Vec<Vec<String>>> {
 
 impl BlockMap {
     pub fn load(prefix: &Path) -> Result<BlockMap> {
-        let mut layouts: Vec<HashMap<String, (String, i64, i64, bool)>> = Vec::new();
-        for r in tsv(&prefix.with_extension("layout.tsv"))? {
-            let id: usize = r[0].parse()?;
-            if layouts.len() <= id {
-                layouts.resize_with(id + 1, HashMap::new);
+        let text: &'static str = Box::leak(read_table(&prefix.with_extension("layout.tsv"))?.into_boxed_str());
+        let mut parts: Vec<String> = Vec::new();
+        let mut part_id = |p: &str| -> u8 {
+            match parts.iter().position(|q| q == p) {
+                Some(k) => k as u8,
+                None => {
+                    parts.push(p.to_owned());
+                    (parts.len() - 1) as u8
+                }
             }
-            layouts[id].insert(r[1].clone(), (r[2].clone(), r[3].parse()?, r[4].parse()?, r[5] == "1"));
+        };
+        let mut rows: Vec<Vec<Row>> = Vec::new();
+        for l in text.lines().skip(1) {
+            let mut f = l.split('\t');
+            let mut next = || f.next().with_context(|| format!("{}: short row {l:?}", prefix.display()));
+            let id: usize = next()?.parse()?;
+            let name = next()?;
+            let part = part_id(next()?);
+            let (df, dd) = (next()?.parse()?, next()?.parse()?);
+            let equal = next()? == "1";
+            if rows.len() <= id {
+                rows.resize_with(id + 1, Vec::new);
+            }
+            rows[id].push(Row { name, part, df, dd, equal });
         }
-        let mut anchors: HashMap<String, Placed> = HashMap::new();
+        let layouts = rows
+            .into_iter()
+            .map(|mut rows| {
+                rows.sort_unstable_by_key(|r| r.name);
+                let index = rows.iter().enumerate().map(|(k, r)| (r.name, k as u32)).collect();
+                Layout { rows, index }
+            })
+            .collect();
+        let mut anchors: FxHashMap<String, Placed> = FxHashMap::default();
         for r in tsv(&prefix.with_extension("anchors.tsv"))? {
             let (_, _, start, _) = PARTS
                 .iter()
                 .find(|(o, p, _, _)| *o == r[2] && *p == r[3])
                 .with_context(|| format!("unknown image part {}/{}", r[2], r[3]))?;
+            let k = part_id(&r[3]) as usize;
             let placed = anchors
                 .entry(r[0].clone())
-                .or_insert_with(|| Placed { layout: r[1].parse().unwrap_or(0), parts: HashMap::new() });
-            placed.parts.insert(
-                r[3].clone(),
-                Anchor { start: *start, cram: r[3] == "cram", frame: r[4].parse()?, bdata: r[5].parse()? },
-            );
+                .or_insert_with(|| Placed { layout: r[1].parse().unwrap_or(0), parts: Vec::new() });
+            if placed.parts.len() <= k {
+                placed.parts.resize(k + 1, None);
+            }
+            placed.parts[k] = Some(Anchor { start: *start, cram: r[3] == "cram", frame: r[4].parse()?, bdata: r[5].parse()? });
         }
-        Ok(BlockMap { layouts, anchors })
+        Ok(BlockMap { parts, layouts, anchors })
     }
 
     pub fn has(&self, uid: &str) -> bool {
@@ -161,35 +220,33 @@ impl BlockMap {
     /// The named bits of an instance's layout, sorted.
     pub fn bit_names(&self, uid: &str) -> Vec<&str> {
         let Some(placed) = self.anchors.get(uid) else { return Vec::new() };
-        let mut b: Vec<&str> = self.layouts[placed.layout].keys().map(String::as_str).collect();
-        b.sort();
-        b
+        self.layouts[placed.layout].rows.iter().map(|r| r.name).collect()
+    }
+
+    /// Every mapped named bit of an instance with its position, sorted by name.
+    pub fn bits<'a>(&'a self, uid: &str) -> impl Iterator<Item = (&'static str, BitPos)> + 'a {
+        let placed = self.anchors.get(uid);
+        let rows = placed.map_or(&[][..], |p| &self.layouts[p.layout].rows[..]);
+        rows.iter().filter_map(move |r| {
+            let a = placed?.parts.get(r.part as usize).copied().flatten()?;
+            Some((r.name, a.pos(r.df, r.dd, r.equal)))
+        })
     }
 
     /// Image byte offsets of every mapped bit of an instance in one part.
     pub fn byte_offsets(&self, uid: &str, part: &str) -> Vec<usize> {
         let Some(placed) = self.anchors.get(uid) else { return Vec::new() };
-        let Some(a) = placed.parts.get(part) else { return Vec::new() };
-        self.layouts[placed.layout]
-            .values()
-            .filter(|(p, ..)| p == part)
-            .map(|(_, df, dd, _)| {
-                let (f, d) = ((a.frame + df) as usize, (a.bdata + dd) as usize);
-                if a.cram { a.start + f * FRAME_BYTES + d / 8 } else { a.start + f / 8 }
-            })
-            .collect()
+        let Some(k) = self.parts.iter().position(|p| p == part) else { return Vec::new() };
+        let Some(Some(a)) = placed.parts.get(k).copied() else { return Vec::new() };
+        self.layouts[placed.layout].rows.iter().filter(|r| r.part as usize == k).map(|r| a.pos(r.df, r.dd, r.equal).byte).collect()
     }
 
     pub fn pos(&self, uid: &str, bit: &str) -> Option<BitPos> {
         let placed = self.anchors.get(uid)?;
-        let (part, df, dd, equal) = self.layouts[placed.layout].get(bit)?;
-        let a = placed.parts.get(part)?;
-        let (f, d) = ((a.frame + df) as usize, (a.bdata + dd) as usize);
-        Some(if a.cram {
-            BitPos { byte: a.start + f * FRAME_BYTES + d / 8, bit: (d % 8) as u8, equal: *equal }
-        } else {
-            BitPos { byte: a.start + f / 8, bit: (f % 8) as u8, equal: *equal }
-        })
+        let lay = &self.layouts[placed.layout];
+        let r = &lay.rows[*lay.index.get(bit)? as usize];
+        let a = placed.parts.get(r.part as usize).copied().flatten()?;
+        Some(a.pos(r.df, r.dd, r.equal))
     }
 }
 
@@ -316,12 +373,13 @@ pub struct Db {
     pub bcm: Bcm,
     maps: HashMap<String, BlockMap>,
     attrs: HashMap<String, HashMap<String, Attr>>,
+    type_cache: HashMap<String, String>,
 }
 
 impl Db {
     pub fn open(dir: &str) -> Result<Db> {
         let dir = PathBuf::from(dir);
-        Ok(Db { bcm: Bcm::load(&dir)?, dir, maps: HashMap::new(), attrs: HashMap::new() })
+        Ok(Db { bcm: Bcm::load(&dir)?, dir, maps: HashMap::new(), attrs: HashMap::new(), type_cache: HashMap::new() })
     }
 
     /// Load a type's block map (once).
@@ -389,6 +447,15 @@ impl Db {
 
     /// The block type of an instance uid: `<type>_r<y>_c<x>` or a bare name.
     pub fn type_of(&mut self, uid: &str) -> Result<String> {
+        if let Some(t) = self.type_cache.get(uid) {
+            return Ok(t.clone());
+        }
+        let t = self.find_type(uid)?;
+        self.type_cache.insert(uid.to_owned(), t.clone());
+        Ok(t)
+    }
+
+    fn find_type(&mut self, uid: &str) -> Result<String> {
         let bits = self.dir.join("bits");
         let mut types: Vec<String> = std::fs::read_dir(&bits)?
             .filter_map(|e| e.ok()?.file_name().into_string().ok()?.strip_suffix(".anchors.tsv").map(str::to_owned))

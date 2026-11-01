@@ -110,10 +110,16 @@ fn core_section(inst: &Install, img: &[u8], f: &Fields, key: &[u8]) -> Result<Ve
     let enc = core::encode(&lay, [&img[s0..s0 + n], &img[s1..s1 + n]], &inst.s4_flags);
     let offs = enc.offs;
     let lib_pages: Vec<Vec<u8>> = enc.libs.chunks(PAGE).map(<[u8]>::to_vec).collect();
-    let zero = section::stream_pages(&deflate::deflate(&core::zero_block())?);
-    ensure!(zero.len() == 1, "the codebook block deflates to {} pages", zero.len());
-    // Per sector: codebook, zero block, second codebook, BBM, then the frame stream.
-    let setup: [Vec<Vec<u8>>; 2] = std::array::from_fn(|s| vec![inst.cb1.clone(), zero[0].clone(), inst.cb2.clone(), enc.bbm[s].clone()]);
+    // Per sector: codebook, M20K contents, second codebook, BBM, then the
+    // frame stream. The contents' pages go in the frame pages' interleave.
+    let ram: Vec<Vec<u8>> = ["sector0", "sector1"]
+        .iter()
+        .map(|o| {
+            let (s, n) = io::part(o, "ram");
+            deflate::deflate(&core::ram_block(&img[s..s + n]))
+        })
+        .collect::<Result<_>>()?;
+    let rpages: Vec<Vec<Vec<u8>>> = ram.iter().map(|d| section::stream_pages(d)).collect();
     let deflated: Vec<Vec<u8>> = enc.frames.iter().map(|f| deflate::deflate(f)).collect::<Result<_>>()?;
     let fpages: Vec<Vec<Vec<u8>>> = deflated.iter().map(|d| section::stream_pages(d)).collect();
     let frames = [fpages[0].len(), fpages[1].len()];
@@ -123,10 +129,22 @@ fn core_section(inst: &Install, img: &[u8], f: &Fields, key: &[u8]) -> Result<Ve
     for s in 0..2 {
         data.extend(hashed(lib_pages.clone(), s));
     }
-    for k in 0..4 {
-        for s in 0..2 {
-            data.push(Page::Hashed(setup[s][k].clone(), s as u32));
-        }
+    for s in 0..2 {
+        data.push(Page::Hashed(inst.cb1.clone(), s as u32));
+    }
+    let mut ram_bitmap = Vec::new();
+    let mut next = [0usize; 2];
+    for s in interleave([ram[0].len(), ram[1].len()]) {
+        ram_bitmap.push(s == 1);
+        data.push(Page::Hashed(rpages[s][next[s]].clone(), s as u32));
+        next[s] += 1;
+    }
+    ensure!(next == [rpages[0].len(), rpages[1].len()], "interleave placed {next:?} contents pages");
+    for s in 0..2 {
+        data.push(Page::Hashed(inst.cb2.clone(), s as u32));
+    }
+    for s in 0..2 {
+        data.push(Page::Hashed(enc.bbm[s].clone(), s as u32));
     }
     let mut bitmap = Vec::new();
     let mut next = [0usize; 2];
@@ -153,7 +171,7 @@ fn core_section(inst: &Install, img: &[u8], f: &Fields, key: &[u8]) -> Result<Ve
         })
         .collect();
     let recs: Vec<(u32, &[u32])> = recs.iter().map(|(t, w)| (*t, w.as_slice())).collect();
-    let act1 = section::action_page(&recs, &[(2, vec![false, true]), (bitmap.len() as u32, bitmap)])?;
+    let act1 = section::action_page(&recs, &[(ram_bitmap.len() as u32, ram_bitmap), (bitmap.len() as u32, bitmap)])?;
     let (h0s, h0n) = io::part("sector0", "hdr");
     let (h1s, h1n) = io::part("sector1", "hdr");
     let shdr = section::stream_pages(&deflate::deflate(&core::sector_header_stream(&img[h0s..h0s + h0n], &img[h1s..h1s + h1n]))?);
@@ -208,11 +226,12 @@ fn interleave(sizes: [usize; 2]) -> Vec<usize> {
     }
 }
 
-/// Byte sum of every object header and both sectors' CRAM (header +0x78).
+/// Byte sum of every object header and both sectors' CRAM and M20K
+/// contents (header +0x78; the contents were always zero before README (y)).
 fn header_sum(img: &[u8]) -> u32 {
     let mut s = 0u32;
     for (o, p, start, n) in crate::db::PARTS {
-        if *p == "hdr" || (*p == "cram" && o.starts_with("sector")) {
+        if *p == "hdr" || ((*p == "cram" || *p == "ram") && o.starts_with("sector")) {
             s = img[*start..start + n].iter().fold(s, |a, &b| a.wrapping_add(b as u32));
         }
     }

@@ -1,303 +1,19 @@
-//! Packing cells into ALMs and placing ALMs in LABs (README (w)).
-//!
-//! An ALM holds either one LUT (up to 6 inputs, ALM half 0) with its flop and
-//! a combinational output, or two halves of a carry chain, each with its flop
-//! and/or combinational sum. A carry chain runs through the half-ALM slots of
-//! a LAB in order (ALM 0 half 0, half 1, ALM 1 …, 20 per LAB) and on into the
-//! LAB one row down; chains start at ALM 0 of a LAB.
+//! Placing ALMs in LABs (README (w), (y)): simulated annealing on wire
+//! length plus, when timing is known, criticality-weighted connection delay
+//! (README (z)), with a VPR-style schedule (temperature from the acceptance
+//! rate, a shrinking move range). A carry chain runs through the half-ALM
+//! slots of a LAB in order (ALM 0 half 0, half 1, ALM 1 …, 20 per LAB) and
+//! on into the LAB one row down, so a chain starts at ALM 0 of a LAB and
+//! moves as a whole. A LAB has two clock lines, two enable lines, one
+//! synchronous clear and two asynchronous clears (README (y)); no move may
+//! ask a LAB for more.
 
 use std::collections::HashMap;
 
 use anyhow::{bail, Context, Result};
 
-use crate::netlist::{Cell, Netlist, Sig};
-
-#[derive(Clone, Debug)]
-pub struct Half {
-    pub cell: usize,
-    pub ff: Option<usize>,
-    pub comb: bool,
-}
-
-#[derive(Clone, Debug)]
-pub enum Alm {
-    /// `lut` None: a pass-through LUT (output = A) in front of a lone flop.
-    Lut { lut: Option<usize>, ff: Option<usize>, comb: bool },
-    Arith { halves: [Option<Half>; 2] },
-}
-
-/// Where a net comes from or goes to, before placement.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum End {
-    /// ALM a's output: half h, xreg0 (the flop) or xreg1 (combinational).
-    Out { alm: usize, h: u8, ff: bool },
-    /// ALM a's input pin, as the offset within the ALM's 8 LAB_RE pins.
-    In { alm: usize, pin: u8 },
-    /// The LAB clock of ALM a's LAB.
-    Clock { alm: usize },
-    /// A top-level port.
-    Port(usize),
-    /// Pin of M20K m (`MEDIUM_EAB_RE` index), input or output by context.
-    M20k { m: usize, pin: u16 },
-}
-
-/// The M20K's pins in its 512 x 32 simple dual-port use (README (w)), from
-/// mm's quartus_sta paths: clock, write and read address, write and read data.
-pub const M20K_CLK: u16 = 77;
-pub fn m20k_waddr(i: usize) -> u16 { 25 + i as u16 }
-pub fn m20k_raddr(i: usize) -> u16 { 52 - i as u16 }
-pub fn m20k_wdata(k: usize) -> u16 { if k < 20 { 57 + k as u16 } else { 40 - k as u16 } }
-pub fn m20k_rdata(k: usize) -> u16 { 83 + k as u16 }
-
-pub struct Packed {
-    pub alms: Vec<Alm>,
-    /// Chains as ALM lists, in chain order.
-    pub chains: Vec<Vec<usize>>,
-    /// M20K cells, by netlist index.
-    pub m20ks: Vec<usize>,
-    /// Per net: driver and sinks.
-    pub nets: std::collections::BTreeMap<u32, (End, Vec<End>)>,
-    pub clock: Option<u32>,
-}
-
-/// LUT input i (A..F) of an ALM is LAB_RE pin 8k + IN[i] (README (n)).
-pub const LUT_IN: [u8; 6] = [3, 4, 2, 1, 0, 7];
-/// An arithmetic half's C and D inputs (README (w)).
-pub const ARITH_IN: [[u8; 2]; 2] = [[2, 1], [5, 6]];
-
-pub fn pack(nl: &Netlist) -> Result<Packed> {
-    let mut driver: HashMap<u32, usize> = HashMap::new();
-    let mut loads: HashMap<u32, Vec<(usize, &'static str)>> = HashMap::new();
-    for (i, c) in nl.cells.iter().enumerate() {
-        let mut add = |s: Sig, port: &'static str| {
-            if let Sig::Net(n) = s {
-                loads.entry(n).or_default().push((i, port));
-            }
-        };
-        match c {
-            Cell::Lut { ins, out, .. } => {
-                driver.insert(*out, i);
-                for &n in ins {
-                    add(Sig::Net(n), "lut");
-                }
-            }
-            Cell::Arith { c, d, ci, so, co, .. } => {
-                for n in [c, d].into_iter().flatten() {
-                    add(Sig::Net(*n), "arith");
-                }
-                add(*ci, "ci");
-                for n in [so, co].into_iter().flatten() {
-                    driver.insert(*n, i);
-                }
-            }
-            Cell::Ff { d, clk, q } => {
-                driver.insert(*q, i);
-                add(*d, "d");
-                add(Sig::Net(*clk), "clk");
-            }
-            Cell::M20k { clk, we, waddr, wdata, raddr, rdata } => {
-                if *we != Sig::Const(true) {
-                    bail!("A5_M20K: only an always-written RAM (WE = 1) is modelled");
-                }
-                for s in waddr.iter().chain(wdata).chain(raddr) {
-                    add(*s, "m20k");
-                }
-                add(Sig::Net(*clk), "clk");
-                for n in rdata.iter().flatten() {
-                    driver.insert(*n, i);
-                }
-            }
-        }
-    }
-    for p in nl.ports.iter().filter(|p| !p.input) {
-        if let Sig::Net(n) = p.net {
-            loads.entry(n).or_default().push((usize::MAX, "port"));
-        }
-    }
-    let clocks: Vec<u32> = nl.cells.iter().filter_map(|c| match c { Cell::Ff { clk, .. } | Cell::M20k { clk, .. } => Some(*clk), _ => None }).collect();
-    let clock = clocks.first().copied();
-    if clocks.iter().any(|c| Some(*c) != clock) {
-        bail!("more than one clock: a5pnr handles one clock domain");
-    }
-    // A flop goes with the LUT or sum that drives it, when that output feeds
-    // only the flop; otherwise the LUT's combinational output is used too.
-    let mut ff_of: HashMap<usize, usize> = HashMap::new();
-    for (i, c) in nl.cells.iter().enumerate() {
-        if let Cell::Ff { d: Sig::Net(d), .. } = c {
-            if let Some(&src) = driver.get(d) {
-                let is_so = matches!(nl.cells[src], Cell::Arith { so: Some(s), .. } if s == *d);
-                if matches!(nl.cells[src], Cell::Lut { .. }) || is_so {
-                    if !ff_of.contains_key(&src) {
-                        ff_of.insert(src, i);
-                        continue;
-                    }
-                }
-            }
-        }
-    }
-    let placed_ff: std::collections::HashSet<usize> = ff_of.values().copied().collect();
-    let comb_used = |net: u32, ff: Option<usize>| -> bool {
-        loads.get(&net).is_some_and(|l| l.iter().any(|&(c, port)| !(Some(c) == ff && port == "d")))
-    };
-    let mut alms = Vec::new();
-    let mut cell_alm: HashMap<usize, (usize, u8)> = HashMap::new();
-    // Carry chains, from their heads.
-    let mut next: HashMap<usize, usize> = HashMap::new();
-    let mut has_prev = std::collections::HashSet::new();
-    for (i, c) in nl.cells.iter().enumerate() {
-        if let Cell::Arith { co: Some(co), .. } = c {
-            for &(l, port) in loads.get(co).map(|v| v.as_slice()).unwrap_or(&[]) {
-                if port != "ci" {
-                    bail!("a carry out feeds something other than a carry in");
-                }
-                next.insert(i, l);
-                has_prev.insert(l);
-            }
-        }
-    }
-    let mut chains = Vec::new();
-    for (i, c) in nl.cells.iter().enumerate() {
-        if !matches!(c, Cell::Arith { .. }) || has_prev.contains(&i) {
-            continue;
-        }
-        let mut cells = vec![i];
-        while let Some(&n) = next.get(cells.last().unwrap()) {
-            cells.push(n);
-        }
-        let mut chain = Vec::new();
-        for pair in cells.chunks(2) {
-            let mut halves: [Option<Half>; 2] = [None, None];
-            for (h, &ci) in pair.iter().enumerate() {
-                let ff = ff_of.get(&ci).copied();
-                let comb = match &nl.cells[ci] {
-                    Cell::Arith { so: Some(so), .. } => comb_used(*so, ff),
-                    _ => false,
-                };
-                halves[h] = Some(Half { cell: ci, ff, comb });
-                cell_alm.insert(ci, (alms.len(), h as u8));
-                if let Some(f) = ff {
-                    cell_alm.insert(f, (alms.len(), h as u8));
-                }
-            }
-            chain.push(alms.len());
-            alms.push(Alm::Arith { halves });
-        }
-        chains.push(chain);
-    }
-    for (i, c) in nl.cells.iter().enumerate() {
-        if let Cell::Lut { out, .. } = c {
-            let ff = ff_of.get(&i).copied();
-            let comb = comb_used(*out, ff);
-            cell_alm.insert(i, (alms.len(), 0));
-            if let Some(f) = ff {
-                cell_alm.insert(f, (alms.len(), 0));
-            }
-            alms.push(Alm::Lut { lut: Some(i), ff, comb });
-        }
-    }
-    // A flop with no LUT of its own gets a pass-through LUT (lut_mask = A).
-    for (i, c) in nl.cells.iter().enumerate() {
-        if let Cell::Ff { d: Sig::Net(_), .. } = c {
-            if !placed_ff.contains(&i) {
-                cell_alm.insert(i, (alms.len(), 0));
-                alms.push(Alm::Lut { lut: None, ff: Some(i), comb: false });
-            }
-        }
-    }
-    // Nets: drivers and sinks.
-    let mut nets: std::collections::BTreeMap<u32, (End, Vec<End>)> = Default::default();
-    for (a, alm) in alms.iter().enumerate() {
-        match alm {
-            Alm::Lut { lut, ff, comb } => {
-                if let Some(lut) = lut {
-                    let Cell::Lut { ins, out, .. } = &nl.cells[*lut] else { unreachable!() };
-                    if *comb {
-                        nets.entry(*out).or_insert((End::Out { alm: a, h: 0, ff: false }, vec![])).0 = End::Out { alm: a, h: 0, ff: false };
-                    }
-                    for (k, n) in ins.iter().enumerate() {
-                        nets.entry(*n).or_insert((End::Port(usize::MAX), vec![])).1.push(End::In { alm: a, pin: LUT_IN[k] });
-                    }
-                } else {
-                    let Cell::Ff { d: Sig::Net(d), .. } = nl.cells[ff.unwrap()] else { unreachable!() };
-                    nets.entry(d).or_insert((End::Port(usize::MAX), vec![])).1.push(End::In { alm: a, pin: LUT_IN[0] });
-                }
-                if let Some(f) = ff {
-                    let Cell::Ff { q, .. } = nl.cells[*f] else { unreachable!() };
-                    nets.entry(q).or_insert((End::Port(usize::MAX), vec![])).0 = End::Out { alm: a, h: 0, ff: true };
-                }
-            }
-            Alm::Arith { halves } => {
-                for (h, half) in halves.iter().enumerate() {
-                    let Some(half) = half else { continue };
-                    let Cell::Arith { c, d, so, .. } = &nl.cells[half.cell] else { unreachable!() };
-                    for (k, n) in [c, d].into_iter().enumerate() {
-                        if let Some(n) = n {
-                            nets.entry(*n).or_insert((End::Port(usize::MAX), vec![])).1.push(End::In { alm: a, pin: ARITH_IN[h][k] });
-                        }
-                    }
-                    if half.comb {
-                        nets.entry(so.unwrap()).or_insert((End::Port(usize::MAX), vec![])).0 = End::Out { alm: a, h: h as u8, ff: false };
-                    }
-                    if let Some(f) = half.ff {
-                        let Cell::Ff { q, .. } = nl.cells[f] else { unreachable!() };
-                        nets.entry(q).or_insert((End::Port(usize::MAX), vec![])).0 = End::Out { alm: a, h: h as u8, ff: true };
-                    }
-                }
-            }
-        }
-    }
-    let m20ks: Vec<usize> = nl.cells.iter().enumerate().filter(|(_, c)| matches!(c, Cell::M20k { .. })).map(|(i, _)| i).collect();
-    for (m, &ci) in m20ks.iter().enumerate() {
-        let Cell::M20k { waddr, wdata, raddr, rdata, .. } = &nl.cells[ci] else { unreachable!() };
-        let mut sink = |s: &Sig, pin: u16| -> Result<()> {
-            match s {
-                Sig::Net(n) => nets.entry(*n).or_insert((End::Port(usize::MAX), vec![])).1.push(End::M20k { m, pin }),
-                // A constant address or data bit would need a tie-off: not modelled.
-                Sig::Const(_) => bail!("A5_M20K input tied to a constant"),
-            }
-            Ok(())
-        };
-        for (i, s) in waddr.iter().enumerate() { sink(s, m20k_waddr(i))?; }
-        for (i, s) in raddr.iter().enumerate() { sink(s, m20k_raddr(i))?; }
-        for (k, s) in wdata.iter().enumerate() { sink(s, m20k_wdata(k))?; }
-        for (k, n) in rdata.iter().enumerate() {
-            if let Some(n) = n {
-                nets.entry(*n).or_insert((End::Port(usize::MAX), vec![])).0 = End::M20k { m, pin: m20k_rdata(k) };
-            }
-        }
-    }
-    for (pi, p) in nl.ports.iter().enumerate() {
-        match (p.input, p.net) {
-            (true, Sig::Net(n)) => nets.entry(n).or_insert((End::Port(pi), vec![])).0 = End::Port(pi),
-            (false, Sig::Net(n)) => nets.entry(n).or_insert((End::Port(usize::MAX), vec![])).1.push(End::Port(pi)),
-            (false, Sig::Const(_)) => bail!("output {} is a constant; drive it from logic", p.name),
-            _ => {}
-        }
-    }
-    if let Some(clk) = clock {
-        let e = nets.entry(clk).or_insert((End::Port(usize::MAX), vec![]));
-        let mut labs_seen = Vec::new();
-        for (a, alm) in alms.iter().enumerate() {
-            let has_ff = match alm {
-                Alm::Lut { ff, .. } => ff.is_some(),
-                Alm::Arith { halves } => halves.iter().flatten().any(|h| h.ff.is_some()),
-            };
-            if has_ff {
-                labs_seen.push(a);
-            }
-        }
-        e.1.extend(labs_seen.into_iter().map(|a| End::Clock { alm: a }));
-        e.1.extend((0..m20ks.len()).map(|m| End::M20k { m, pin: M20K_CLK }));
-    }
-    for (n, (d, s)) in &nets {
-        if *d == End::Port(usize::MAX) && !s.is_empty() {
-            bail!("net {} has loads but no driver a5pnr can place", nl.nets[*n as usize]);
-        }
-    }
-    nets.retain(|_, (_, s)| !s.is_empty());
-    let _ = cell_alm;
-    Ok(Packed { alms, chains, m20ks, nets, clock })
-}
+use crate::netlist::Netlist;
+use crate::pack::{Ctl, End, Packed};
 
 /// A LAB site.
 #[derive(Clone, Copy, Debug)]
@@ -319,11 +35,23 @@ pub fn labs(db: &str) -> Result<Vec<Lab>> {
     Ok(out)
 }
 
+pub fn m20k_sites(db: &str) -> Result<Vec<(u32, u32)>> {
+    let text = std::fs::read_to_string(format!("{db}/floorplan.tsv")).context("floorplan.tsv")?;
+    let mut out = Vec::new();
+    for l in text.lines().skip(1) {
+        let f: Vec<&str> = l.split('\t').collect();
+        if f[1] == "cw_mm_m20k" && !f[0].contains("rsp") {
+            out.push((f[3].parse()?, f[4].parse()?));
+        }
+    }
+    Ok(out)
+}
+
 /// A tiny deterministic generator (xorshift), so runs repeat.
 pub struct Rng(u64);
 impl Rng {
     pub fn new(seed: u64) -> Rng {
-        Rng(seed | 1)
+        Rng(seed.wrapping_mul(0x9e3779b97f4a7c15) | 1)
     }
     pub fn next(&mut self) -> u64 {
         self.0 ^= self.0 << 13;
@@ -346,31 +74,89 @@ pub struct Placement {
     pub m20k_at: Vec<(u32, u32)>,
 }
 
-pub fn m20k_sites(db: &str) -> Result<Vec<(u32, u32)>> {
-    let text = std::fs::read_to_string(format!("{db}/floorplan.tsv")).context("floorplan.tsv")?;
-    let mut out = Vec::new();
-    for l in text.lines().skip(1) {
-        let f: Vec<&str> = l.split('\t').collect();
-        if f[1] == "cw_mm_m20k" && !f[0].contains("rsp") {
-            out.push((f[3].parse()?, f[4].parse()?));
+/// How many of each control line a LAB's ALMs ask for, and whether that
+/// fits: two clocks, two enables, one synchronous clear, two asynchronous
+/// clears (an ALM without one still takes a line, left inactive).
+#[derive(Default, Clone)]
+struct LabUse(HashMap<Ctl, u32>);
+
+impl LabUse {
+    fn add(&mut self, ctls: &[Ctl], d: i32) {
+        for c in ctls {
+            let e = self.0.entry(*c).or_default();
+            *e = (*e as i32 + d) as u32;
+            if *e == 0 {
+                self.0.remove(c);
+            }
         }
     }
-    Ok(out)
+    /// One clock (Quartus used LAB clock 0 only, also with two domains:
+    /// ct), two enables, one synchronous clear, one routed asynchronous
+    /// clear (CLR1, LAB_RE 86) and the other line inactive (README (y)).
+    fn ok(&self) -> bool {
+        let (mut clk, mut ce, mut sclr, mut aclr) = (0, 0, 0, 0);
+        for c in self.0.keys() {
+            match c {
+                Ctl::Clock(_) => clk += 1,
+                Ctl::Ce(_) => ce += 1,
+                Ctl::Sclr(_) => sclr += 1,
+                Ctl::Aclr(Some(_)) => aclr += 1,
+                Ctl::Aclr(None) => {}
+            }
+        }
+        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1
+    }
 }
 
-/// Simulated annealing on half-perimeter wire length, in LAB coordinates.
-/// Port positions are their pin nodes' X/Y.
-pub fn place(p: &Packed, labs: &[Lab], m20k_sites: &[(u32, u32)], port_xy: &HashMap<usize, (u32, u32)>, seed: u64) -> Result<Placement> {
+/// VPR's wire-length correction for a net's bounding box by pin count.
+fn crossing(pins: usize) -> f64 {
+    const Q: [f64; 50] = [
+        1.0, 1.0, 1.0, 1.0828, 1.1536, 1.2206, 1.2823, 1.3385, 1.3991, 1.4493, 1.4974, 1.5455, 1.5937, 1.6418, 1.6899, 1.7304,
+        1.7709, 1.8114, 1.8519, 1.8924, 1.9288, 1.9652, 2.0015, 2.0379, 2.0743, 2.1061, 2.1379, 2.1698, 2.2016, 2.2334, 2.2646,
+        2.2958, 2.3271, 2.3583, 2.3895, 2.4187, 2.4479, 2.4772, 2.5064, 2.5356, 2.5610, 2.5864, 2.6117, 2.6371, 2.6625, 2.6887,
+        2.7148, 2.7410, 2.7671, 2.7933,
+    ];
+    if pins < 50 {
+        Q[pins]
+    } else {
+        2.7933 + 0.02616 * (pins - 50) as f64
+    }
+}
+
+/// A placement cost term for timing: for each (driver ALM or fixed point,
+/// sink ALM) connection, its weight (criticality^exponent) and the delay
+/// estimate as a function of the distance.
+pub struct TimingCost<'a> {
+    /// Per connection: driver end, sink end, weight.
+    pub conns: Vec<(End, End, f64)>,
+    pub delay: &'a dyn Fn(i64, i64) -> f64,
+    pub lambda: f64,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn place(
+    p: &Packed,
+    nl: &Netlist,
+    labs: &[Lab],
+    m20k_sites: &[(u32, u32)],
+    port_xy: &HashMap<usize, (u32, u32)>,
+    seed: u64,
+    tc: Option<&TimingCost>,
+    effort: f64,
+) -> Result<Placement> {
     let mut rng = Rng::new(seed);
     let lab_at: HashMap<(u32, u32), usize> = labs.iter().enumerate().map(|(i, l)| ((l.x, l.y), i)).collect();
+    let n = p.alms.len();
+    let ctls: Vec<Vec<Ctl>> = p.alms.iter().map(|a| a.ctls(nl)).collect();
     let mut occ: HashMap<(usize, u8), usize> = HashMap::new();
-    let mut at = vec![(usize::MAX, 0u8); p.alms.len()];
+    let mut uses: Vec<LabUse> = vec![LabUse::default(); labs.len()];
+    let mut at = vec![(usize::MAX, 0u8); n];
     // Start near the ports' centre.
     let (cx, cy) = if port_xy.is_empty() {
         (60, 28)
     } else {
-        let n = port_xy.len() as u32;
-        (port_xy.values().map(|v| v.0).sum::<u32>() / n, port_xy.values().map(|v| v.1).sum::<u32>() / n)
+        let k = port_xy.len() as u32;
+        (port_xy.values().map(|v| v.0).sum::<u32>() / k, port_xy.values().map(|v| v.1).sum::<u32>() / k)
     };
     // M20Ks go to the sites nearest the ports' centre and stay there.
     let mut sites: Vec<(u32, u32)> = m20k_sites.to_vec();
@@ -381,58 +167,77 @@ pub fn place(p: &Packed, labs: &[Lab], m20k_sites: &[(u32, u32)], port_xy: &Hash
     let m20k_at: Vec<(u32, u32)> = sites[..p.m20ks.len()].to_vec();
     let mut by_dist: Vec<usize> = (0..labs.len()).collect();
     by_dist.sort_by_key(|&i| (labs[i].x as i64 - cx as i64).abs() + (labs[i].y as i64 - cy as i64).abs());
-    let in_chain: std::collections::HashSet<usize> = p.chains.iter().flatten().copied().collect();
-    // Chains first: each into LABs (x, y), (x, y-1), … at ALM 0 on.
-    let chain_fits = |occ: &HashMap<(usize, u8), usize>, x: u32, y: u32, n: usize| -> Option<Vec<(usize, u8)>> {
+    let mut chain_of = vec![usize::MAX; n];
+    for (ci, c) in p.chains.iter().enumerate() {
+        for &a in c {
+            chain_of[a] = ci;
+        }
+    }
+    // A chain's slots from LAB (x, y) ALM k0 (0 or 5: the hardware carry
+    // in there is 0, README (y)), if all free and legal.
+    let chain_slots = |occ: &HashMap<(usize, u8), usize>, uses: &[LabUse], c: &[usize], x: u32, y: u32, k0: usize| -> Option<Vec<(usize, u8)>> {
         let mut slots = Vec::new();
-        for j in 0..n {
-            let l = *lab_at.get(&(x, y.checked_sub((j / 10) as u32)?))?;
-            let s = (l, (j % 10) as u8);
-            if occ.contains_key(&s) {
+        let mut trial: HashMap<usize, LabUse> = HashMap::new();
+        for (j, &a) in c.iter().enumerate() {
+            let l = *lab_at.get(&(x, y.checked_sub(((k0 + j) / 10) as u32)?))?;
+            let s = (l, ((k0 + j) % 10) as u8);
+            if occ.get(&s).is_some_and(|&o| !c.contains(&o)) {
                 return None;
             }
+            trial.entry(l).or_insert_with(|| uses[l].clone()).add(&ctls[a], 1);
             slots.push(s);
         }
-        Some(slots)
+        trial.values().all(LabUse::ok).then_some(slots)
     };
     for (ci, c) in p.chains.iter().enumerate() {
-        let mut done = false;
-        for &l in &by_dist {
-            if let Some(slots) = chain_fits(&occ, labs[l].x, labs[l].y, c.len()) {
-                for (j, s) in slots.into_iter().enumerate() {
-                    occ.insert(s, c[j]);
-                    at[c[j]] = s;
+        let slots = by_dist
+            .iter()
+            .flat_map(|&l| [(l, 0), (l, 5)])
+            .find_map(|(l, k0)| chain_slots(&occ, &uses, c, labs[l].x, labs[l].y, k0))
+            .with_context(|| format!("chain {ci} ({} ALMs) doesn't fit; its control lines: {:?}", c.len(), c.iter().map(|&a| &ctls[a]).collect::<Vec<_>>()))?;
+        for (j, s) in slots.into_iter().enumerate() {
+            occ.insert(s, c[j]);
+            at[c[j]] = s;
+            uses[s.0].add(&ctls[c[j]], 1);
+        }
+    }
+    {
+        let mut li = 0;
+        for a in 0..n {
+            if chain_of[a] != usize::MAX {
+                continue;
+            }
+            'find: loop {
+                let l = *by_dist.get(li).context("design doesn't fit")?;
+                for k in 0..10u8 {
+                    if !occ.contains_key(&(l, k)) {
+                        let mut u = uses[l].clone();
+                        u.add(&ctls[a], 1);
+                        if u.ok() {
+                            occ.insert((l, k), a);
+                            at[a] = (l, k);
+                            uses[l] = u;
+                            break 'find;
+                        }
+                    }
                 }
-                done = true;
-                break;
+                li += 1;
             }
         }
-        if !done {
-            bail!("chain {ci} ({} ALMs) doesn't fit", c.len());
-        }
     }
-    let mut free = by_dist.iter().flat_map(|&l| (0..10u8).map(move |k| (l, k)));
-    for a in 0..p.alms.len() {
-        if in_chain.contains(&a) {
-            continue;
+    // Nets for the cost: every net but the clocks (they ride the clock network).
+    let nets: Vec<&(End, Vec<End>)> = p.nets.iter().filter(|(k, _)| !p.clocks.contains(k)).map(|(_, v)| v).collect();
+    let alm_of = |e: &End| -> Option<usize> {
+        match e {
+            End::Out { alm, .. } | End::In { alm, .. } | End::Ctl { alm, .. } => Some(*alm),
+            End::Port(_) | End::M20k { .. } | End::Pll(_) => None,
         }
-        let s = loop {
-            let s = free.next().context("design doesn't fit")?;
-            if !occ.contains_key(&s) {
-                break s;
-            }
-        };
-        occ.insert(s, a);
-        at[a] = s;
-    }
-    // Annealing over single ALMs (chains stay put).
-    let nets: Vec<&(End, Vec<End>)> = p.nets.iter().filter(|(n, _)| Some(**n) != p.clock).map(|(_, v)| v).collect();
-    let mut alm_nets: Vec<Vec<usize>> = vec![Vec::new(); p.alms.len()];
+    };
+    let mut alm_nets: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (i, (d, s)) in nets.iter().enumerate() {
         for e in std::iter::once(d).chain(s.iter()) {
-            match e {
-                End::Out { alm, .. } | End::In { alm, .. } | End::Clock { alm } => alm_nets[*alm].push(i),
-                End::Port(_) | End::M20k { .. } => {}
+            if let Some(a) = alm_of(e) {
+                alm_nets[a].push(i);
             }
         }
     }
@@ -440,77 +245,256 @@ pub fn place(p: &Packed, labs: &[Lab], m20k_sites: &[(u32, u32)], port_xy: &Hash
         v.sort();
         v.dedup();
     }
-    let xy = |at: &[(usize, u8)], e: &End| -> Option<(i64, i64)> {
+    let weight: Vec<f64> = nets.iter().map(|(_, s)| crossing(s.len() + 1)).collect();
+    let fixed_xy = |e: &End| -> Option<(i64, i64)> {
         match e {
-            End::Out { alm, .. } | End::In { alm, .. } | End::Clock { alm } => {
-                let l = labs[at[*alm].0];
-                Some((l.x as i64, l.y as i64))
-            }
             End::Port(p) => port_xy.get(p).map(|&(x, y)| (x as i64, y as i64)),
             End::M20k { m, .. } => Some((m20k_at[*m].0 as i64, m20k_at[*m].1 as i64)),
+            _ => None,
         }
     };
-    let hpwl = |at: &[(usize, u8)], i: usize| -> i64 {
+    let xy = |at: &[(usize, u8)], e: &End| -> Option<(i64, i64)> {
+        match alm_of(e) {
+            Some(a) => {
+                let l = labs[at[a].0];
+                Some((l.x as i64, l.y as i64))
+            }
+            None => fixed_xy(e),
+        }
+    };
+    let net_cost = |at: &[(usize, u8)], i: usize| -> f64 {
         let (d, s) = nets[i];
-        let pts: Vec<(i64, i64)> = std::iter::once(d).chain(s.iter()).filter_map(|e| xy(at, e)).collect();
-        if pts.is_empty() {
-            return 0;
+        let (mut x0, mut x1, mut y0, mut y1) = (i64::MAX, i64::MIN, i64::MAX, i64::MIN);
+        for e in std::iter::once(d).chain(s.iter()) {
+            if let Some((x, y)) = xy(at, e) {
+                x0 = x0.min(x);
+                x1 = x1.max(x);
+                y0 = y0.min(y);
+                y1 = y1.max(y);
+            }
         }
-        let (x0, x1) = (pts.iter().map(|p| p.0).min().unwrap(), pts.iter().map(|p| p.0).max().unwrap());
-        let (y0, y1) = (pts.iter().map(|p| p.1).min().unwrap(), pts.iter().map(|p| p.1).max().unwrap());
-        (x1 - x0) + (y1 - y0)
+        if x0 > x1 {
+            return 0.0;
+        }
+        weight[i] * ((x1 - x0) + (y1 - y0)) as f64
     };
-    let movable: Vec<usize> = (0..p.alms.len()).filter(|a| !in_chain.contains(a)).collect();
-    if movable.is_empty() || nets.is_empty() {
+    // Timing connections touching each ALM.
+    let mut alm_conns: Vec<Vec<usize>> = vec![Vec::new(); n];
+    if let Some(tc) = tc {
+        for (i, (d, s, _)) in tc.conns.iter().enumerate() {
+            for e in [d, s] {
+                if let Some(a) = alm_of(e) {
+                    alm_conns[a].push(i);
+                }
+            }
+        }
+        for v in &mut alm_conns {
+            v.sort();
+            v.dedup();
+        }
+    }
+    let conn_cost = |at: &[(usize, u8)], i: usize| -> f64 {
+        let tc = tc.unwrap();
+        let (d, s, w) = &tc.conns[i];
+        match (xy(at, d), xy(at, s)) {
+            (Some(a), Some(b)) => w * (tc.delay)((a.0 - b.0).abs(), (a.1 - b.1).abs()),
+            _ => 0.0,
+        }
+    };
+    let movable: Vec<usize> = (0..n).filter(|&a| chain_of[a] == usize::MAX).collect();
+    if n == 0 || nets.is_empty() {
         return Ok(Placement { at, m20k_at });
     }
-    let mut cost: i64 = (0..nets.len()).map(|i| hpwl(&at, i)).sum();
-    let mut temp = 10.0f64;
-    let moves = 2000 * movable.len().max(10);
-    let window = 12i64;
-    for step in 0..moves {
-        let a = movable[rng.below(movable.len())];
-        let (l0, _) = at[a];
-        let (x0, y0) = (labs[l0].x as i64, labs[l0].y as i64);
-        let tx = x0 + rng.below(2 * window as usize + 1) as i64 - window;
-        let ty = y0 + rng.below(2 * window as usize + 1) as i64 - window;
-        let Some(&tl) = lab_at.get(&(tx.max(0) as u32, ty.max(0) as u32)) else { continue };
-        let tk = rng.below(10) as u8;
-        let other = occ.get(&(tl, tk)).copied();
-        if other.is_some_and(|o| in_chain.contains(&o)) || other == Some(a) {
-            continue;
-        }
-        let mut touched: Vec<usize> = alm_nets[a].clone();
-        if let Some(o) = other {
-            touched.extend(&alm_nets[o]);
-            touched.sort();
-            touched.dedup();
-        }
-        let before: i64 = touched.iter().map(|&i| hpwl(&at, i)).sum();
-        let old = at[a];
-        at[a] = (tl, tk);
-        if let Some(o) = other {
-            at[o] = old;
-        }
-        let after: i64 = touched.iter().map(|&i| hpwl(&at, i)).sum();
-        let delta = after - before;
-        if delta <= 0 || rng.unit() < (-(delta as f64) / temp).exp() {
-            cost += delta;
-            occ.remove(&old);
-            occ.insert((tl, tk), a);
-            if let Some(o) = other {
-                occ.insert(old, o);
-            }
-        } else {
-            at[a] = old;
-            if let Some(o) = other {
-                at[o] = (tl, tk);
-            }
-        }
-        if step % 1000 == 999 {
-            temp *= 0.97;
+    // Wire length plus a cost per LAB in use: wire length alone doesn't
+    // mind ALMs spread thinly between their nets' ends (the CPU's 2,127
+    // ALMs took 522 LABs without it).
+    const LAB_COST: f64 = 1.5;
+    let mut ln = vec![0u32; labs.len()];
+    for &(l, _) in &at {
+        if l != usize::MAX {
+            ln[l] += 1;
         }
     }
-    eprintln!("place: {} ALMs ({} in {} chains), HPWL {cost}", p.alms.len(), in_chain.len(), p.chains.len());
+    let lab_term = |ln: &[u32]| LAB_COST * ln.iter().filter(|&&c| c > 0).count() as f64;
+    let mut wl: f64 = (0..nets.len()).map(|i| net_cost(&at, i)).sum::<f64>() + lab_term(&ln);
+    let mut tcost: f64 = if tc.is_some() { (0..tc.unwrap().conns.len()).map(|i| conn_cost(&at, i)).sum() } else { 0.0 };
+    // Normalise the two terms by their starting values (VPR's
+    // timing-driven cost).
+    let lambda = tc.map_or(0.0, |t| t.lambda);
+    let (wl_norm, t_norm) = (1.0 / wl.max(1.0), 1.0 / tcost.max(1e-9));
+    let total = |wl: f64, t: f64| (1.0 - lambda) * wl * wl_norm + lambda * t * t_norm;
+    let (gx, gy) = (labs.iter().map(|l| l.x).max().unwrap() as i64, labs.iter().map(|l| l.y).max().unwrap() as i64);
+    let mut rlim = gx.max(gy) as f64;
+    let mut moves_tried: Vec<usize> = Vec::new();
+    // One move: an ALM (or its chain) to a random slot within rlim, swapping
+    // with what is there. Returns the cost delta if accepted.
+    let try_move = |at: &mut Vec<(usize, u8)>,
+                        occ: &mut HashMap<(usize, u8), usize>,
+                        uses: &mut Vec<LabUse>,
+                        rng: &mut Rng,
+                        temp: f64,
+                        rlim: f64,
+                        wl: &mut f64,
+                        tcost: &mut f64,
+                        ln: &mut Vec<u32>|
+     -> Option<bool> {
+        let a = if !p.chains.is_empty() && rng.below(8) == 0 {
+            p.chains[rng.below(p.chains.len())][0]
+        } else {
+            *movable.get(rng.below(movable.len().max(1)))?
+        };
+        let r = rlim.max(1.0) as i64;
+        let (l0, k0) = at[a];
+        let tx = labs[l0].x as i64 + rng.below(2 * r as usize + 1) as i64 - r;
+        let ty = labs[l0].y as i64 + rng.below(2 * r as usize + 1) as i64 - r;
+        let &tl = lab_at.get(&(tx.clamp(0, 255) as u32, ty.clamp(0, 255) as u32))?;
+        // The ALMs that move, old and new slots.
+        let mut moved: Vec<(usize, (usize, u8), (usize, u8))> = Vec::new();
+        if chain_of[a] != usize::MAX {
+            let c = &p.chains[chain_of[a]];
+            let k0 = 5 * rng.below(2);
+            for (j, &m) in c.iter().enumerate() {
+                let l = *lab_at.get(&(labs[tl].x, labs[tl].y.checked_sub(((k0 + j) / 10) as u32)?))?;
+                let s = (l, ((k0 + j) % 10) as u8);
+                if occ.get(&s).is_some_and(|o| !c.contains(o)) {
+                    return None;
+                }
+                moved.push((m, at[m], s));
+            }
+        } else {
+            let tk = rng.below(10) as u8;
+            if (tl, tk) == (l0, k0) {
+                return None;
+            }
+            moved.push((a, (l0, k0), (tl, tk)));
+            if let Some(&o) = occ.get(&(tl, tk)) {
+                if chain_of[o] != usize::MAX {
+                    return None;
+                }
+                moved.push((o, (tl, tk), (l0, k0)));
+            }
+        }
+        // LAB control lines.
+        let mut trial: HashMap<usize, LabUse> = HashMap::new();
+        for &(m, from, to) in &moved {
+            trial.entry(from.0).or_insert_with(|| uses[from.0].clone()).add(&ctls[m], -1);
+            trial.entry(to.0).or_insert_with(|| uses[to.0].clone()).add(&ctls[m], 1);
+        }
+        if !trial.values().all(LabUse::ok) {
+            return None;
+        }
+        let mut touched: Vec<usize> = moved.iter().flat_map(|&(m, ..)| alm_nets[m].iter().copied()).collect();
+        touched.sort();
+        touched.dedup();
+        let mut ttouched: Vec<usize> = moved.iter().flat_map(|&(m, ..)| alm_conns[m].iter().copied()).collect();
+        ttouched.sort();
+        ttouched.dedup();
+        let before: f64 = touched.iter().map(|&i| net_cost(at, i)).sum();
+        let tbefore: f64 = ttouched.iter().map(|&i| conn_cost(at, i)).sum();
+        for &(m, _, to) in &moved {
+            at[m] = to;
+        }
+        // LABs emptied and newly used.
+        let mut dl: HashMap<usize, i32> = HashMap::new();
+        for &(_, from, to) in &moved {
+            *dl.entry(from.0).or_default() -= 1;
+            *dl.entry(to.0).or_default() += 1;
+        }
+        let lab_delta: f64 = dl
+            .iter()
+            .map(|(&l, &d)| {
+                let (o, n) = (ln[l] as i32, ln[l] as i32 + d);
+                LAB_COST * ((n > 0) as i32 - (o > 0) as i32) as f64
+            })
+            .sum();
+        let after: f64 = touched.iter().map(|&i| net_cost(at, i)).sum::<f64>() + lab_delta;
+        let tafter: f64 = ttouched.iter().map(|&i| conn_cost(at, i)).sum();
+        let delta = total(*wl + after - before, *tcost + tafter - tbefore) - total(*wl, *tcost);
+        if delta <= 0.0 || rng.unit() < (-delta / temp).exp() {
+            for &(_, from, _) in &moved {
+                occ.remove(&from);
+            }
+            for &(m, _, to) in &moved {
+                occ.insert(to, m);
+            }
+            for (l, u) in trial {
+                uses[l] = u;
+            }
+            *wl += after - before;
+            *tcost += tafter - tbefore;
+            for (l, d) in dl {
+                ln[l] = (ln[l] as i32 + d) as u32;
+            }
+            Some(true)
+        } else {
+            for &(m, from, _) in &moved {
+                at[m] = from;
+            }
+            Some(false)
+        }
+    };
+    // Starting temperature: 20 standard deviations of random moves' deltas.
+    let mut deltas = Vec::new();
+    for _ in 0..(n.min(500)).max(50) {
+        let before = total(wl, tcost);
+        if try_move(&mut at, &mut occ, &mut uses, &mut rng, f64::INFINITY, rlim, &mut wl, &mut tcost, &mut ln).is_some() {
+            deltas.push(total(wl, tcost) - before);
+        }
+    }
+    let mean = deltas.iter().sum::<f64>() / deltas.len().max(1) as f64;
+    let sd = (deltas.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / deltas.len().max(1) as f64).sqrt();
+    let mut temp = 20.0 * sd.max(1e-6);
+    let inner = ((effort * (n as f64).powf(4.0 / 3.0)) as usize).max(200);
+    let nets_n = nets.len().max(1) as f64;
+    let mut rounds = 0;
+    loop {
+        let (mut acc, mut tried) = (0usize, 0usize);
+        for _ in 0..inner {
+            match try_move(&mut at, &mut occ, &mut uses, &mut rng, temp, rlim, &mut wl, &mut tcost, &mut ln) {
+                Some(true) => {
+                    acc += 1;
+                    tried += 1
+                }
+                Some(false) => tried += 1,
+                None => {}
+            }
+        }
+        let rate = acc as f64 / tried.max(1) as f64;
+        moves_tried.push(tried);
+        let alpha = if rate > 0.96 {
+            0.5
+        } else if rate > 0.8 {
+            0.9
+        } else if rate > 0.15 {
+            0.95
+        } else {
+            0.8
+        };
+        temp *= alpha;
+        rlim = (rlim * (1.0 - 0.44 + rate)).clamp(1.0, gx.max(gy) as f64);
+        rounds += 1;
+        // Recompute from scratch now and then: the running sums drift.
+        if rounds % 10 == 0 {
+            wl = (0..nets.len()).map(|i| net_cost(&at, i)).sum::<f64>() + lab_term(&ln);
+            if tc.is_some() {
+                tcost = (0..tc.unwrap().conns.len()).map(|i| conn_cost(&at, i)).sum();
+            }
+        }
+        if temp < 0.005 * total(wl, tcost) / nets_n || rounds > 400 {
+            break;
+        }
+    }
+    // A last greedy pass at zero temperature.
+    for _ in 0..inner {
+        try_move(&mut at, &mut occ, &mut uses, &mut rng, 1e-12, 3.0, &mut wl, &mut tcost, &mut ln);
+    }
+    let labs_used: std::collections::BTreeSet<usize> = at.iter().map(|a| a.0).collect();
+    eprintln!(
+        "place: {n} ALMs ({} in {} chains) in {} LABs, wire length {:.0}, {rounds} temperatures x {inner} moves",
+        p.chains.iter().map(Vec::len).sum::<usize>(),
+        p.chains.len(),
+        labs_used.len(),
+        (0..nets.len()).map(|i| net_cost(&at, i)).sum::<f64>()
+    );
     Ok(Placement { at, m20k_at })
 }

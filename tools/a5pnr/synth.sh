@@ -2,22 +2,26 @@
 # Verilog → a5pnr's JSON netlist with yosys from nixpkgs (README (w)):
 #   tools/a5pnr/synth.sh <top> <out.json> <design.v>...
 # Cells: $lut (≤ 6 inputs), A5_ARITH carry chains ($alu, yosys/arith_map.v),
-# $_DFF_P_ flops (enables and synchronous resets become LUT logic; flops
-# power up at 0) and A5_M20K instances (yosys/cells.v).
+# flops with the LAB's controls (README (y): enable, synchronous clear that
+# the enable gates, asynchronous clear of either polarity; anything else
+# becomes LUT logic; flops power up at 0) and A5_M20K instances
+# (yosys/cells.v).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 top=$1; out=$2; shift 2
+inc=""; for f in "$@"; do inc="$inc -I$(dirname "$(realpath "$f")")"; done
 nix shell nixpkgs#yosys -c yosys -q -l "${out%.json}.yosys.log" -p "
 read_verilog -lib $here/yosys/cells.v
-read_verilog $*
+read_verilog$inc $*
 synth -top $top -flatten -run :fine
 memory_map
 opt -full
 techmap -map $here/yosys/arith_map.v
 techmap
 opt -fast
-dfflegalize -cell \$_DFF_P_ 0
+dfflegalize -cell \$_DFF_P_ 0 -cell \$_DFFE_PP_ 0 -cell \$_SDFF_PP0_ 0 -cell \$_SDFFCE_PP0P_ 0 -cell \$_DFF_PP0_ 0 -cell \$_DFF_PN0_ 0 -cell \$_DFFE_PP0P_ 0 -cell \$_DFFE_PN0P_ 0
 abc -lut 6
+opt_merge -share_all t:\$lut
 opt_clean -purge
 stat
 write_json $out

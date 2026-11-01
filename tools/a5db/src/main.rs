@@ -91,23 +91,28 @@ fn decode(db: &Db, btype: &str, img: &[u8], uid: &str, a: &Attr) -> Result<Optio
     Ok(Some(if found.is_empty() { "?".into() } else { found.join("|") }))
 }
 
-fn attrs(dbdir: &str, sof_path: &str, uid: &str) -> Result<()> {
+fn attrs(dbdir: &str, sof_path: &str, uids: &[String], prefix: bool) -> Result<()> {
     let mut db = Db::open(dbdir)?;
     let sof = sof::Sof::read(sof_path)?;
-    let btype = db.type_of(uid)?;
-    for a in db.bcm.attributes(&btype) {
-        if let Some(v) = decode(&db, &btype, sof.image(), uid, &a)? {
-            println!("{}\t{v}", a.path);
+    let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+    use std::io::Write as _;
+    for uid in uids {
+        let btype = db.type_of(uid)?;
+        let lead = if prefix { format!("{uid}\t") } else { String::new() };
+        for a in db.bcm.attributes(&btype) {
+            if let Some(v) = decode(&db, &btype, sof.image(), uid, &a)? {
+                writeln!(out, "{lead}{}\t{v}", a.path)?;
+            }
         }
-    }
-    for d in direct_attrs(&db, &btype) {
-        let bits = db.bcm.direct_bits(&btype, &d).unwrap().to_vec();
-        let map = db.map(&btype);
-        let s: String = bits
-            .iter()
-            .map(|b| map.pos(uid, b).map_or('?', |p| if p.get(sof.image()) { '1' } else { '0' }))
-            .collect();
-        println!("{d}\t{s}");
+        for d in direct_attrs(&db, &btype) {
+            let bits = db.bcm.direct_bits(&btype, &d).unwrap().to_vec();
+            let map = db.map(&btype);
+            let s: String = bits
+                .iter()
+                .map(|b| map.pos(uid, b).map_or('?', |p| if p.get(sof.image()) { '1' } else { '0' }))
+                .collect();
+            writeln!(out, "{lead}{d}\t{s}")?;
+        }
     }
     Ok(())
 }
@@ -292,7 +297,9 @@ pub fn write_rows(db: &mut Db, img: &mut [u8], rows: &[(String, String, String)]
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
-        ["attrs", dbdir, sof, uid] => attrs(dbdir, sof, uid),
+        ["attrs", dbdir, sof, uid] => attrs(dbdir, sof, &[uid.to_string()], false),
+        // Many instances in one run, each line prefixed with its uid.
+        ["attrs-of", dbdir, sof, uids @ ..] if !uids.is_empty() => attrs(dbdir, sof, &args[3..], true),
         ["bits", dbdir, sof, uid] => bits(dbdir, sof, uid),
         ["set", dbdir, inp, out, key, uid, rest @ ..] if !rest.is_empty() => {
             set(dbdir, inp, out, key, uid, &args[6..])
@@ -351,11 +358,15 @@ fn main() -> Result<()> {
         }
         ["build", dbdir, g, root, key, design, out] => {
             let (mut db, g) = route::open(dbdir, g)?;
+            let t = std::time::Instant::now();
             let inst = rbf::install::Install::open(std::path::Path::new(root))?;
             let text = std::fs::read_to_string(design).with_context(|| format!("reading {design}"))?;
             let img = rebuild::build(&mut db, &g, &text)?;
+            eprintln!("build: image {:.1} s", t.elapsed().as_secs_f64());
             let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
-            sof::Sof::from_raw(sofgen::build(&inst, &img)?)?.write(out, &key)
+            let raw = sofgen::build(&inst, &img)?;
+            eprintln!("build: container {:.1} s", t.elapsed().as_secs_f64());
+            sof::Sof::from_raw(raw)?.write(out, &key)
         }
         ["rebuild", dbdir, g, root, key, inp, outdir, ..] => {
             let (mut db, g) = route::open(dbdir, g)?;
@@ -392,11 +403,11 @@ fn main() -> Result<()> {
             let (mut db, g) = route::open(dbdir, g)?;
             let mut j = graph::Join::new(&mut db, &g);
             let u = route::usable(&mut j, &g)?;
-            let mut n = [0usize; 4];
+            let mut n = [0usize; 5];
             for &k in &u {
                 n[k as usize] += 1;
             }
-            eprintln!("{} edges: {} unusable, {} mux, {} pass-through, {} clock", u.len(), n[0], n[1], n[2], n[3]);
+            eprintln!("{} edges: {} unusable, {} mux, {} pass-through, {} clock, {} at the mux's idle setting", u.len(), n[0], n[1], n[2], n[3], n[4]);
             std::fs::write(out, &u)?;
             Ok(())
         }
