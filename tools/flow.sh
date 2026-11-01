@@ -6,7 +6,7 @@
 #   tools/flow.sh designs/fz specimens/runs/fz0          # starts unit a5-fz0
 #   tools/flow.sh designs/fz specimens/runs/fz0 --wait   # same, in the foreground
 #
-# The flow's quartus_sta step is skipped: it can't load under chipsmith
+# A prep.tcl in the design runs first (quartus_sh -t). The flow's quartus_sta step is skipped: it can't load under chipsmith
 # (README, "quartus_sta fails under chipsmith").
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -17,7 +17,10 @@ unit=a5-$(basename "$run")
 cat > "$run/flow.run" <<EOS
 set -e
 cd "$run"
-for step in "quartus_syn $top" "quartus_fit $top" "quartus_asm $top"; do
+steps=("quartus_syn $top" "quartus_fit $top" "quartus_asm $top")
+# A design with IP generates it first (designs/pl/prep.tcl).
+[[ -f prep.tcl ]] && steps=("quartus_sh -t prep.tcl" "\${steps[@]}")
+for step in "\${steps[@]}"; do
     t0=\$(date +%s)
     "$here/quartus.sh" \$step > "\${step%% *}.log" 2>&1
     echo "\${step%% *} \$(( \$(date +%s) - t0 )) s" >> times.txt

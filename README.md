@@ -1560,10 +1560,53 @@ Results [obs]:
 - **Readback** [obs]: `tools/readback.sh` on each rebuilt image (a5db's
   decode against asm2's `get_attribute`, every attribute of every instance
   that differs from idle): hx 35,563 attributes in 58 instances, 34,626
-  equal, 0 differ; ar 33,409 in 55, 32,557 equal, 0 differ; mm: see the
-  commit after. The attributes a5db can't decode are DFT and scan settings
+  equal, 0 differ; ar 33,409 in 55, 32,557 equal, 0 differ; mm 37,021 in
+  61, 36,339 equal, 0 differ. The attributes a5db can't decode are DFT and scan settings
   (`a_regscan`, `a_frzlogic`, `dft_mode`, `secmux_dftclk*`), whose bits are
   among the unmapped ones of (h).
+
+### (s) Phase 5: leftover unknowns
+
+- **Record 0x13 is the JTAG USERCODE** [obs]: its 16 bytes are `u32 0,
+  0x00200020, 0x00010000` and the USERCODE (0xFFFFFFFF by default). An
+  assembler-only rerun of ar with `STRATIX_JTAG_USER_CODE 1234ABCD` changed
+  the last word to 0x1234ABCD and nothing else in the record. The first
+  three words are the same in every image here [unk]. `a5db`'s container
+  keeps 0xFFFFFFFF.
+- **Where the design hash comes from** [obs, decompiled]: the fitter, not the
+  assembler. `FITCC_DESIGN_HASH_UTILITY::apply_design_hash`
+  (`libfitter_fitcc.so`) runs `FITCC_PR_POF_HASH_GENERATOR` per
+  partition: SHA-256 over the partition's 8-byte netlist cookie
+  (`cdb_get_atom_netlist_cookie`, its child partitions' after it) and then
+  its LUT masks, and stores it as the partition's DESIGN_HASH assignment;
+  the assembler copies it into record 0x36 and the `.rbf`. It is the
+  partial-reconfiguration compatibility hash: a PR image must carry the
+  same hash as the static region it was compiled against [inf, from the
+  names]. The netlist cookie is a database value with no counterpart in the
+  image, so an open flow can't reproduce Quartus' hash and needn't: it has
+  to be consistent between its own images, which a5db's SHA-256 over the
+  sector objects is. An assembler rerun keeps the hash (ar: `3C76F86D…` in
+  both, also in `ar.asm.rpt`).
+- **The spare row is a spare row 5, outside the image** [obs/inf]: asm2's
+  `get_uids` lists `_rsp5_` instances for 8 block types: 52 LABs, 52 MLABs,
+  8 M20Ks, 4 DSPs, 104 LAB and 16 M20K/DSP routing tiles, 2 HIOL tiles and 2
+  row-clock tiles, a whole fabric row named after row 5. `get_bit` on any of
+  them aborts (`data < data_width`), so they have no image address [obs].
+  Every fabric row Y = 5..51 has a 98-frame group (Y = 5 group 0, Y = 6..51
+  groups 2..47) and group 1 holds no tile and is never stored by pfg (f),
+  so the spare row is that group: the SDM fills it itself when it repairs a
+  row through the redundancy muxes [inf]. The 94 `cw_rd_redtl_bf` tiles
+  (one per row at X = 0) and the `*_redt_bf` vertical-seam tiles are not
+  asm2 block types at all (asm2 has 26 types), so their settings don't come
+  from the user image either; `lsm_eram_redundancy.fw` is the likely owner
+  [inf]. A writer leaves both alone, as every Quartus image here does.
+- **The 8 perictrl0 words pfg skips** [unk, narrowed]: none of their CNOC
+  addresses (0xA1000, 0x20F000…0x20F128, alone or plus 0x300000 or
+  0x10300000) appears as a 32-bit word in `cssm.fw`, `cssm_ux_phy.fw`,
+  `io_config.fw`, `cssm_reset_release.fw` or `enable_pm.fw`, raw or
+  inflated. The "firmware owns them" inference of (l) stands untested.
+- **Sector-header forced bits**: no change since (o); classified, meaning
+  [unk].
 
 ### quartus_sta fails under chipsmith [obs]
 
