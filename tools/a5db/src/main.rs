@@ -37,6 +37,7 @@
 //!   a5db build <db> <graph> <quartus root> <hmac.key> <design> <out.sof>
 //!   a5db rebuild <db> <graph> <quartus root> <hmac.key> <in.sof> <out dir> [pins...]
 //!       extract, build from the written file, and print the bits that differ
+//!   a5db usable <db> <graph> <out.bin>          one byte per graph edge: may a router take it (route::usable)
 //!   a5db pinmap <db> <graph>                    every ball's boundary nodes (db/sm4revb/io/pin_nodes.tsv)
 //!   a5db pincheck <db> <graph> <design>...      do a design file's pins start/end at the predicted nodes?
 //!   a5db trace <graph> <node> <depth>              downstream edges, breadth first
@@ -386,6 +387,18 @@ fn main() -> Result<()> {
             write_rows(&mut db, sof.image_mut(), &rows)?;
             let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
             sof.write(out, &key)
+        }
+        ["usable", dbdir, g, out] => {
+            let (mut db, g) = route::open(dbdir, g)?;
+            let mut j = graph::Join::new(&mut db, &g);
+            let u = route::usable(&mut j, &g)?;
+            let mut n = [0usize; 4];
+            for &k in &u {
+                n[k as usize] += 1;
+            }
+            eprintln!("{} edges: {} unusable, {} mux, {} pass-through, {} clock", u.len(), n[0], n[1], n[2], n[3]);
+            std::fs::write(out, &u)?;
+            Ok(())
         }
         ["pinmap", dbdir, g] => {
             let db = Db::open(dbdir)?;

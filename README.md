@@ -1814,6 +1814,84 @@ read from the device database.
 - a5pnr (w) uses the `re:` means as PathFinder base costs. Timing-driven
   placement and a path-delay report are not written yet.
 
+### (w) Phase 6: an open flow (yosys, a5pnr, a5db)
+
+`tools/a5pnr/flow.sh <top> <pins.txt> <out> <design.v>` takes Verilog to a
+`.rbf` with no Quartus image or route anywhere: yosys from nixpkgs
+(`synth.sh`), `tools/a5pnr` (Rust: packing, placement, routing; writes an
+a5db design file), `a5db build` and `a5db rbf`. `tools/a5pnr/check.sh` runs
+every check below on the result.
+
+- **Synthesis** (`synth.sh`, `yosys/arith_map.v`, `yosys/cells.v`): yosys'
+  generic flow down to `$lut` (≤ 6 inputs), plain `$_DFF_P_` flops (enables
+  and synchronous resets become LUT logic; flops power up at 0), and `$alu`
+  mapped to `A5_ARITH` carry chains with tennm_lcell_comb's arithmetic
+  semantics. A chain starts with a cell whose carry out is the carry in
+  (p = 0, g = CI). `A5_M20K` is instantiated by hand.
+- **The ALM's arithmetic mode** [obs]: Quartus' own simulation model
+  (`quartus/eda/fv_lib/verilog/tennm/tennm_atoms.sv`, `tennm_lcell_comb`)
+  defines it: p = mask[15:0] and g = mask[31:16] over {D, C, B, A},
+  sum = cin ^ p, cout = p ? cin : g. From ar's fitted atoms (quartus_fit
+  ECO, `tools/alm/atoms.tcl`), its stored masks and quartus_sta's port-to-pin
+  paths (`tools/timing/pins.py`), on all 87 arithmetic half-ALMs:
+  - an ALM holds two arithmetic halves; half h's p is stored bits
+    32h .. 32h + 15 and g 32h + 16 .. 32h + 31 of the DIRECT `lut_mask`, as
+    the WYSIWYG masks are (no inversion, unlike the 6-LUT's
+    `stored[j] = ¬W[j ^ 31]`); each cell's p depends on exactly the inputs its
+    ports connect, and is XOR, g AND, in every adder ALM;
+  - inputs A and B are ALM pins 3 and 4 (shared), C and D are pins 2 and 1
+    for half 0 and 5 and 6 for half 1;
+  - the chain runs N0 → N3 → … → N57 through a LAB (two halves per ALM, 20
+    per LAB) and on to N0 of the LAB one row down (Y − 1); cin and cout are
+    LAB_RE 153 and 154;
+  - half h's flops are `xcw_la_le_reg{h}`, xreg0 driving LAB_RE
+    89 + 4k + 2h and xreg1 90 + 4k + 2h; a sum flop keeps `reg_input` at its
+    idle ARITH_SUMOUT;
+  - Quartus sets `secmux_bto = DISABLE_BTO` and `hipi_clken = COMB_PATH` in
+    the LAB where a chain starts (ar, ho); what they select is [inf], and
+    a5pnr copies them.
+- **a5pnr** packs a 6-LUT and its flop into ALM half 0 (combinational
+  output through `reg0/xreg1` in WIRE_MODE, as phase 4's blinky did), or two
+  arithmetic halves into an ALM; a lone flop gets a pass-through LUT. It
+  places chains at ALM 0 of a LAB column and the other ALMs by simulated
+  annealing on half-perimeter wire length, and routes with PathFinder
+  (A* from the net's tree to each sink, one net per node, present and
+  history congestion costs). Node costs are the delay model's means (u).
+  Pins start and end nets at (t)'s nodes. One clock domain; the clock net
+  stays on the clock network.
+- **The router's edges** (`a5db usable`, one byte per graph edge in
+  `specimens/rg/full/usable.bin`): routing-tile and clock-network muxes that
+  resolve to bits (21,093,894 and 48,968), pass-throughs and hardwired edges
+  between fabric node types (938,661 plus the DCM's hardwired clock paths).
+  I/O block internals and redundancy muxes are never routed through.
+- **Checks** [obs] (`check.sh`), each independent of a5pnr's intent:
+  1. `a5db extract` decodes the image back into a design file; it must hold
+     exactly a5pnr's pins, edges, attributes and DIRECT values, and nothing
+     else (no `bit` or `raw` lines);
+  2. `a5pnr readback` rebuilds a netlist from that decode alone: every sink
+     traced back over the decoded mux edges and the graph's pass-through
+     edges (a node reached from two sources is an error), every ALM from its
+     decoded mode, masks and register settings. `simcheck.py` simulates it
+     against the RTL in iverilog: 2,000 cycles each starting from a fresh
+     random register state (the same on both sides, biased towards all ones
+     and all zeros so long carries happen), then 2,000 free-running cycles,
+     comparing every output and every register. Mutating one mask bit, one
+     flop's input or one routing edge makes it fail (400 to 6,000
+     mismatches on blinky);
+  3. `tools/readback.sh`: Quartus' assembler (asm2) reads every attribute of
+     every instance that differs from idle, against a5db's decode;
+  4. `quartus_pfg -c` on the `.sof` (its `.rbf` must equal a5db's),
+     `quartus_pfg --check_integrity` and `bitstream.py check` on a5db's.
+
+Results (`designs/p6`, pins in `designs/p6/*.pins`):
+
+| design | cells | ALMs (arith) / LABs | M20K | nets | edges | route iterations | a5pnr time | extract = design | simcheck | asm2 | pfg |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| blinky (25-bit counter → LED0) | 26 A5_ARITH, 25 FF | 13 (13) / 2 | 0 | 26 | 108 | 1 | 19 s | yes | 0 mismatches, 25 registers | 0 of 25,821 differ | `.rbf` identical, integrity OK |
+
+Times are on the shared machine (load 20–40): synth 38 s, a5pnr 19 s (18 s
+of it loading the graph), `a5db build` 276 s, `a5db rbf` 9 s.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

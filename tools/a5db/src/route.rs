@@ -295,3 +295,78 @@ pub fn open(dbdir: &str, gdir: &str) -> Result<(Db, Graph)> {
     eprintln!("graph: {} nodes, {} edges, {:.0} s", g.names.iter().filter(|n| !n.is_empty()).count(), g.dst.len(), t.elapsed().as_secs_f64());
     Ok((Db::open(dbdir)?, g))
 }
+
+/// Router edge classes, one byte per graph edge (`a5db usable`, used by
+/// tools/a5pnr): what a router may do with each edge.
+pub mod usable {
+    pub const NO: u8 = 0;
+    /// A fabric routing mux that resolves to bits.
+    pub const MUX: u8 = 1;
+    /// A fabric edge with nothing to set: hardwired (LEIM → LAB_RE) or a
+    /// pass-through (RPII → RPI, HIOL 4:1 data mux, plain buffers).
+    pub const PASS: u8 = 2;
+    /// A clock-network mux that resolves to bits (edge API or clock rule).
+    pub const CLOCK: u8 = 3;
+}
+
+/// Classify every edge for a router. Only routing tiles (`cw_rt_*`) and the
+/// clock network (`cw_cc_*`) are the router's: I/O block internals are set
+/// by the pin template and the redundancy muxes stay idle (README (t)). A
+/// hardwired edge (no edge API) counts when both its ends are node types
+/// that some router edge touches, or clock-network types.
+pub fn usable(join: &mut Join, graph: &Graph) -> Result<Vec<u8>> {
+    use usable::*;
+    let ty = |n: u32| graph.names[n as usize].split(':').next().unwrap_or("");
+    let mut src = vec![0u32; graph.dst.len()];
+    for s in 0..graph.names.len() as u32 {
+        for e in graph.fanout(s) {
+            src[e] = s;
+        }
+    }
+    let mut out = vec![NO; graph.dst.len()];
+    let mut seen: FxHashMap<(u32, u32), u8> = FxHashMap::default();
+    let mut fabric: HashSet<String> = HashSet::new();
+    for e in 0..graph.dst.len() {
+        let (u, c) = (graph.uid[e], graph.cfg[e]);
+        let class = if c == 0 {
+            match join.rule_edge(e, false)? {
+                Some(Ok(_)) => CLOCK,
+                _ => continue,
+            }
+        } else {
+            let uid = &graph.uids[u as usize];
+            let clock = uid.starts_with("cw_cc_");
+            if !clock && !uid.starts_with("cw_rt_") {
+                continue;
+            }
+            match seen.get(&(u, c)) {
+                Some(&k) => k,
+                None => {
+                    let k = match join.pair(u, c)? {
+                        Some(Ok(_)) if clock => CLOCK,
+                        Some(Ok(_)) => MUX,
+                        Some(Err(m)) if m.is_pass_through() => PASS,
+                        _ => NO,
+                    };
+                    seen.insert((u, c), k);
+                    k
+                }
+            }
+        };
+        out[e] = class;
+        if class != NO {
+            fabric.insert(ty(src[e]).to_owned());
+            fabric.insert(ty(graph.dst[e]).to_owned());
+        }
+    }
+    // The DCM's periphery-to-core muxes are wired through node types no
+    // router edge touches (HSSI_P2C_RE, CW_CC_DCM_*_MUX_*): the clock network
+    // counts as fabric, its DFT cells don't.
+    let ours = |t: &str| fabric.contains(t) || ((t.starts_with("CW_CC_") || t.starts_with("CE_CC_") || t == "HSSI_P2C_RE") && !t.contains("DFT"));
+    for e in 0..graph.dst.len() {
+        if graph.cfg[e] == 0 && out[e] == NO && graph.uid[e] == 0 && ours(ty(src[e])) && ours(ty(graph.dst[e])) {
+            out[e] = PASS;
+        }
+    }
+    Ok(out)
+}
