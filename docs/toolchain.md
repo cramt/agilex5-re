@@ -16,6 +16,11 @@ Section letters refer to the README's findings. File formats are in
 | idle state | `db/sm4revb/idle*.tsv` | the value of every bit when a block is unused |
 | I/O | `db/sm4revb/io/template.tsv`, `pins.tsv`, `de25_pins.tsv` | pin use (in, out, clock, IO register) → bits, for every HVIO and IO96 ball |
 | routing graph | `tools/rgdump` → `specimens/rg/full` (not committed: it is Quartus' graph, regenerate it from your install in 13 min) | 7.6 M nodes, 26.3 M edges, each edge's mux setting |
+| router edge classes | `a5db usable` → `specimens/rg/full/usable.bin` (8 min) | which edges a router may take: fabric and clock muxes with bits, pass-throughs (README (w)) |
+| pin ↔ graph nodes | `db/sm4revb/io/pin_nodes.tsv` (`a5db pinmap`) | where each ball's input leaves for fabric routing (`in0`, `in1`, `clock`) and where its output is entered (`out`) (README (t)) |
+| delays | `db/sm4revb/timing/delays.tsv` (`tools/timing`) | mean delay per routing node type and per cell arc, from quartus_sta paths (README (u)) |
+| IOPLL | `db/sm4revb/io/iopll.tsv`, `tools/pll/iopll.py` | an IOPLL's lines for any reference and output frequencies (README (v)) |
+| open flow | `tools/a5pnr` (yosys + Rust placer and router) | Verilog → design file → `.sof` → `.rbf` (README (w)) |
 | writer | `tools/a5db` (Rust) | design file → `.sof` image → `.rbf` byte-identical to `quartus_pfg`'s |
 
 ## The interface: a design file
@@ -72,7 +77,9 @@ Verification kinds, strongest first:
 | HVIO clock pins | 2 per bank half: pins k0/k1 through the 2:1 ioclk mux, k2/k3 through the 4:1 ss clock mux | all 32 clock pins, held out (ck2) |
 | HVIO IO registers | uses `in_reg`, `out_reg` | 3 pins (ck1), rebuilt |
 | IO96 pins | pin, lane and bank rows; lane vref values depend on whether the lane has an input; IOSSM pin map | 22 pins, both directions, held out (ph1, ph2), CLOCK0_50 as a clock |
-| IOPLL | 40 attributes, 10 counters, 19 bits in the HVIO's `xpllwrap_top` | one configuration (50 → 100 MHz), rebuilt |
+| IOPLL | a common template plus N, M and C counters, output enables, reference select and charge-pump trims (`tools/pll/iopll.py`) | counters from frequencies: 10 held-out IP configurations; bits: pa (four PLLs) exact, pb held out (README (v)) |
+| carry chains | tennm_lcell_comb's p/g masks, stored as written; chain order N0 → N57, then the LAB below | 87 arithmetic halves of ar; a5pnr designs read back and simulated (README (w)) |
+| M20K, 512 x 32 simple dual port | 20 settings and the port ↔ `MEDIUM_EAB_RE` pin map from mm's paths, write enable tied | a5pnr's `ram` design (README (w)) |
 | idle state | majority over five Quartus images, three per-instance exceptions | every image here differs from it only in its own blocks (n) |
 | `.rbf` | a5db's writer | byte-identical to pfg on 78 pairs (o) |
 
@@ -91,11 +98,18 @@ Verification kinds, strongest first:
 - **Pins**: use `a5db pins`/`pintable` for the whole set of pins of a
   design, not one table per pin: IO96 lane and bank rows are shared and
   the lane's vref values depend on the lane's mix of inputs and outputs. An
-  input leaves through one of two input register muxes (`in0`/`in1`), and
-  that choice goes with the route out of the pin; which graph node each mux
-  feeds is [unk], so take the default (`in`).
+  input leaves through one of two input register muxes (`in0`/`in1`); start
+  its net at that role's node in `io/pin_nodes.tsv` (HVIO `in` is `in1`,
+  IO96 `in` is `in0`), a clock pin's at `clock`, and end an output's net at
+  `out`. Checked on 432 pin uses of 14 Quartus designs (README (t)).
 - **Fabric pins**: ALM k's LUT inputs and register outputs are `LAB_RE`
-  pins (README (n)); the LAB clock is pin 83.
+  pins (README (n)); the LAB clock is pin 83. In arithmetic mode half h's C
+  and D inputs are pins 8k + 2, 1 (h = 0) or 5, 6 (h = 1), its flops drive
+  89 + 4k + 2h (xreg0) and 90 + 4k + 2h (xreg1), and a carry chain runs
+  through the LAB's 20 halves and on into the LAB one row down (README (w)).
+- **Arithmetic LUT masks** are stored as written: half h's p (propagate) in
+  bits 32h..32h + 15 and g (generate) in 32h + 16..32h + 31, with
+  sum = cin ^ p, cout = p ? cin : g; only the 6-LUT is stored inverted.
 - **Group 1 / spare row**: never write the spare row (`_rsp5_` instances)
   or the redundancy tiles; the image has no place for them (s).
 
@@ -106,13 +120,15 @@ Verification kinds, strongest first:
   those attributes as `<VIRTUAL>` and no design here used them.
 - Differential I/O, the D-PHY standard, IO96 lanes 0–3 and 6–7, the second
   IO96 bank (`pio_1_0`), the left-side DCMs: no DE25-Nano pin reaches them.
-- The pin ↔ routing-graph node map for every pin (which fabric node carries
-  a pin's input or output); routes so far start and end at the nodes
-  Quartus used.
-- IOPLL settings for any frequency but the one compiled; PLL cascading,
-  dynamic phase shift, LVDS/DPA, EMIF/hard memory controllers, HSSI, HPS.
-- Timing: the graph has no delays (`DYGR_ROUTE_TIMING_INFO` isn't dumped),
-  so a router can't do timing-driven routing from this database.
+- The pin map's `direct` (IO96) and `out2` roles, and output enables.
+- IOPLL: PFD frequencies other than 10, 25 and 50 MHz (charge-pump trims),
+  bank-half 0 reference pads, the IP's output-frequency ceiling, PLL
+  cascading, dynamic phase shift; LVDS/DPA, EMIF/hard memory controllers,
+  HSSI, HPS.
+- Timing: the delay model is per node type, fitted to Quartus' paths
+  (README (u)); Quartus' own RC model (`DYGR_ROUTE_TIMING_INFO`, the
+  `timing_routing_delays_*` databases) is not decoded, and there is no
+  static timing analysis of a5pnr's output.
 - Hyper-registers used as registers (`flop_mode` FLOP), clock gating in the
   clock network, LAB `lut_mode`/`latch_mode` (no bits in asm2).
 - Any check on silicon: the DE25-Nano was off for all of phase 5; see the

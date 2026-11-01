@@ -852,7 +852,8 @@ u32 uid id, u32 config id`, with gids minus `0x80000000`. Line k of
 
 [unk]:
 - Which resource "Direct links" (526,400) is.
-- Edge delays and timing (`DYGR_ROUTE_TIMING_INFO`, not dumped).
+- Edge delays and timing (`DYGR_ROUTE_TIMING_INFO`, not dumped; a model
+  fitted to quartus_sta's paths is in (u)).
 - The meaning of `CONFIG_DATA`'s first word and tail.
 - The attribute mapping of sub-mux configurations.
 - Only one tile and one design were checked against a bitstream; checking
@@ -1463,9 +1464,9 @@ in banks 6A–6H (6G and 6H at 1.8 V, the rest 3.3 V) and 22 IO96 pins in bank
 - **Not covered**: the D-PHY standard (used here single-ended at 1.1 V),
   bidirectional pins, pull-ups, bus hold, current strength and slew
   settings (the DE25-Nano manual sets none), IO96 lanes 0–3 and 6–7 and the
-  second IO96 bank (no DE25-Nano pins), differential I/O, and the pin ↔
+  second IO96 bank (no DE25-Nano pins), differential I/O. The pin ↔
   routing-graph node map (which fabric node carries a pin's input or
-  output; phase 4 took V16's and DF35's from Quartus routes).
+  output; phase 4 took V16's and DF35's from Quartus routes) is now (t).
 
 ### (q) Phase 5: core features, rebuilt from a design file
 
@@ -1645,9 +1646,8 @@ ck2 the other 16.
   covers. V16 as a PLL reference leaves the ioclk mux at P0: the reference
   doesn't use the clock-pin path. The PLL output enters the clock network
   as an ordinary graph edge (`HVIOWR_RE … I16 → DCM_mux`). How counters and
-  trims follow from the requested frequencies is [unk]: one PLL was
-  compiled, so a writer can reproduce this 50 → 100 MHz PLL verbatim and
-  nothing else yet.
+  trims follow from the requested frequencies was [unk] here (one PLL
+  compiled); phase 6 has the rule, held out on four more PLLs (v).
 
 ### (s) Phase 5: leftover unknowns
 
@@ -1692,6 +1692,290 @@ ck2 the other 16.
 - **Sector-header forced bits**: no change since (o); classified, meaning
   [unk].
 
+### (t) Phase 6: pin ↔ routing-graph node map
+
+`a5db pinmap <db> <graph>` writes
+[`db/sm4revb/io/pin_nodes.tsv`](db/sm4revb/io/pin_nodes.tsv): for each of the
+357 HVIO and IO96 balls, the graph node where fabric routing starts from the
+pin (roles `in0`, `in1`, `clock`, `direct`) or ends at it (`out`, `oe`,
+`out2`). A router starts an input net and ends an output net there, with no
+Quartus route to copy. `a5db pincheck <db> <graph> <design>…` checks the
+table against design files extracted from Quartus images.
+
+- **A pad's nodes** [obs]: every graph node at the pad's fitter location,
+  `<type>:X<x>Y<y>Z<sub_loc>I<i>`, where (x, y, sub_loc) is the pad's
+  `X…Y…SUB_LOC…` from `ddb pins` (now columns of `io/pins.tsv`). The input
+  buffer (`IO_INPUT_BUFFER_OUTPUT`) and output buffer (`IO_OUTPUT_BUFFER_INPUT`
+  I0 data, I1 OE, I2 a third input on HVIO) are among those nodes or one hop
+  from them.
+- **The rule** [obs on the designs below]: from the buffer, follow every edge
+  the router doesn't set (forward for inputs, backward for outputs), and stop
+  at the first node with an edge the router does set: a mux in a routing tile
+  (`cw_rt_*`) or the clock network (`cw_cc_*`, or a clock rule of (k)). Edges
+  inside I/O blocks have no edge API (the pin template of (p) sets those
+  muxes), and the redundancy muxes (`REDMUX`, `cw_rd_*`, no bit map) pass
+  their data input when idle, so the search goes through both. The search
+  ends 27–83 hops from the buffer. Then:
+  - HVIO input: two `REDMUX` nodes, one through each input register 4:1 mux
+    (`IOGPIO_REG_4TO1_MUX_RE` at Z = sub_loc − 15 for mux 0, − 14 for mux 1).
+    Pin use `in` (mux 1, as (p)) leaves through the second. The REDMUX feeds
+    one `HIOB` through the HIOL's `i_4mux1`, which has no `sel` bits, so it
+    is a pass-through.
+  - HVIO clock: the `HVIOWR_RE` clock output reached through mux 0, the
+    bank's clock-or-data demux and the ioclk 2:1 or ss clock 4:1 mux (r).
+    Two pins share each such node, which is the phase-5 limit of two clock
+    pins per bank half seen from the graph side.
+  - IO96 input: `in0` (the usual `in`, mux 0) leaves through the fabric
+    adapter's flyby path into the VIO tile's `VIO_TO_CORE` mux, `in1` through
+    the IOGPIO 4:1 mux and the adapter's 2:1 mux, `clock` through the
+    adapter's `P2C_FRZ` into the DCM; `direct` (adapter 2:1 mux only) is never
+    used by Quartus here [unk].
+  - Outputs: the `RPI` (programmable inverter in the HIOL or VIO routing
+    tile) that leads to the buffer's data input. The OE input has its own RPI
+    but no Quartus design routes it: the template ties OE for output pins.
+  - `pio_1_0` (top IO96 bank, no DE25-Nano pins) goes through
+    `SOC_MPFE_WRAPPER_RE` and is in the table but unchecked [inf].
+- **Checked** [obs] (`pincheck`): a pin "uses" a node if the design file's
+  first (last) routing edge of the pin's net leaves (enters) it, allowing up
+  to 3 non-wire hops for edges a design file can't list (RPI inputs and the
+  HIOL 4:1 data mux are pass-throughs; MUXIN settings equal to the idle state
+  aren't decoded). The rule was worked out on ph1 alone; 429 of 432 pin
+  uses in 14 designs match, and the 3 misses are explained.
+
+  | design | pin uses | at the predicted node |
+  |---|---|---|
+  | ph1 (development) | 167 | 167 |
+  | ph2 | 167 | 166: `DRAM_RAS_n` is an unloaded input (p), no route |
+  | ck1 | 23 (16 HVIO clocks, IO96 clock, IO registers) | 23 |
+  | ck2 | 18 | 18 |
+  | ar, mm, hx | 9, 5, 10 | all |
+  | pl | 4 | 3: V16 is the IOPLL's reference and never enters the clock network (r) |
+  | pt, ho, blinky, gc, rt (extracted for this) | 27 | 27 |
+  | idle | 2 | 1: its CLOCK2_50 drives one flop and Quartus routed it as data (`in1`, which it uses), not over the clock network the `clock_in` label assumed |
+
+  `in_reg` (an HVIO input register) leaves through mux 1 like `in`; an output
+  register (`out_reg`) uses the `out` node. In ar one data input also feeds
+  the clock network: Quartus used its clock node as well as its `in1` node.
+- **Not covered**: `direct` and `out2` are unexplained; `oe` is unchecked
+  (no design drives an OE); IO96 lanes without DE25-Nano pins follow the same
+  search but no design uses them [inf].
+
+### (u) Phase 6: delays for routing
+
+[`db/sm4revb/timing/delays.tsv`](db/sm4revb/timing/delays.tsv) is a delay
+model a router can use as node costs: the mean delay into each routing node
+type, and per cell the LUT input-to-output, arithmetic, clock-to-out and
+register-input delays. It is fitted to quartus_sta's own timing paths, not
+read from the device database.
+
+- **quartus_sta runs** [obs] once `libbrotlidec` is on `LD_LIBRARY_PATH`
+  (nixpkgs `brotli.lib`): `tools/timing/sta.sh <run> <out>` copies a
+  compiled run and dumps `report_timing -setup -detail full_path
+  -show_routing` (slow model, up to 4,000 paths per clock). That is the
+  workaround for "quartus_sta fails under chipsmith" below until chipsmith
+  carries brotli. Every path lists each routing hop by fitter node name
+  (DYGR name after the (k) renaming) with its incremental delay, and each
+  cell's input port, output port and delay.
+- **Where Quartus keeps the model** [obs, not decoded]: `DYGR_ROUTE_TIMING_INFO`
+  in `qcore/linux64/libddb_dygr.so` holds per-node driver data
+  (`set_driver_data(unsigned short, float*, float*, int, int, int*,
+  DEV_ROUTING_SWITCH_ENUM*)`) and loads (`set_load`), loaded from
+  `devices/10nm/sm4revb/ddb_sm4revb_timing_routing_delays_*` (one file per
+  process/voltage/temperature corner, plus crosstalk and DSPF RC models in
+  `*_routing_models_*.mdb`). It is an RC model with per-load terms and
+  `dump_timing_nodes()` exists, but turning it into delays needs the
+  evaluation code too [unk]. The path-based model below was the tractable
+  route.
+- **The model** [obs] (`tools/timing/paths.py` parses, `fit.py fit` fits):
+  a hop's class is its destination node type (`re:H4`, `re:LEIM`, …) or,
+  for cells, `lut:<input>` (a..f → combout), `arith:<input>>sumout|cout`,
+  `arith:cin>cout|sumout` (along a carry chain), `tco`, `reg_d`, `tsu`.
+  The value is the class mean over rt and ar (5,443 paths). Some numbers,
+  slow 0 °C corner: tco 0.320 ns; LUT input A 0.209, B 0.183, C 0.150,
+  D 0.130, E 0.068, F 0.043; carry cin→cout 0.059, cin→sumout 0.169; H0
+  0.077, H1 0.065, H2 0.067, H4 0.101, H6 0.110, H12 0.135, V1 0.128, V4
+  0.120, V8 0.124, LL 0.054, LEIM 0.050 per hop.
+- **Checked against quartus_sta** [obs] (`fit.py eval`): each path's hops
+  summed under the model against quartus_sta's data delay (same route,
+  Quartus' placement):
+
+  | design | paths | mean error | median abs error | 95th percentile |
+  |---|---|---|---|---|
+  | rt (fit) | 1,443 | −0.9 % | 2.7 % | 7.3 % |
+  | ar (fit) | 4,000 | +0.5 % | 7.0 % | 19.2 % |
+  | hx (held out) | 2,817 | +2.4 % | 5.2 % | 11.7 % |
+  | mm (held out) | 1,164 | −2.2 % | 4.8 % | 10.5 % |
+  | ck1 (held out) | 53 | +2.2 % | 3.8 % | 16.2 % |
+  | blinky (held out) | 405 | −0.1 % | 11.9 % | 22.0 % |
+
+  M20K and DSP cells (`MEDIUM_EAB_RE`, `MP_MAC_RE`) and IO registers are
+  not modelled; those hops use quartus_sta's own delay in the check.
+  Per-hop spread is real (an H4 hop runs 0.073–0.168 ns with its load and
+  position), so the model is for costs, not sign-off. The biggest residual
+  is a carry chain's data input to cout (0.17–0.59 ns, depending on the
+  ALM) [unk].
+- a5pnr (w) uses the `re:` means as PathFinder base costs, and after
+  routing prints the model's longest path into a flop (driver tco or 0 at a
+  pin, each routed hop's mean, LUT and carry arcs, `reg_d`, `tsu` 0.084 ns):
+  blinky 2.44 ns, leds 3.51, acc 5.75, ram 2.85 [inf: model estimates; no
+  clock skew, no hold]. For scale, quartus_sta gives Quartus' own 25-bit
+  counter blinky a worst data delay of 1.37 ns. Placement is not
+  timing-driven.
+
+### (v) Phase 6: IOPLL settings from frequencies
+
+`python3 -I tools/pll/iopll.py <ref ball> <ref MHz> <out MHz>[,…]` writes an
+IOPLL's a5db design-file lines for any reference and output frequencies:
+the template every PLL here shares
+([`db/sm4revb/io/iopll.tsv`](db/sm4revb/io/iopll.tsv): 38 attributes, 5
+DIRECT values, 12 named bits, all equal in the five PLLs compiled) plus the
+counters, reference select, output enables and charge-pump trims below.
+`tools/pll/check.sh` builds them over the idle image and compares every
+named bit under `xpllwrap_top` with a Quartus image.
+
+- **Frequencies → N, M, C** (`tools/pll/compute.py`) [obs]: the
+  altera_iopll IP's own choice, learnt from a sweep that generates the IP
+  for many frequency sets with no fit (`tools/pll/ipsweep.py`: ip-deploy
+  and qsys-generate, then the `tennm_iopll` atom parameters; about 5 min per
+  set on this machine). The rule: the VCO candidates are the multiples of
+  the outputs' least common multiple from 3,200 MHz down to 600 MHz; for
+  each, the smallest N whose PFD frequency (reference / N) is at least
+  10 MHz and makes M = VCO / PFD an integer; the first candidate with such
+  an N wins, and C_i = VCO / out_i. For example 50 → 120 MHz gives VCO
+  3,120 MHz, N = 5, M = 312, C = 26 (3,000 MHz with N = 1 would also work,
+  but a higher VCO wins), and 50 → 13.5 MHz gives 3,037.5 MHz with N = 4.
+  - Training: 32 frequency sets (references 10–156.25 MHz, outputs 10 MHz
+    to 1 GHz, up to four outputs). 31 match; the other, 1 MHz, has no exact
+    solution, and the IP falls back to the nearest it can reach (600 MHz /
+    510).
+  - **Held out**: predictions written to `tools/pll/predictions.tsv` and
+    committed before the IPs were generated, for 6 sweep sets (50 → 125,
+    180, 48, 65, 16 and 200/100/50/25 MHz) and pb's four PLLs (50 → 64/160,
+    100/12.5, 270; 25 → 40/80): **10 of 10 match** the IP's N, M and C. A
+    seventh set, 50 → 1,200 MHz, is refused by ip-deploy itself, so there
+    is an output-frequency ceiling the rule doesn't model [unk].
+- **Counters → bits** [obs on pl and pa, five PLLs]: across the five, only
+  these PLL settings differ:
+  - C_k: `xccnt_iopll<k>` hi = ⌈C/2⌉ and lo = ⌊C/2⌋ (8-bit DIRECT), and
+    `dprio_c_m_cnt_even_duty_en` = ENABLED for odd C (C = 105 → 53 / 52);
+    an unused C1 is 255 / 255; counters 2–6 stay bypassed unless used;
+  - M: `gdiv/dprio_c_m_cnt_hi_div_user`, 9 bits, is M itself (63, 64, 125,
+    312);
+  - N: bypassed for N = 1; otherwise `pll_n_cnt_bypass_en` DIV_ENABLED, hi
+    and lo as for C, odd duty for odd N (N = 5 → 3 / 2);
+  - `xpllcoutbuf<k>/cnt_out_en` for each used output above 0;
+  - the reference mux `hviowr_pllwrap_clk_mux_sel` = PLL_CLKMUX_IOCLKIN_(2 + k)
+    for the bank-half 1 reference pad `HVIO_B1_2_<k>` (CE19 and V16 → 3, BF23
+    and AE11 → 2); bank-half 0 pads are [unk];
+  - charge-pump and lock-filter trims follow the PFD frequency [inf, three
+    values seen]: 50 MHz → `cpi_trim` 00110, `cpp_trim` 01001,
+    `cr_lockf_early` 1000; 25 MHz → 00011, 00011, 1000; 10 MHz → 00010,
+    00010, 1011. Other PFD frequencies are [unk] and iopll.py refuses them.
+- **Check** (`tools/pll/check.sh`): pa (training, four PLLs: 50 → 75/30,
+  120, 33.33/200; 25 → 125): 2,776 of 2,776 named bits equal Quartus'.
+  **pb (held out**: compiled after the rule and template were fixed; four
+  PLLs: 50 → 64/160, 50 → 100/12.5, 50 → 270 with N = 5 and M = 297,
+  25 → 40/80 with M = 128): **2,776 of 2,776 named bits equal Quartus'**,
+  the PFD-based trims included (10 MHz with a different M than training,
+  25 MHz likewise).
+- The PLL's input pin and output routing are not in these lines: the
+  reference pin needs its pin bits, and each output enters the clock
+  network as a graph edge (r).
+
+### (w) Phase 6: an open flow (yosys, a5pnr, a5db)
+
+`tools/a5pnr/flow.sh <top> <pins.txt> <out> <design.v>` takes Verilog to a
+`.rbf` with no Quartus image or route anywhere: yosys from nixpkgs
+(`synth.sh`), `tools/a5pnr` (Rust: packing, placement, routing; writes an
+a5db design file), `a5db build` and `a5db rbf`. `tools/a5pnr/check.sh` runs
+every check below on the result.
+
+- **Synthesis** (`synth.sh`, `yosys/arith_map.v`, `yosys/cells.v`): yosys'
+  generic flow down to `$lut` (≤ 6 inputs), plain `$_DFF_P_` flops (enables
+  and synchronous resets become LUT logic; flops power up at 0), and `$alu`
+  mapped to `A5_ARITH` carry chains with tennm_lcell_comb's arithmetic
+  semantics. A chain starts with a cell whose carry out is the carry in
+  (p = 0, g = CI). `A5_M20K` is instantiated by hand.
+- **The ALM's arithmetic mode** [obs]: Quartus' own simulation model
+  (`quartus/eda/fv_lib/verilog/tennm/tennm_atoms.sv`, `tennm_lcell_comb`)
+  defines it: p = mask[15:0] and g = mask[31:16] over {D, C, B, A},
+  sum = cin ^ p, cout = p ? cin : g. From ar's fitted atoms (quartus_fit
+  ECO, `tools/alm/atoms.tcl`), its stored masks and quartus_sta's port-to-pin
+  paths (`tools/timing/pins.py`), on all 87 arithmetic half-ALMs:
+  - an ALM holds two arithmetic halves; half h's p is stored bits
+    32h .. 32h + 15 and g 32h + 16 .. 32h + 31 of the DIRECT `lut_mask`, as
+    the WYSIWYG masks are (no inversion, unlike the 6-LUT's
+    `stored[j] = ¬W[j ^ 31]`); each cell's p depends on exactly the inputs its
+    ports connect, and is XOR, g AND, in every adder ALM;
+  - inputs A and B are ALM pins 3 and 4 (shared), C and D are pins 2 and 1
+    for half 0 and 5 and 6 for half 1;
+  - the chain runs N0 → N3 → … → N57 through a LAB (two halves per ALM, 20
+    per LAB) and on to N0 of the LAB one row down (Y − 1); cin and cout are
+    LAB_RE 153 and 154;
+  - half h's flops are `xcw_la_le_reg{h}`, xreg0 driving LAB_RE
+    89 + 4k + 2h and xreg1 90 + 4k + 2h; a sum flop keeps `reg_input` at its
+    idle ARITH_SUMOUT;
+  - Quartus sets `secmux_bto = DISABLE_BTO` and `hipi_clken = COMB_PATH` in
+    the LAB where a chain starts (ar, ho); what they select is [inf], and
+    a5pnr copies them.
+- **a5pnr** packs a 6-LUT and its flop into ALM half 0 (combinational
+  output through `reg0/xreg1` in WIRE_MODE, as phase 4's blinky did), or two
+  arithmetic halves into an ALM; a lone flop gets a pass-through LUT. It
+  places chains at ALM 0 of a LAB column and the other ALMs by simulated
+  annealing on half-perimeter wire length, and routes with PathFinder
+  (A* from the net's tree to each sink, one net per node, present and
+  history congestion costs). Node costs are the delay model's means (u).
+  Pins start and end nets at (t)'s nodes. One clock domain; the clock net
+  stays on the clock network.
+- **The router's edges** (`a5db usable`, one byte per graph edge in
+  `specimens/rg/full/usable.bin`): routing-tile and clock-network muxes that
+  resolve to bits (21,093,894 and 48,968), pass-throughs and hardwired edges
+  between fabric node types (938,661 plus the DCM's hardwired clock paths).
+  I/O block internals and redundancy muxes are never routed through.
+- **Checks** [obs] (`check.sh`), each independent of a5pnr's intent:
+  1. `a5db extract` decodes the image back into a design file; it must hold
+     exactly a5pnr's pins, edges, attributes and DIRECT values, and nothing
+     else (no `bit` or `raw` lines);
+  2. `a5pnr readback` rebuilds a netlist from that decode alone: every sink
+     traced back over the decoded mux edges and the graph's pass-through
+     edges (a node reached from two sources is an error), every ALM from its
+     decoded mode, masks and register settings. `simcheck.py` simulates it
+     against the RTL in iverilog: 2,000 cycles each starting from a fresh
+     random register state (the same on both sides, biased towards all ones
+     and all zeros so long carries happen), then 2,000 free-running cycles,
+     comparing every output and every register. Mutating one mask bit, one
+     flop's input or one routing edge makes it fail (400 to 6,000
+     mismatches on blinky);
+  3. `tools/readback.sh`: Quartus' assembler (asm2) reads every attribute of
+     every instance that differs from idle, against a5db's decode;
+  4. `quartus_pfg -c` on the `.sof` (its `.rbf` must equal a5db's),
+     `quartus_pfg --check_integrity` and `bitstream.py check` on a5db's.
+
+Results (`designs/p6`, pins in `designs/p6/*.pins`):
+
+| design | cells | ALMs (arith) / LABs | M20K | nets | edges | route iterations | a5pnr time | extract = design | simcheck | asm2 | pfg |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| blinky (25-bit counter → LED0) | 26 A5_ARITH, 25 FF | 13 (13) / 2 | 0 | 26 | 108 | 1 | 20 s | yes | 0 mismatches, 25 registers | 0 of 25,821 differ (18 instances) | `.rbf` identical, integrity OK |
+| leds (27-bit counter, KEY0 clear, KEY1 invert, SW0 reverse → LED[7:0]) | 35 LUT, 28 A5_ARITH, 27 FF | 49 (14) / 28 | 0 | 66 | 700 | 2 | 35 s | yes | 0, 27 registers | 0 of 102,056 (152) | identical, OK |
+| acc (56-bit accumulator + 32-bit LFSR, chain over 3 LABs) | 58 LUT, 57 A5_ARITH, 88 FF | 117 (29) / 30 | 0 | 147 | 1,287 | 3 | 36 s | yes | 0, 87 registers | 0 of 86,320 (130) | identical, OK |
+| ram (512 x 32 M20K, counter writes, slow read → LED[7:0]) | 33 A5_ARITH, 32 FF, 1 A5_M20K | 17 (17) / 2 | 1 | 41 | 391 | 3 | 29 s | yes | 0, 32 registers | 0 of 46,723 (51) | identical, OK |
+
+"cells" are yosys' after mapping, "edges" the configured routing edges in
+the design file (pass-throughs not counted), "a5pnr time" includes about
+18 s of loading the graph. The other steps, on the shared machine (load
+20–40): synth 12–38 s, `a5db build` 190–276 s, `a5db rbf` 4–9 s; `check.sh`
+about 45 min, most of it `a5db extract` and asm2.
+
+- The M20K [obs, mm's quartus_sta paths, `report_path` for the read side]:
+  in its 512 x 32 simple dual-port use Quartus splits the RAM into 32 one-bit
+  `ram_block2a<k>` atoms in one block, and the block's `MEDIUM_EAB_RE` pins
+  are: clock 77, write address bit i 25 + i, read address bit i 52 − i,
+  write data bit k 57 + k (k < 20) or 40 − k, read data bit k 83 + k. The
+  block's settings are the 20 `xdigicore` delay and enable settings mm's
+  such block differs from idle in; widths and modes stay idle. Write enable
+  is tied high (mm writes every cycle); a5pnr refuses any other. The clock
+  enters through an RPI from the row clock, as a LAB's does.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -1702,7 +1986,8 @@ the other compression dependency). chipsmith's
 `crates/chipsmith-quartus-common/compat.nix` provides no brotli. The fix
 belongs in chipsmith: add `brotli = pkgs.brotli.lib.outPath;` to that
 list. Fitter and assembler are unaffected, so blinky was assembled with a
-separate `quartus_asm blinky`.
+separate `quartus_asm blinky`. With `brotli.lib` on `LD_LIBRARY_PATH`
+quartus_sta runs (u) [obs].
 
 ### Board test (prepared, not run: the board is off)
 
@@ -1766,6 +2051,32 @@ On the board (DE25-Nano, on-board USB-Blaster III, JTAG; MSEL as shipped):
 Record for each: LED behaviour, openFPGALoader's exit status, and the SDM
 status it prints (`ISC_SR`).
 
+**Phase 6: designs from the open flow** (w), in `specimens/board/p6/`
+(git-ignored). Each `<d>.rbf` is a5db's and equals `quartus_pfg`'s
+(`<d>_pfg.rbf`); `<d>.sof` is a5db's container. Rebuild them with
+`tools/a5pnr/flow.sh <d> designs/p6/<d>.pins specimens/p6/flow/<d>
+designs/p6/<d>.v` and check them with `tools/a5pnr/check.sh` (same
+arguments). After step 4 above works, load each with
+`openFPGALoader -c usb-blasterIII <d>.rbf`:
+
+7. `blinky.rbf`: LED0 blinks at about 1.5 Hz. This is the first image whose
+   placement and routing are entirely a5pnr's: if step 4 worked and this
+   doesn't, suspect the carry chain (it is the counter) or a5pnr's clock
+   route (DCM input 1, not Quartus' 2).
+8. `leds.rbf`: LED7 toggles every 1.3 s (counter bit 26), LED6 twice as
+   fast, the lower LEDs too fast to see. Holding KEY0 turns them all off
+   (the counter is held at 0); holding KEY1 inverts them; SW0 up reverses
+   their order. Tests HVIO inputs (KEY0, KEY1), an IO96 input (SW0) and
+   eight IO96 outputs.
+9. `acc.rbf`: LED7 changes about every 0.3 s and the lower LEDs faster, an
+   irregular pattern (the top byte of a 56-bit accumulator adding an LFSR);
+   KEY0 held clears them. Tests a carry chain over three LABs.
+10. `ram.rbf`: LED[7:0] counts up in binary at about 6 Hz (the M20K's copy
+    of the slowly stepping read address); all off or frozen means the M20K
+    isn't being written or read.
+
+SHA-256 of the files as built here (each equal to its `_pfg.rbf`): `blinky.rbf` ab5e1d19…, `leds.rbf` d9a3618e…, `acc.rbf` aa25d7f5…, `ram.rbf` 03f8d88f…
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
@@ -1793,6 +2104,50 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 6 status** (branch `phase6`): from "a5db rebuilds Quartus images" to
+an open flow that places and routes Verilog itself.
+
+- Step 1 (pin ↔ routing-graph nodes): **done** (t). `a5db pinmap` derives
+  every ball's boundary nodes from the graph; 429 of 432 pin uses in 14
+  Quartus designs start or end at the predicted node, rule fitted on ph1
+  alone; the 3 misses are explained (an unloaded input, a PLL reference, a
+  clock routed as data).
+- Step 2 (timing): **done as a fitted model** (u). quartus_sta runs with
+  brotli on `LD_LIBRARY_PATH`; per-node-type and per-cell-arc means from
+  its paths predict held-out path delays within 3.8–11.9 % median (95th
+  percentile 8.7–22 %). Quartus' own RC model is located, not decoded.
+  a5pnr routes on these delays as costs; there is no timing report.
+- Step 3 (IOPLL): **done for PFDs of 10, 25, 50 MHz** (v). The IP's counter
+  choice is a rule (10 of 10 held-out frequency sets match), the bits are a
+  template plus counters and trims (held-out pb: 2,776 of 2,776 bits).
+- Step 4 (open flow): **done** (w). yosys → a5pnr → a5db build → a5db rbf
+  for four designs (counter, keys and LEDs, a carry chain over three LABs,
+  an M20K); each image decodes back to exactly a5pnr's design file, its
+  rebuilt netlist simulates like the RTL, asm2 agrees with every decodable
+  attribute, and pfg's `.rbf` is byte-identical with integrity OK.
+
+Open after phase 6 [unk]:
+
+- Everything on silicon: the board is still off. The phase-6 files add
+  four open-flow images to "Board test".
+- Two LAB settings Quartus writes where a chain starts (`secmux_bto`,
+  `hipi_clken`): copied, not understood. The hardware carry-in at a chain's
+  start (a5pnr's chains begin with a p = 0 cell, so it doesn't matter).
+- Pin map: IO96 `direct` and HVIO `out2` roles, output enables, pio_1_0.
+- IOPLL: other PFD frequencies, bank-half 0 reference pads, the IP's output
+  ceiling (1.2 GHz refused), phase shifts, cascading.
+- M20K: only the 512 x 32 simple dual-port use with write enable tied high;
+  other widths, enables, output registers and true dual port need their
+  pins and settings (hx, mm have Quartus examples).
+- Timing: Quartus' RC model, hold and clock skew; an STA for a5pnr's output.
+- a5pnr: one clock domain; no LAB control signals (enables and resets
+  become LUT logic), MLAB RAM, DSP, IO registers, PLLs; placement packs
+  loosely (leds: 49 ALMs in 28 LABs).
+
+Next: the board test (phase 4–6 files); then widen a5pnr (enables and
+clears on the LAB lines, more M20K modes, PLLs, DSP) and grow it into a
+nextpnr (himbaechel) target fed from `db/`, as Plan step 7 said.
 
 **Phase 5 status** (branch `phase5`): coverage for a real toolchain. The
 summary for a toolchain author is [docs/toolchain.md](docs/toolchain.md).

@@ -1,0 +1,12 @@
+# Generate the four IOPLL IPs (README (v)) into the run directory.
+set root [file normalize [file join $::quartus(binpath) .. ..]]
+set ipd [file join $root qsys bin ip-deploy]
+set qg [file join $root qsys bin qsys-generate]
+if {[catch {exec $ipd --component-name=altera_iopll --output-name=pll0 --family=Agilex\ 5 --part=A5EB013BB23BE4SCS --component-parameter=gui_reference_clock_frequency=50 --component-parameter=gui_number_of_clocks=2 --component-parameter=gui_output_clock_frequency0=75 --component-parameter=gui_output_clock_frequency1=30 --component-parameter=gui_use_locked=true 2>@1} r]} { puts "ip-deploy failed: $r"; exit 1 }
+if {[catch {exec $qg pll0.ip --synthesis=VERILOG --family=Agilex\ 5 --part=A5EB013BB23BE4SCS 2>@1} r]} { puts "qsys-generate failed: [string range $r end-2000 end]"; exit 1 }
+if {[catch {exec $ipd --component-name=altera_iopll --output-name=pll1 --family=Agilex\ 5 --part=A5EB013BB23BE4SCS --component-parameter=gui_reference_clock_frequency=50 --component-parameter=gui_number_of_clocks=1 --component-parameter=gui_output_clock_frequency0=120 --component-parameter=gui_use_locked=true 2>@1} r]} { puts "ip-deploy failed: $r"; exit 1 }
+if {[catch {exec $qg pll1.ip --synthesis=VERILOG --family=Agilex\ 5 --part=A5EB013BB23BE4SCS 2>@1} r]} { puts "qsys-generate failed: [string range $r end-2000 end]"; exit 1 }
+if {[catch {exec $ipd --component-name=altera_iopll --output-name=pll2 --family=Agilex\ 5 --part=A5EB013BB23BE4SCS --component-parameter=gui_reference_clock_frequency=50 --component-parameter=gui_number_of_clocks=2 --component-parameter=gui_output_clock_frequency0=33.333333 --component-parameter=gui_output_clock_frequency1=200 --component-parameter=gui_use_locked=true 2>@1} r]} { puts "ip-deploy failed: $r"; exit 1 }
+if {[catch {exec $qg pll2.ip --synthesis=VERILOG --family=Agilex\ 5 --part=A5EB013BB23BE4SCS 2>@1} r]} { puts "qsys-generate failed: [string range $r end-2000 end]"; exit 1 }
+if {[catch {exec $ipd --component-name=altera_iopll --output-name=pll3 --family=Agilex\ 5 --part=A5EB013BB23BE4SCS --component-parameter=gui_reference_clock_frequency=25 --component-parameter=gui_number_of_clocks=1 --component-parameter=gui_output_clock_frequency0=125 --component-parameter=gui_use_locked=true 2>@1} r]} { puts "ip-deploy failed: $r"; exit 1 }
+if {[catch {exec $qg pll3.ip --synthesis=VERILOG --family=Agilex\ 5 --part=A5EB013BB23BE4SCS 2>@1} r]} { puts "qsys-generate failed: [string range $r end-2000 end]"; exit 1 }

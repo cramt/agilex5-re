@@ -37,6 +37,9 @@
 //!   a5db build <db> <graph> <quartus root> <hmac.key> <design> <out.sof>
 //!   a5db rebuild <db> <graph> <quartus root> <hmac.key> <in.sof> <out dir> [pins...]
 //!       extract, build from the written file, and print the bits that differ
+//!   a5db usable <db> <graph> <out.bin>          one byte per graph edge: may a router take it (route::usable)
+//!   a5db pinmap <db> <graph>                    every ball's boundary nodes (db/sm4revb/io/pin_nodes.tsv)
+//!   a5db pincheck <db> <graph> <design>...      do a design file's pins start/end at the predicted nodes?
 //!   a5db trace <graph> <node> <depth>              downstream edges, breadth first
 //!   a5db traceback <graph> <node> <depth>          upstream edges, breadth first
 //!   a5db idle-derive <db> <sof>...                 derive db/sm4revb/idle*.tsv
@@ -53,6 +56,7 @@
 mod blank;
 mod db;
 mod graph;
+mod pinmap;
 mod pins;
 mod rebuild;
 mod rbf;
@@ -383,6 +387,99 @@ fn main() -> Result<()> {
             write_rows(&mut db, sof.image_mut(), &rows)?;
             let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
             sof.write(out, &key)
+        }
+        ["usable", dbdir, g, out] => {
+            let (mut db, g) = route::open(dbdir, g)?;
+            let mut j = graph::Join::new(&mut db, &g);
+            let u = route::usable(&mut j, &g)?;
+            let mut n = [0usize; 4];
+            for &k in &u {
+                n[k as usize] += 1;
+            }
+            eprintln!("{} edges: {} unusable, {} mux, {} pass-through, {} clock", u.len(), n[0], n[1], n[2], n[3]);
+            std::fs::write(out, &u)?;
+            Ok(())
+        }
+        ["pinmap", dbdir, g] => {
+            let db = Db::open(dbdir)?;
+            let g = graph::Graph::load(std::path::Path::new(g))?;
+            let rev = pinmap::Rev::new(&g);
+            let all = pinmap::balls(&db)?;
+            let at = pinmap::nodes_at(&g, &all.iter().map(|b| (b.x, b.y, b.z)).collect::<Vec<_>>());
+            println!("# Pin ↔ routing-graph node map (README (t)), written by `a5db pinmap`: for each");
+            println!("# ball, the node where fabric routing starts (in0, in1, clock, direct) or ends");
+            println!("# (out, oe, out2), and the unconfigured hops between it and the pad's buffer.");
+            println!("ball\tuid\trole\tnode\thops");
+            for b in &all {
+                let pad = at.get(&(b.x, b.y, b.z)).cloned().unwrap_or_default();
+                for (role, n, d) in pinmap::roles(&g, &rev, &pad) {
+                    println!("{}\t{}\t{role}\t{}\t{d}", b.ball, b.uid, g.names[n as usize]);
+                }
+            }
+            Ok(())
+        }
+        ["pincheck", dbdir, g, designs @ ..] if !designs.is_empty() => {
+            let db = Db::open(dbdir)?;
+            let g = graph::Graph::load(std::path::Path::new(g))?;
+            let rev = pinmap::Rev::new(&g);
+            let idx = g.index();
+            let all = pinmap::balls(&db)?;
+            let at = pinmap::nodes_at(&g, &all.iter().map(|b| (b.x, b.y, b.z)).collect::<Vec<_>>());
+            for d in designs {
+                let (mut outs, mut ins): (std::collections::HashSet<u32>, std::collections::HashSet<u32>) = Default::default();
+                let mut specs = Vec::new();
+                for l in std::fs::read_to_string(d)?.lines() {
+                    let f: Vec<&str> = l.split('\t').collect();
+                    match f[0] {
+                        "pin" => specs.push(f[1].to_owned()),
+                        "edge" => {
+                            outs.insert(idx[f[1]]);
+                            ins.insert(idx[f[2]]);
+                        }
+                        _ => {}
+                    }
+                }
+                let (mut ok, mut n) = (0, 0);
+                for s in &specs {
+                    let (ball, rest) = s.split_once('=').unwrap();
+                    let u = rest.split(':').next().unwrap();
+                    let b = all.iter().find(|b| b.ball == ball).with_context(|| format!("no ball {ball}"))?;
+                    let pad = at.get(&(b.x, b.y, b.z)).cloned().unwrap_or_default();
+                    let roles = pinmap::roles(&g, &rev, &pad);
+                    let io96 = b.uid.starts_with("pio");
+                    let want = match u {
+                        "in" | "in_reg" => if io96 { "in0" } else { "in1" },
+                        "in0" | "in1" => u,
+                        "clock_in" => "clock",
+                        _ => "out",
+                    };
+                    let fwd = want != "out";
+                    // Edges whose setting is idle or a pass-through (an RPI's input, the
+                    // HIOL 4:1 data mux) are not in a design file: look up to 3 hops
+                    // past the boundary, through non-wire nodes, for a listed edge.
+                    let wire = |n: u32| { let t = g.names[n as usize].split(':').next().unwrap(); t == "LL" || t == "LAB_RE" || ((t.starts_with('H') || t.starts_with('V')) && t[1..].parse::<u32>().is_ok()) };
+                    let used = |node: u32| {
+                        let mut front = vec![node];
+                        for _ in 0..4 {
+                            let mut next = Vec::new();
+                            for &m in &front {
+                                if (fwd && outs.contains(&m)) || (!fwd && ins.contains(&m)) { return true; }
+                                if fwd { for e in g.fanout(m) { if !wire(g.dst[e]) { next.push(g.dst[e]); } } }
+                                else { for f in rev.fanin(m) { if !wire(rev.src[f]) { next.push(rev.src[f]); } } }
+                            }
+                            front = next;
+                        }
+                        false
+                    };
+                    let hits: Vec<&str> = roles.iter().filter(|r| (r.0 == "out") != fwd && r.0 != "oe" && r.0 != "out2" && used(r.1)).map(|r| r.0).collect();
+                    let good = hits.contains(&want);
+                    n += 1;
+                    ok += good as usize;
+                    println!("{d}\t{s}\t{want}\t{}\t{}", if good { "ok" } else { "MISS" }, hits.join(","));
+                }
+                eprintln!("{d}: {ok} of {n} pins use the predicted node");
+            }
+            Ok(())
         }
         ["trace", g, node, depth] => {
             let g = graph::Graph::load(std::path::Path::new(g))?;

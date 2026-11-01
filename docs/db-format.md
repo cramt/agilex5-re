@@ -74,8 +74,20 @@ half (X ≤ 60) and sector 1 the right half, mirrored.
   and L (lane), p (pin in lane). A uid `@object/part` is an unnamed image bit
   at that offset. Written by `tools/pins/derive.py`; `a5db pintable`
   expands it (plus the HVIO clock-mux rule in `src/pins.rs`).
-- `io/pins.tsv`: `ball, uid, pad, function` for every HVIO and IO96 ball of
-  the package.
+- `io/pins.tsv`: `ball, uid, pad, function, x, y, sub_loc` for every HVIO
+  and IO96 ball of the package; x, y, sub_loc are the pad's fitter location,
+  and its routing-graph nodes are `<type>:X<x>Y<y>Z<sub_loc>I<i>`.
+- `io/pin_nodes.tsv`: `ball, uid, role, node, hops`. The graph node where
+  fabric routing starts from the ball (role `in0`, `in1`, `clock`,
+  `direct`) or ends at it (`out`, `oe`, `out2`), and the unconfigured hops
+  between it and the pad's buffer (`a5db pinmap`, README (t)).
+- `io/iopll.tsv`: an IOPLL's common design-file lines with `{uid}` for the
+  hviowr instance; `tools/pll/iopll.py` adds the frequency-dependent ones
+  (README (v)).
+- `timing/delays.tsv`: `class, n, mean_ns, min_ns, max_ns`. Delay classes
+  `re:<node type>` (into a routing node), `lut:data<a..f>`,
+  `arith:<input>><sumout|cout>`, `carry`, `tco`, `reg_d`, `tsu`, fitted to
+  quartus_sta paths (`tools/timing/fit.py`, README (u)).
 - `io/de25_pins.tsv`: `signal, ball, use, uid, bit, value`, the template
   expanded for each DE25-Nano pin alone, as input and as output.
 - A table of `uid, bit, value` rows (`#` lines are comments, `@object/part`
