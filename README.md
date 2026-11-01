@@ -1565,6 +1565,86 @@ Results [obs]:
   (`a_regscan`, `a_frzlogic`, `dft_mode`, `secmux_dftclk*`), whose bits are
   among the unmapped ones of (h).
 
+### (r) Phase 5: clocks
+
+Designs: `designs/clocks/gen.py` writes `ck1` and `ck2`, which between them
+use every clock-capable HVIO pin of the DE25-Nano (pads `HVIO_B<b>_2_<k>`,
+4 per bank, 32 in all, CLOCK1_50 and CLOCK2_50 among them) as a global
+clock, each driving a 2-bit counter with a clock enable. ck1 adds CLOCK0_50
+(IO96, DJ35) and three IO registers. `designs/ck_all`, all 32 pins at once,
+doesn't fit (Error 24404: a pin's periphery-to-core clock path is taken by
+another pin), and that failure split the pins: ck1 got the 16 that placed,
+ck2 the other 16.
+
+- **How an HVIO clock pin enters the clock network** [obs on all 32 pins]:
+  each bank half b of an `hviowr` has two clock outputs toward the DCM, a
+  2:1 `xif_p2c_ioclk_2to1_mux_u<b>` that takes pin k = 0 or 1 of the
+  `xx4_u2` group (P0, P1) and a 4:1 `xif_p2c_ssclk_4to1_mux_u<b>` that takes
+  pin 2 or 3 of either half (`O_SSCLK_BANK<half>_P<k>`; Quartus always used
+  the one numbered like the pin's half). So at most two clock pins per bank
+  half reach the clock network at once, 16 per design on this board, which
+  is why ck_all can't fit. Besides that the pin needs its pin-level bits
+  (input buffer, `ireg_4to1_mux0` in bypass, the bank's `clkordat` demux
+  `u<4g + k>` toward the clock path). `a5db pins` writes all of it for
+  `<ball>=clock_in` (`src/pins.rs`).
+  - Fitted on ck1 (with pt, blinky and ho), **held out on ck2**: its 16
+    clock pins are exactly the other pin of each ioclk and ss clock mux.
+    `tools/pins/check.sh` on ck2: **0 I/O bits differ**, as on ck1.
+  - 1.8-V clock pins (6G, 6H) clear only `iio_config_[0]`, as 1.8-V data
+    pins do (p).
+- **CLOCK0_50 (IO96)** [obs]: an IO96 clock input sets the input's
+  `i_rx_tggpiorxen` and IOSSM bit but leaves `ireg_4to1_mux0` at its idle
+  SEL3; the lane gets the lane-with-input rows of (p). One pin seen
+  (`<ball>=clock_in` on IO96).
+- **The DCM P2C muxes** [obs]: the rule of (n) was checked on 2 muxes. ck1
+  and ck2 use **22 distinct P2C muxes** (10 in the DCM at X121 Y4, 12 at
+  X121 Y51) with 32 (mux, input) pairs covering inputs 0–3, and every one
+  decodes to an edge whose setting equals Quartus'. The DCMs at X0 Y4 and
+  X0 Y51 serve the left side, which has no DE25-Nano clock pins; the rule
+  there is [inf].
+- **Whole images** [obs]: `a5db rebuild` on ck1 (23 pins, 426 edges) and ck2
+  (18 pins, 395 edges) leaves **0 differing bits**. No clock-network block
+  needs an `attr` line: the P2C muxes, switchboxes, vertical-seam and spine
+  taps and row clocks all come from routing edges and the clock rules
+  (graph.rs). The LAB clock enables are LAB attributes (`ce_sel` CE and the
+  LAB's enable lines, (q)).
+- **Global and regional** [obs]: there is one clock network. Quartus builds
+  each clock's tree only into the sectors that have loads: every clock in
+  ck1, global or not, reports "Clock Region: Sector (1, 0)" (the right half,
+  `(61, 5)` to `(121, 51)`). `GLOBAL_SIGNAL "REGIONAL CLOCK"` is not a valid
+  value for Agilex 5 (Warning 125035); `CLOCK_REGION "SX1 SY0 SX1 SY0"` on
+  CLOCK2_50 is honoured ("Clock Region Constraint") and changes nothing
+  since the tree was one sector anyway. A placer chooses the sectors by
+  where it puts the loads; the routing is the same clock-network edges.
+- **Row-clock delay chains** [obs in mm, rule inf]: mm's DSP/M20K rows use a
+  row clock through its delay chain: `delay_chain_<side><j>/mux41` CLKIN0
+  and the predrive mux on input 0 instead of input 1. graph.rs now has rules
+  for the delay chain edges (tap k → CLKIN<k>, only k = 0 seen).
+- **IO registers** [obs, ck1]: FAST_INPUT_REGISTER and FAST_OUTPUT_REGISTER
+  on 1.8-V pins are the uses `in_reg` and `out_reg`: the input register's
+  clock inversion, clock and enable enables and `ireg_4to1_mux1` SEL1, and
+  the output's `oreg` clock and enable enables and `oreg` mux SEL1. The
+  register clock comes from the fabric through the HIOL tile, where
+  Quartus also set three `rpi_sel` INV programmable inverters (`attr`
+  lines). One design, so [obs] for those three pins and [inf] for others.
+
+- **IOPLL** [obs, one configuration]: `designs/pl` (CLOCK1_50 into an
+  IOPLL made by `ip-deploy`/`qsys-generate` in `prep.tcl`, 100 MHz out to a
+  24-bit counter on LED0, `locked` on LED1). Quartus placed it in
+  `hvio_3_1`'s `xpllwrap_top`, next to V16. `a5db rebuild` (4 pins, 95
+  edges) leaves **0 differing bits**; the PLL is 40 `attr` lines (enable,
+  reference from the I/O clock `PLL_CLKMUX_IOCLKIN_3`, VCO phases, charge
+  pump and loop filter trims, counter sources and bypasses, output enable),
+  10 `direct` lines (the C0/C1/M counters' hi/lo dividers, DCC timers) and
+  19 `bit` lines: lock-detector and VCO-calibration controls
+  (`cr_lockf_*`, `cr_vcocalsel_clk*`, `cr_dcs_clksel`) that no attribute
+  covers. V16 as a PLL reference leaves the ioclk mux at P0: the reference
+  doesn't use the clock-pin path. The PLL output enters the clock network
+  as an ordinary graph edge (`HVIOWR_RE … I16 → DCM_mux`). How counters and
+  trims follow from the requested frequencies is [unk]: one PLL was
+  compiled, so a writer can reproduce this 50 → 100 MHz PLL verbatim and
+  nothing else yet.
+
 ### (s) Phase 5: leftover unknowns
 
 - **Record 0x13 is the JTAG USERCODE** [obs]: its 16 bytes are `u32 0,
