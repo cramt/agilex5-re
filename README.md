@@ -1757,6 +1757,63 @@ table against design files extracted from Quartus images.
   (no design drives an OE); IO96 lanes without DE25-Nano pins follow the same
   search but no design uses them [inf].
 
+### (u) Phase 6: delays for routing
+
+[`db/sm4revb/timing/delays.tsv`](db/sm4revb/timing/delays.tsv) is a delay
+model a router can use as node costs: the mean delay into each routing node
+type, and per cell the LUT input-to-output, arithmetic, clock-to-out and
+register-input delays. It is fitted to quartus_sta's own timing paths, not
+read from the device database.
+
+- **quartus_sta runs** [obs] once `libbrotlidec` is on `LD_LIBRARY_PATH`
+  (nixpkgs `brotli.lib`): `tools/timing/sta.sh <run> <out>` copies a
+  compiled run and dumps `report_timing -setup -detail full_path
+  -show_routing` (slow model, up to 4,000 paths per clock). That is the
+  workaround for "quartus_sta fails under chipsmith" below until chipsmith
+  carries brotli. Every path lists each routing hop by fitter node name
+  (DYGR name after the (k) renaming) with its incremental delay, and each
+  cell's input port, output port and delay.
+- **Where Quartus keeps the model** [obs, not decoded]: `DYGR_ROUTE_TIMING_INFO`
+  in `qcore/linux64/libddb_dygr.so` holds per-node driver data
+  (`set_driver_data(unsigned short, float*, float*, int, int, int*,
+  DEV_ROUTING_SWITCH_ENUM*)`) and loads (`set_load`), loaded from
+  `devices/10nm/sm4revb/ddb_sm4revb_timing_routing_delays_*` (one file per
+  process/voltage/temperature corner, plus crosstalk and DSPF RC models in
+  `*_routing_models_*.mdb`). It is an RC model with per-load terms and
+  `dump_timing_nodes()` exists, but turning it into delays needs the
+  evaluation code too [unk]. The path-based model below was the tractable
+  route.
+- **The model** [obs] (`tools/timing/paths.py` parses, `fit.py fit` fits):
+  a hop's class is its destination node type (`re:H4`, `re:LEIM`, …) or,
+  for cells, `lut:<input>` (a..f → combout), `arith:<input>>sumout|cout`,
+  `arith:cin>cout|sumout` (along a carry chain), `tco`, `reg_d`, `tsu`.
+  The value is the class mean over rt and ar (5,443 paths). Some numbers,
+  slow 0 °C corner: tco 0.320 ns; LUT input A 0.209, B 0.183, C 0.150,
+  D 0.130, E 0.068, F 0.043; carry cin→cout 0.059, cin→sumout 0.169; H0
+  0.077, H1 0.065, H2 0.067, H4 0.101, H6 0.110, H12 0.135, V1 0.128, V4
+  0.120, V8 0.124, LL 0.054, LEIM 0.050 per hop.
+- **Checked against quartus_sta** [obs] (`fit.py eval`): each path's hops
+  summed under the model against quartus_sta's data delay (same route,
+  Quartus' placement):
+
+  | design | paths | mean error | median abs error | 95th percentile |
+  |---|---|---|---|---|
+  | rt (fit) | 1,443 | −0.9 % | 2.7 % | 7.3 % |
+  | ar (fit) | 4,000 | +0.5 % | 7.0 % | 19.2 % |
+  | hx (held out) | 2,817 | +2.4 % | 5.2 % | 11.7 % |
+  | mm (held out) | 1,164 | −2.2 % | 4.8 % | 10.5 % |
+  | ck1 (held out) | 53 | +2.2 % | 3.8 % | 16.2 % |
+  | blinky (held out) | 405 | −0.1 % | 11.9 % | 22.0 % |
+
+  M20K and DSP cells (`MEDIUM_EAB_RE`, `MP_MAC_RE`) and IO registers are
+  not modelled; those hops use quartus_sta's own delay in the check.
+  Per-hop spread is real (an H4 hop runs 0.073–0.168 ns with its load and
+  position), so the model is for costs, not sign-off. The biggest residual
+  is a carry chain's data input to cout (0.17–0.59 ns, depending on the
+  ALM) [unk].
+- a5pnr (w) uses the `re:` means as PathFinder base costs. Timing-driven
+  placement and a path-delay report are not written yet.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -1767,7 +1824,8 @@ the other compression dependency). chipsmith's
 `crates/chipsmith-quartus-common/compat.nix` provides no brotli. The fix
 belongs in chipsmith: add `brotli = pkgs.brotli.lib.outPath;` to that
 list. Fitter and assembler are unaffected, so blinky was assembled with a
-separate `quartus_asm blinky`.
+separate `quartus_asm blinky`. With `brotli.lib` on `LD_LIBRARY_PATH`
+quartus_sta runs (u) [obs].
 
 ### Board test (prepared, not run: the board is off)
 
