@@ -1692,6 +1692,71 @@ ck2 the other 16.
 - **Sector-header forced bits**: no change since (o); classified, meaning
   [unk].
 
+### (t) Phase 6: pin ↔ routing-graph node map
+
+`a5db pinmap <db> <graph>` writes
+[`db/sm4revb/io/pin_nodes.tsv`](db/sm4revb/io/pin_nodes.tsv): for each of the
+357 HVIO and IO96 balls, the graph node where fabric routing starts from the
+pin (roles `in0`, `in1`, `clock`, `direct`) or ends at it (`out`, `oe`,
+`out2`). A router starts an input net and ends an output net there, with no
+Quartus route to copy. `a5db pincheck <db> <graph> <design>…` checks the
+table against design files extracted from Quartus images.
+
+- **A pad's nodes** [obs]: every graph node at the pad's fitter location,
+  `<type>:X<x>Y<y>Z<sub_loc>I<i>`, where (x, y, sub_loc) is the pad's
+  `X…Y…SUB_LOC…` from `ddb pins` (now columns of `io/pins.tsv`). The input
+  buffer (`IO_INPUT_BUFFER_OUTPUT`) and output buffer (`IO_OUTPUT_BUFFER_INPUT`
+  I0 data, I1 OE, I2 a third input on HVIO) are among those nodes or one hop
+  from them.
+- **The rule** [obs on the designs below]: from the buffer, follow every edge
+  the router doesn't set (forward for inputs, backward for outputs), and stop
+  at the first node with an edge the router does set: a mux in a routing tile
+  (`cw_rt_*`) or the clock network (`cw_cc_*`, or a clock rule of (k)). Edges
+  inside I/O blocks have no edge API (the pin template of (p) sets those
+  muxes), and the redundancy muxes (`REDMUX`, `cw_rd_*`, no bit map) pass
+  their data input when idle, so the search goes through both. The search
+  ends 27–83 hops from the buffer. Then:
+  - HVIO input: two `REDMUX` nodes, one through each input register 4:1 mux
+    (`IOGPIO_REG_4TO1_MUX_RE` at Z = sub_loc − 15 for mux 0, − 14 for mux 1).
+    Pin use `in` (mux 1, as (p)) leaves through the second. The REDMUX feeds
+    one `HIOB` through the HIOL's `i_4mux1`, which has no `sel` bits, so it
+    is a pass-through.
+  - HVIO clock: the `HVIOWR_RE` clock output reached through mux 0, the
+    bank's clock-or-data demux and the ioclk 2:1 or ss clock 4:1 mux (r).
+    Two pins share each such node, which is the phase-5 limit of two clock
+    pins per bank half seen from the graph side.
+  - IO96 input: `in0` (the usual `in`, mux 0) leaves through the fabric
+    adapter's flyby path into the VIO tile's `VIO_TO_CORE` mux, `in1` through
+    the IOGPIO 4:1 mux and the adapter's 2:1 mux, `clock` through the
+    adapter's `P2C_FRZ` into the DCM; `direct` (adapter 2:1 mux only) is never
+    used by Quartus here [unk].
+  - Outputs: the `RPI` (programmable inverter in the HIOL or VIO routing
+    tile) that leads to the buffer's data input. The OE input has its own RPI
+    but no Quartus design routes it: the template ties OE for output pins.
+  - `pio_1_0` (top IO96 bank, no DE25-Nano pins) goes through
+    `SOC_MPFE_WRAPPER_RE` and is in the table but unchecked [inf].
+- **Checked** [obs] (`pincheck`): a pin "uses" a node if the design file's
+  first (last) routing edge of the pin's net leaves (enters) it, allowing up
+  to 3 non-wire hops for edges a design file can't list (RPI inputs and the
+  HIOL 4:1 data mux are pass-throughs; MUXIN settings equal to the idle state
+  aren't decoded). The rule was worked out on ph1 alone.
+
+  | design | pin uses | at the predicted node |
+  |---|---|---|
+  | ph1 (development) | 167 | 167 |
+  | ph2 | 167 | 166: `DRAM_RAS_n` is an unloaded input (p), no route |
+  | ck1 | 23 (16 HVIO clocks, IO96 clock, IO registers) | 23 |
+  | ck2 | 18 | 18 |
+  | ar, mm, hx | 9, 5, 10 | all |
+  | pl | 4 | 3: V16 is the IOPLL's reference and never enters the clock network (r) |
+
+  `in_reg` (an HVIO input register) leaves through mux 1 like `in`; an output
+  register (`out_reg`) uses the `out` node. In ar one data input also feeds
+  the clock network: Quartus used its clock node as well as its `in1` node.
+- **Not covered**: `direct` and `out2` are unexplained; `oe` is unchecked
+  (no design drives an OE); IO96 lanes without DE25-Nano pins follow the same
+  search but no design uses them [inf].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
