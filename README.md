@@ -1456,6 +1456,10 @@ in banks 6A–6H (6G and 6H at 1.8 V, the rest 3.3 V) and 22 IO96 pins in bank
     (4 bits). Which of the two muxes an input uses goes with the fabric route
     Quartus chose, so a pin spec can name it: `in0`/`in1` (`in` is the
     usual one). Which graph node each mux reaches is [unk].
+  - The whole ph1 image, with SW3 as `in1`, rebuilds bit for bit from a
+    design file (q): 167 pins, 1,448 edges (the pin data through the HIOL
+    and VIO input muxes), 443 LAB/MLAB attributes and 60 LUT masks, 0 bits
+    differ.
 - **Not covered**: the D-PHY standard (used here single-ended at 1.1 V),
   bidirectional pins, pull-ups, bus hold, current strength and slew
   settings (the DE25-Nano manual sets none), IO96 lanes 0–3 and 6–7 and the
