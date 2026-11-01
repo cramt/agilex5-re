@@ -405,6 +405,20 @@ pub fn clock_rule(g: &Graph, e: usize) -> Option<(&'static str, u32, u32, Vec<Ch
             let m = format!("xrowclkmux/mux_predrive_{}{}/output_mux_dolsgn_delay_chain_dolsgn_0/sel", if j < 6 { 'l' } else { 'r' }, j % 6);
             Some(("cw_cc_ts_base", x, y, vec![ch(m, 1)]))
         }
+        // Row clock j's delay chain (README (q)): from the mux output b = 44 + 7j
+        // through b + 1 to the taps b + 2 .. b + 4, whose 4:1 mux drives b + 5,
+        // which is the predrive mux's input 0. Tap k is CLKIN<k> [inf: only
+        // CLKIN0 seen].
+        ("SCLKMUX_RE", "SCLKMUX_RE") if si >= 46 && di >= 49 && (di - 49) % 7 == 0 && (di - 49) / 7 < 12 && (di - 3..di).contains(&si) => {
+            let j = (di - 49) / 7;
+            let m = format!("xrowclkmux/delay_chain_{}{}/mux41_dolsgn_delay_dolsgn_0/sel", if j < 6 { 'l' } else { 'r' }, j % 6);
+            Some(("cw_cc_ts_base", x, y, vec![ch(m, si + 3 - di)]))
+        }
+        ("SCLKMUX_RE", "SCLKMUX_RE") if si >= 49 && (si - 49) % 7 == 0 && di == si + 1 && (si - 49) / 7 < 12 => {
+            let j = (si - 49) / 7;
+            let m = format!("xrowclkmux/mux_predrive_{}{}/output_mux_dolsgn_delay_chain_dolsgn_0/sel", if j < 6 { 'l' } else { 'r' }, j % 6);
+            Some(("cw_cc_ts_base", x, y, vec![ch(m, 0)]))
+        }
         _ => None,
     }
 }

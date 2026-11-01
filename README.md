@@ -1463,6 +1463,108 @@ in banks 6A–6H (6G and 6H at 1.8 V, the rest 3.3 V) and 22 IO96 pins in bank
   routing-graph node map (which fabric node carries a pin's input or
   output; phase 4 took V16's and DF35's from Quartus routes).
 
+### (q) Phase 5: core features, rebuilt from a design file
+
+`a5db extract` turns an image into a **design file**, the vocabulary a placer
+and router would write through a5db (`src/rebuild.rs`): `pin` lines (the
+template of (p)), `edge` lines (routing graph edges, decoded with `a5db
+routed`'s rules), then per instance `attr` (a CUSTOM setting) and `direct`
+(a DIRECT bit string: LUT masks, M20K contents, DSP inversion masks) for
+whatever the pins and edges leave different from the idle image. What that
+vocabulary can't express comes out as `bit` (a named bit) and `raw` (an
+image bit no named bit covers) lines. `a5db build` writes a design file over
+the idle image; `a5db rebuild` does both and diffs the result against the
+input. A design file names nothing from Quartus' image: every line is a
+setting, an edge or a table expansion.
+
+Designs (all compiled for this phase; `specimens/runs/*0`):
+
+- `designs/ar` (development): a 32-bit accumulator with enable and
+  synchronous clear (carry chain), a ternary adder (shared arithmetic), a
+  12-bit down counter with asynchronous clear and synchronous load, a
+  comparator and subtractor, an 8-bit register-only shift register and a
+  32 x 16 RAM in an MLAB;
+- `designs/mm` (development): a 512 x 32 simple dual-port M20K, a 1024 x 16
+  initialised ROM in M20K, a registered 18x18 signed multiply and a 27x27
+  multiply-accumulate in DSP blocks;
+- `designs/hx` (**held out**: written before the tools above and never used
+  to fix them): a 20-bit up/down counter with enable, asynchronous preset
+  value and synchronous clear, a four-input adder, a 16 x 8 MLAB RAM, a
+  2,048 x 10 true dual-port M20K with initial contents, and a 9x9 + 18x19
+  multiply-add, on another bank and clock (CLOCK2_50) than ar and mm.
+
+Results [obs]:
+
+| design | pins | edges | attr | direct | bit | raw | bits differing after the rebuild |
+|---|---|---|---|---|---|---|---|
+| ar | 9 | 1,888 | 1,198 | 98 | 0 | 0 | **0** |
+| mm | 5 | 1,760 | 712 | 577 | 1 → 0 | 0 | **0** |
+| hx (held out) | 10 | 1,675 | 917 | 591 | 1 → 0 | 0 | **0** |
+
+- Each image is rebuilt **bit for bit** in every part (CRAM, M20K content
+  RAM, I/O headers): the rebuild leaves 0 differing bits, so there are no
+  unmapped bits to exclude here.
+- The one `bit` line in mm and hx was `rmode[0]` of a DSP: `dsp_mode`, like
+  four others below, is a CUSTOM attribute that the Bcm_device dump has no
+  bits for. With it added (below), both are pure attr/direct.
+- The attributes these designs need, by feature [obs, names from the design
+  files]: LUT masks (`lut_mask`, DIRECT); carry chains and shared arithmetic
+  (`adder_mode` ENABLE_ADDER on the LUT, `adder_or_packed_mode` on the
+  adder; the register's `reg_input` picks ARITH_SUMOUT, LUTOUT_6LUT,
+  LUTOUT_5LUT or LEIM, the last one a register packed with unrelated logic,
+  fed straight from routing); registers (`register_comb` DFF_LATCH, REGIN,
+  or WIRE_MODE to bypass; four per ALM in `xcw_la_le_reg{0,1}/xreg{0,1}`);
+  register controls (`regclk` DFF_LABCLK0/1 picks one of the LAB's two
+  clocks, `regclr` CLR1/CLR2 one of its two clears, `ce_sel`/`clr_sel` per
+  half-LAB select the LAB's enable and clear lines, `sclr_sel` SCLR per
+  register, and the programmable inverter `iss/xclrb_rpi/sel` INV in the
+  routing tile for an active-low clear); MLAB RAM (`ram_mode`
+  LUTRAM_32DEEP/LUT_MODE on `xce_ml_le_din`, `xcw_ml_le_csel` and the LAB's
+  `lram_sigctrl`); M20K (42 CUSTOM settings for widths, ports and registers,
+  plus `m20k_eram_add<k>`: row k/2, bits 40(k mod 2) .. +39 of the 256 x 80
+  `eram_array`); DSP (`dsp_mode`, input/output register and clock selects,
+  signedness, `dsp_proginv_{l,h}` DIRECT masks).
+- **Routing needs two more things than the mux settings** [obs]:
+  - every used routing mux with a hyper-register (LEIM, LEIM_WB, EDIM, the
+    H/V drivers, HIOL `xleim`/`xedim`) is set to `flop_mode = FAST_WIRE`
+    (bypass) by Quartus, 580 of 580 in ar; idle is DIS. The exception are
+    the LEIMs into a LAB's control inputs (`LEIM` I80 and up of a LAB
+    routing tile), which stay DIS. `a5db` now writes FAST_WIRE with every
+    edge it routes (`Join::edge`). **The phase-4 from-scratch blinky has
+    every routing mux at DIS**, which no Quartus image has; whether DIS
+    passes the signal is [unk], so its board files are rebuilt with
+    FAST_WIRE (see "Board test");
+  - the HIOL tiles' `xleim` input muxes (pin data into the fabric) had no
+    `sel` bits in the Bcm_device dump, so 1,565,476 graph edges resolved to
+    nothing. asm2's `set_attribute` gives them: MUXINk is the one-hot
+    `cram_mux{k/4}_hg[k mod 4]`, MUX_DIS all zero (`tools/bcm/
+    asm2_settings.tcl`). Data inputs from HVIO pins pass through them.
+- **CUSTOM attributes without bits in the Bcm_device dump** [obs]:
+  `tools/bcm/asm2_probe.sh` sets every value of each such attribute on one
+  instance through asm2 and records the named bits that change
+  (`probe2settings.py` writes them into `bcm_settings.tsv`). Of 1,008
+  probed (LAB, MLAB, M20K, DSP, routing, clock, HVIO), only three change
+  named bits: DSP `dsp_mode` (`rmode[4:0]`, a 5-bit code: TWO_18X19 0,
+  ONE_27X27 1, SUM_OF_2_18X19 2, … COMPLEX_MULT 22) and the HVIO input and
+  OE delay chains (`a_rb_dlychn_sel`, 64 and 16 steps). The rest (LAB
+  `lut_mode`, `carry_out`, `latch_mode`, MLAB `fastwrite`, M20K port
+  selects, the HVIO buffer's `io_standard`, `weak_pull_up`, `bus_hold`,
+  `slew_rate`, `open_drain`, `schmitt_trigger` …) change no named bit in
+  asm2: they are `<VIRTUAL>` there, so whatever they mean on silicon comes
+  through other attributes or the fitter [inf]. Three LAB/MLAB `lut_mode`
+  probes crash asm2 (`asm2_state.cpp:1140`).
+- **DIRECT attributes** (`db/sm4revb/direct.tsv`, `tools/bcm/direct.tcl`):
+  the bit order of every DIRECT attribute of the LAB, MLAB, M20K, DSP and
+  HVIO blocks (775), and of the IO96 (4,775 attributes, 4.28 M bits,
+  `direct_io96.tsv.xz`, not loaded by a5db).
+- **Readback** [obs]: `tools/readback.sh` on each rebuilt image (a5db's
+  decode against asm2's `get_attribute`, every attribute of every instance
+  that differs from idle): hx 35,563 attributes in 58 instances, 34,626
+  equal, 0 differ; ar 33,409 in 55, 32,557 equal, 0 differ; mm: see the
+  commit after. The attributes a5db can't decode are DFT and scan settings
+  (`a_regscan`, `a_frzlogic`, `dft_mode`, `secmux_dftclk*`), whose bits are
+  among the unmapped ones of (h).
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
