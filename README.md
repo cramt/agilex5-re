@@ -1739,7 +1739,8 @@ table against design files extracted from Quartus images.
   first (last) routing edge of the pin's net leaves (enters) it, allowing up
   to 3 non-wire hops for edges a design file can't list (RPI inputs and the
   HIOL 4:1 data mux are pass-throughs; MUXIN settings equal to the idle state
-  aren't decoded). The rule was worked out on ph1 alone.
+  aren't decoded). The rule was worked out on ph1 alone; 429 of 432 pin uses in 14 designs
+  match, and the 3 misses are explained.
 
   | design | pin uses | at the predicted node |
   |---|---|---|
@@ -1749,6 +1750,8 @@ table against design files extracted from Quartus images.
   | ck2 | 18 | 18 |
   | ar, mm, hx | 9, 5, 10 | all |
   | pl | 4 | 3: V16 is the IOPLL's reference and never enters the clock network (r) |
+  | pt, ho, blinky, gc, rt (extracted for this) | 27 | 27 |
+  | idle | 2 | 1: its CLOCK2_50 drives one flop and Quartus routed it as data (`in1`, which it uses), not over the clock network the `clock_in` label assumed |
 
   `in_reg` (an HVIO input register) leaves through mux 1 like `in`; an output
   register (`out_reg`) uses the `out` node. In ar one data input also feeds
