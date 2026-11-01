@@ -333,6 +333,11 @@ pub mod usable {
     pub const PASS: u8 = 2;
     /// A clock-network mux that resolves to bits (edge API or clock rule).
     pub const CLOCK: u8 = 3;
+    /// A mux (fabric or clock) whose setting for this edge is the mux's
+    /// idle state: it writes no bit, an image can't show it, and whether an
+    /// unconfigured mux passes that input is unknown (README (y)), so a
+    /// router leaves it alone.
+    pub const IDLE: u8 = 4;
 }
 
 /// Classify every edge for a router. Only routing tiles (`cw_rt_*`) and the
@@ -355,8 +360,9 @@ pub fn usable(join: &mut Join, graph: &Graph) -> Result<Vec<u8>> {
     for e in 0..graph.dst.len() {
         let (u, c) = (graph.uid[e], graph.cfg[e]);
         let class = if c == 0 {
-            match join.rule_edge(e, false)? {
-                Some(Ok(_)) => CLOCK,
+            match (join.rule_edge(e, false)?, join.rule_edge(e, true)?) {
+                (Some(Ok(w)), Some(Ok(i))) if w.iter().zip(&i).all(|(a, b)| a.1 == b.1) => IDLE,
+                (Some(Ok(_)), _) => CLOCK,
                 _ => continue,
             }
         } else {
@@ -368,7 +374,12 @@ pub fn usable(join: &mut Join, graph: &Graph) -> Result<Vec<u8>> {
             match seen.get(&(u, c)) {
                 Some(&k) => k,
                 None => {
+                    let idle = match (join.pair(u, c)?, join.pair_idle(u, c)?) {
+                        (Some(Ok(w)), Some(Ok(i))) => w.iter().zip(&i).all(|(a, b)| a.1 == b.1),
+                        _ => false,
+                    };
                     let k = match join.pair(u, c)? {
+                        Some(Ok(_)) if idle => IDLE,
                         Some(Ok(_)) if clock => CLOCK,
                         Some(Ok(_)) => MUX,
                         Some(Err(m)) if m.is_pass_through() => PASS,

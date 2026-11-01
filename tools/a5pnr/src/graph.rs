@@ -23,6 +23,10 @@ pub struct Graph {
     first: Vec<u32>,
     pub dst: Vec<u32>,
     pub class: Vec<u8>,
+    /// Nodes outside LABs with more than one pass-through fanin: which one
+    /// drives them is a setting nobody knows (README (y)); the router
+    /// doesn't enter them over a pass-through edge.
+    pub ambiguous: Vec<bool>,
     index: FxHashMap<(u16, u8, u8, u16, u32), u32>,
     type_index: FxHashMap<String, u16>,
 }
@@ -49,6 +53,7 @@ impl Graph {
             first: Vec::new(),
             dst: Vec::new(),
             class: Vec::new(),
+            ambiguous: Vec::new(),
             index: FxHashMap::default(),
             type_index: FxHashMap::default(),
         };
@@ -110,6 +115,15 @@ impl Graph {
         drop(raw);
         g.class = std::fs::read(dir.join("usable.bin")).context("reading usable.bin (a5db usable)")?;
         ensure!(g.class.len() == g.dst.len(), "usable.bin has {} entries for {} edges", g.class.len(), g.dst.len());
+        let mut fanin = vec![0u8; n];
+        for e in 0..g.dst.len() {
+            if g.class[e] == PASS {
+                let d = g.dst[e] as usize;
+                fanin[d] = fanin[d].saturating_add(1);
+            }
+        }
+        let lab_re = g.type_index.get("LAB_RE").copied();
+        g.ambiguous = (0..n).map(|k| fanin[k] > 1 && Some(g.ty[k]) != lab_re).collect();
         Ok(g)
     }
 

@@ -1,9 +1,11 @@
 //! The netlist an image holds, rebuilt from `a5db extract`'s decode of it
 //! and written as Verilog, for simulation against the source design
-//! (README (w)). Nothing comes from a5pnr's own intent: connectivity is the
-//! image's decoded mux edges plus the graph's pass-through edges, cells are
-//! the decoded LAB attributes and LUT masks, ports are the design file's
-//! pins at their boundary nodes (README (t)).
+//! (README (w), (y)). Nothing comes from a5pnr's own intent: connectivity is
+//! the image's decoded mux edges plus the graph's pass-through edges, cells
+//! are the decoded LAB, routing-tile and M20K attributes, LUT masks and M20K
+//! contents, ports are the design file's pins at their boundary nodes
+//! (README (t)). What the image does that this model doesn't know is an
+//! error, not a guess.
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
@@ -21,6 +23,10 @@ enum Src {
     /// M20K (x, y) output pin.
     M20k(u32, u32, u32),
 }
+
+/// The M20K settings a5pnr's 512 x 32 use writes (emit::M20K_SDP); any
+/// other differing M20K attribute is outside the model.
+const M20K_KNOWN: [&str; 2] = ["xdigicore/m20k_a_outreg_byp", "xdigicore/m20k_b_outreg_byp"];
 
 pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str) -> Result<()> {
     let text = std::fs::read_to_string(extract).with_context(|| format!("reading {extract}"))?;
@@ -42,6 +48,27 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             }
             "bit" | "raw" => bail!("{extract}: the image has bits outside the design vocabulary: {l}"),
             _ => {}
+        }
+    }
+    // Routing-tile attributes: only the clear inverters are modelled. An
+    // inverted clear's last hop (RPII → RPI) conducts, inverted.
+    let mut inverted_lab: HashSet<(u32, u32)> = HashSet::new();
+    for ((u, a), v) in &attr {
+        let Some(rest) = u.strip_prefix("cw_rt_lab_base_r") else {
+            if u.starts_with("cw_rt_") || u.starts_with("hvio") || u.starts_with("pio") {
+                bail!("{u} {a} = {v}: routing or I/O attribute outside the model");
+            }
+            continue;
+        };
+        let (y, x) = rest.split_once("_c").context("uid")?;
+        let (x, y): (u32, u32) = (x.parse()?, y.parse()?);
+        match (a.as_str(), v.as_str()) {
+            ("iss/xclrb_rpi/sel", "INV") => {
+                let (Some(a), Some(b)) = (g.node(&format!("RPII:X{x}Y{y}Z0I5")), g.node(&format!("RPI:X{x}Y{y}Z0I5"))) else { bail!("no RPI at X{x}Y{y}") };
+                active.insert((a, b));
+                inverted_lab.insert((x, y));
+            }
+            _ => bail!("{u} {a} = {v}: routing-tile attribute outside the model"),
         }
     }
     // Port names by ball (pins.txt) and boundary nodes (io/pin_nodes.tsv).
@@ -71,22 +98,24 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             "clock_in" => "clock",
             "out" => "out",
             "in0" | "in1" => u.as_str(),
-            _ => if io96[b] { "in0" } else { "in1" },
+            "in" => if io96[b] { "in0" } else { "in1" },
+            _ => bail!("pin use {u} is outside the model"),
         };
         let n = *node_of.get(&(b.clone(), role.to_owned())).with_context(|| format!("{b} {role}"))?;
         if role == "out" { outputs.push((name, n)) } else { inputs.push((name, n)) }
     }
-    // Used LABs and their ALMs.
+    // Used LABs and M20Ks.
     let mut labs: BTreeMap<(u32, u32), ()> = BTreeMap::new();
     let mut m20ks: BTreeMap<(u32, u32), ()> = BTreeMap::new();
     for (u, _) in attr.keys() {
         if let Some(rest) = u.strip_prefix("cw_mm_m20k_r") {
             let (y, x) = rest.split_once("_c").context("uid")?;
             m20ks.insert((x.parse()?, y.parse()?), ());
-        }
-        if let Some(rest) = u.strip_prefix("cw_la_lab_r") {
+        } else if let Some(rest) = u.strip_prefix("cw_la_lab_r") {
             let (y, x) = rest.split_once("_c").context("uid")?;
             labs.insert((x.parse()?, y.parse()?), ());
+        } else if !u.starts_with("cw_rt_lab_base") {
+            bail!("{u}: block type outside the model");
         }
     }
     // Every source's reach over conducting edges: decoded mux edges and the
@@ -103,14 +132,14 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         sources.push((Src::Port(k), *n));
     }
     for &(x, y) in m20ks.keys() {
-        for k in 0..32u32 {
-            if let Some(n) = g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{}", 83 + k)) {
-                sources.push((Src::M20k(x, y, 83 + k), n));
+        for pin in 83..123u32 {
+            if let Some(n) = g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{pin}")) {
+                sources.push((Src::M20k(x, y, pin), n));
             }
         }
     }
     let mut reach: HashMap<u32, Src> = HashMap::new();
-    let mut shorts = 0;
+    let mut conflict: Vec<u32> = Vec::new();
     for &(s, n0) in &sources {
         let mut q = VecDeque::from([n0]);
         let mut seen = HashSet::from([n0]);
@@ -118,33 +147,51 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             for e in g.fanout(m) {
                 let d = g.dst[e];
                 if (g.class[e] == PASS || active.contains(&(m, d))) && seen.insert(d) {
-                    match reach.insert(d, s) {
-                        Some(o) if o != s => {
-                            shorts += 1;
-                            eprintln!("readback: {} reached from {o:?} and {s:?}", g.name(d));
+                    if let Some(o) = reach.insert(d, s) {
+                        if o != s {
+                            conflict.push(d);
                         }
-                        _ => {}
                     }
                     q.push_back(d);
                 }
             }
         }
     }
-    if shorts > 0 {
-        bail!("{shorts} nodes driven by more than one source");
-    }
-    let sig = |n: Option<u32>| -> String {
-        match n.and_then(|n| reach.get(&n)) {
-            Some(Src::Lab(x, y, p)) => format!("l{x}_{y}_o{p}"),
-            Some(Src::Port(k)) => inputs[*k].0.replace(['[', ']'], "_"),
-            Some(Src::M20k(x, y, p)) => format!("m{x}_{y}_q[{}]", p - 83),
-            None => "1'bx".into(),
+    // A node two sources reach over pass-through edges (some clock-network
+    // nodes have several, README (y)) is unknown, and so is everything it
+    // reaches; that only matters if a used pin is among them.
+    let mut unknown: HashSet<u32> = HashSet::new();
+    let mut q: VecDeque<u32> = conflict.iter().copied().collect();
+    while let Some(m) = q.pop_front() {
+        if !unknown.insert(m) {
+            continue;
         }
+        for e in g.fanout(m) {
+            let d = g.dst[e];
+            if g.class[e] == PASS || active.contains(&(m, d)) {
+                q.push_back(d);
+            }
+        }
+    }
+    let used_unknown = std::cell::RefCell::new(Vec::new());
+    let sig = |n: Option<u32>| -> Option<String> {
+        if let Some(n) = n {
+            if unknown.contains(&n) {
+                used_unknown.borrow_mut().push(g.name(n));
+                return Some("1'bx".into());
+            }
+        }
+        n.and_then(|n| reach.get(&n)).map(|s| match s {
+            Src::Lab(x, y, p) => format!("l{x}_{y}_o{p}"),
+            Src::Port(k) => inputs[*k].0.replace(['[', ']'], "_"),
+            Src::M20k(x, y, p) => format!("m{x}_{y}_q{p}"),
+        })
     };
     let lab_node = |x: u32, y: u32, pin: u32| g.node(&format!("LAB_RE:X{x}Y{y}Z0I{pin}"));
+    let lab_sig = |x: u32, y: u32, pin: u32| sig(lab_node(x, y, pin)).unwrap_or_else(|| "1'bx".into());
     let mut head = String::new();
     let mut v = String::new();
-    writeln!(head, "// Rebuilt by a5pnr readback from {extract} (README (w)).")?;
+    writeln!(head, "// Rebuilt by a5pnr readback from {extract} (README (w), (y)).")?;
     let ports: Vec<String> = inputs.iter().map(|p| format!("input wire {}", p.0.replace(['[', ']'], "_"))).chain(outputs.iter().map(|p| format!("output wire {}", p.0.replace(['[', ']'], "_")))).collect();
     writeln!(head, "module {top}_readback ({});", ports.join(", "))?;
     // LUTs as mux trees: an unknown select bit gives a known output when
@@ -156,14 +203,44 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     writeln!(head, "    begin a = i[5] ? (i[4] ? m[63:48] : m[47:32]) : (i[4] ? m[31:16] : m[15:0]); lut6 = lut4(a, i[3:0]); end")?;
     writeln!(head, "  endfunction")?;
     let alm = |k: u32| if k < 5 { format!("xtophalf/xale{k}") } else { format!("xbothalf/xale{}", k - 5) };
-    let is_arith = |x: u32, y: u32, k: u32| attr.get(&(format!("cw_la_lab_r{y}_c{x}"), format!("{}/xcw_la_le_lut/adder_mode", alm(k)))).map(String::as_str) == Some("ENABLE_ADDER");
+    let lab_attr = |x: u32, y: u32, a: &str| attr.get(&(format!("cw_la_lab_r{y}_c{x}"), a.to_owned())).map(String::as_str);
+    let is_arith = |x: u32, y: u32, k: u32| lab_attr(x, y, &format!("{}/xcw_la_le_lut/adder_mode", alm(k))) == Some("ENABLE_ADDER");
     // Declarations first: cells refer to each other in any order.
     let mut d = String::new();
     let mut nffs = 0;
     let mut nalms = 0;
     for &(x, y) in labs.keys() {
         let uid = format!("cw_la_lab_r{y}_c{x}");
-        let clk = sig(lab_node(x, y, 83));
+        // The LAB's control lines (README (y)): clock 0 (83), enables
+        // CLKEN0/1 (80, 81), synchronous clear (82), clears CLR1 (86,
+        // through the routing tile's clrb inverter) and CLR2 (85). An
+        // unrouted clear is inactive (as in Quartus' images).
+        let clk = lab_sig(x, y, 83);
+        let ces = [lab_sig(x, y, 80), lab_sig(x, y, 81)];
+        let sclr = lab_sig(x, y, 82);
+        let clr1 = match sig(lab_node(x, y, 86)) {
+            Some(s) if inverted_lab.contains(&(x, y)) => format!("~{s}"),
+            Some(s) => s,
+            None => "1'b0".into(),
+        };
+        let clr2 = sig(lab_node(x, y, 85)).unwrap_or_else(|| "1'b0".into());
+        writeln!(d, "  wire l{x}_{y}_clr1 = {clr1}, l{x}_{y}_clr2 = {clr2};")?;
+        for (a, val) in [("xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off", "DISABLE_TIEOFF"), ("xsecmux/xcw_la_lcb_adder/secmux_bto", "DISABLE_BTO"), ("xsecmux/xcw_la_lcb_adder/hipi_clken", "COMB_PATH")] {
+            if lab_attr(x, y, a).is_some_and(|v| v != val) {
+                bail!("{uid} {a}: setting outside the model");
+            }
+        }
+        for ((u, a), val) in &attr {
+            if *u == uid && a.starts_with("xsecmux") && ![
+                "xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off",
+                "xsecmux/xcw_la_lcb_adder/secmux_bto",
+                "xsecmux/xcw_la_lcb_adder/hipi_clken",
+            ]
+            .contains(&a.as_str())
+            {
+                bail!("{uid} {a} = {val}: LAB setting outside the model");
+            }
+        }
         for k in 0..10u32 {
             let p = alm(k);
             let mask = attr.get(&(uid.clone(), format!("{p}/xcw_la_le_lut/lut_mask")));
@@ -174,7 +251,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             }
             nalms += 1;
             let stored: Vec<u8> = mask.map_or(vec![1; 64], |m| m.bytes().rev().map(|c| c - b'0').collect());
-            let pin = |q: u32| sig(lab_node(x, y, 8 * k + q));
+            let pin = |q: u32| lab_sig(x, y, 8 * k + q);
             let n = format!("l{x}_{y}_a{k}");
             let arith = get("xcw_la_le_lut/adder_mode") == Some("ENABLE_ADDER");
             let mut outs: [String; 2] = [String::new(), String::new()];
@@ -184,12 +261,27 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                 for h in 0..2u32 {
                     let (c, d_in) = if h == 0 { (pin(2), pin(1)) } else { (pin(5), pin(6)) };
                     let bits = |off: usize| -> String { (0..16).rev().map(|i| (b'0' + stored[off + i]) as char).collect() };
-                    let cin = if h == 0 {
-                        // From the previous ALM, or ALM 9 of the LAB above.
-                        let (py, pk) = if k == 0 { (y + 1, 9) } else { (y, k - 1) };
-                        if is_arith(x, py, pk) { format!("l{x}_{py}_a{pk}_co1") } else { "1'bx".into() }
-                    } else {
+                    // The carry in (README (y)): from the previous half; into
+                    // ALM 5 only with DISABLE_BTO, into ALM 0 only from a
+                    // LAB above with hipi_clken COMB_PATH; otherwise 0.
+                    let cin = if h == 1 {
                         format!("{n}_co0")
+                    } else if k == 0 {
+                        if lab_attr(x, y + 1, "xsecmux/xcw_la_lcb_adder/hipi_clken") == Some("COMB_PATH") && is_arith(x, y + 1, 9) {
+                            format!("l{x}_{}_a9_co1", y + 1)
+                        } else {
+                            "1'b0".into()
+                        }
+                    } else if k == 5 {
+                        if lab_attr(x, y, "xsecmux/xcw_la_lcb_adder/secmux_bto") == Some("DISABLE_BTO") && is_arith(x, y, 4) {
+                            format!("l{x}_{y}_a4_co1")
+                        } else {
+                            "1'b0".into()
+                        }
+                    } else if is_arith(x, y, k - 1) {
+                        format!("l{x}_{y}_a{}_co1", k - 1)
+                    } else {
+                        "1'bx".into()
                     };
                     writeln!(d, "  wire [15:0] {n}_p{h} = 16'b{}, {n}_g{h} = 16'b{};", bits(32 * h as usize), bits(32 * h as usize + 16))?;
                     writeln!(d, "  wire [3:0] {n}_i{h}; wire {n}_pp{h}, {n}_co{h}, {n}_s{h};")?;
@@ -206,24 +298,40 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                 writeln!(v, "  assign {n}_lut = lut6({n}_w, {{{}, {}, {}, {}, {}, {}}});", pin(7), pin(0), pin(1), pin(2), pin(4), pin(3))?;
                 outs[0] = format!("{n}_lut");
             }
+            let ce = match get("xcw_la_le_regctrl/xce_la_le_regctrl_mux/regclk_ens") {
+                None | Some("CLKEN0") => ces[0].clone(),
+                Some("CLKEN1") => ces[1].clone(),
+                Some(o) => bail!("{uid} {p}: regclk_ens {o}"),
+            };
             for h in 0..2u32 {
+                let rb = format!("xcw_la_le_reg{h}");
+                let clr = match get(&format!("{rb}/xreg_aclr/regclr")) {
+                    None | Some("CLR1") => format!("l{x}_{y}_clr1"),
+                    Some("CLR2") => format!("l{x}_{y}_clr2"),
+                    Some(o) => bail!("{uid} {p} {rb}: regclr {o}"),
+                };
                 for r in 0..2u32 {
-                    let mode = get(&format!("xcw_la_le_reg{h}/xreg{r}/register_comb"));
-                    let input = get(&format!("xcw_la_le_reg{h}/xreg{r}/reg_input")).unwrap_or("ARITH_SUMOUT");
+                    let mode = get(&format!("{rb}/xreg{r}/register_comb"));
+                    let input = get(&format!("{rb}/xreg{r}/reg_input")).unwrap_or("ARITH_SUMOUT");
                     let src = match (input, arith) {
                         ("ARITH_SUMOUT", true) => outs[h as usize].clone(),
-                        ("LUTOUT_6LUT", false) if h == 0 => outs[0].clone(),
+                        ("LUTOUT_6LUT", false) => outs[0].clone(),
+                        // LEIM: the ALM's pin A (half 0) or B (half 1) (README (y)).
+                        ("LEIM", _) => pin(3 + h),
                         (_, _) if mode.is_none() => continue,
-                        (i, _) => bail!("{uid} {p} reg{h}/xreg{r}: input {i} not modelled"),
+                        (i, _) => bail!("{uid} {p} {rb}/xreg{r}: input {i} not modelled"),
                     };
                     let o = format!("l{x}_{y}_o{}", 89 + 4 * k + 2 * h + r);
                     match mode {
                         Some("DFF_LATCH") => {
-                            if get(&format!("xcw_la_le_reg{h}/xlabclk_mux/regclk")) != Some("DFF_LABCLK0") {
-                                bail!("{uid} {p} reg{h}: not on LAB clock 0");
+                            if get(&format!("{rb}/xlabclk_mux/regclk")) != Some("DFF_LABCLK0") {
+                                bail!("{uid} {p} {rb}: not on LAB clock 0");
                             }
+                            let ce = if get(&format!("{rb}/xreg{r}/ce_sel")) == Some("CE") { ce.clone() } else { "1'b1".into() };
+                            let sc = if get(&format!("{rb}/xreg{r}/sclr_sel")) == Some("SCLR") { sclr.clone() } else { "1'b0".into() };
                             writeln!(d, "  reg {o} = 1'b0;")?;
-                            writeln!(v, "  always @(posedge {clk}) {o} <= {src};")?;
+                            // The enable gates the synchronous clear (README (y)).
+                            writeln!(v, "  always @(posedge {clk} or posedge {clr}) if ({clr}) {o} <= 1'b0; else if ({ce}) {o} <= {sc} ? 1'b0 : {src};")?;
                             nffs += 1;
                         }
                         Some("WIRE_MODE") => {
@@ -231,32 +339,134 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                             writeln!(v, "  assign {o} = {src};")?
                         }
                         None => {}
-                        Some(m) => bail!("{uid} {p} reg{h}/xreg{r}: {m} not modelled"),
+                        Some(m) => bail!("{uid} {p} {rb}/xreg{r}: {m} not modelled"),
                     }
                 }
             }
         }
     }
-    // M20Ks in their 512 x 32 simple dual-port use, pins as README (w);
-    // the model is tools/a5pnr/yosys/cells_sim.v's A5_M20K.
+    // M20Ks as 512 x 32 simple dual-port RAMs (README (w), (y)); the model
+    // is tools/a5pnr/yosys/cells_sim.v's A5_M20K.
+    let pos = |k: u32| 10 * (k / 8) + k % 8;
     for &(x, y) in m20ks.keys() {
+        let uid = format!("cw_mm_m20k_r{y}_c{x}");
         let eab = |p: u32| sig(g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{p}")));
-        let bus = |f: &dyn Fn(u32) -> u32, n: u32| (0..n).rev().map(|i| eab(f(i))).collect::<Vec<_>>().join(", ");
+        let req = |p: u32| eab(p).unwrap_or_else(|| "1'bx".into());
+        // An unrouted enable is high; WE through its inverter is low.
+        let en = |p: u32| eab(p).unwrap_or_else(|| "1'b1".into());
+        let mut we = en(37);
+        let (mut outreg, mut init) = (true, vec![0u32; 512]);
+        for ((u, a), val) in &attr {
+            if *u != uid {
+                continue;
+            }
+            if let Some(n) = a.strip_prefix("xdigicore/xdigicorepg/xcore/xary/m20k_eram_add") {
+                let w = u64::from_str_radix(val, 2)?;
+                let word = (0..32).fold(0u32, |acc, k| acc | ((w >> pos(k) & 1) as u32) << k);
+                if (0..40).any(|j| w >> j & 1 == 1 && !(0..32).any(|k| pos(k) == j)) {
+                    bail!("{uid} {a}: content outside the byte lanes");
+                }
+                init[n.parse::<usize>()?] = word;
+            } else if a == "xsecmux/xwe0/m20k_invsel" && val == "INV_LEIM_SEL" {
+                we = format!("~{we}");
+            } else if M20K_KNOWN.contains(&a.as_str()) {
+                outreg = false;
+            } else if !crate::emit::M20K_SDP.iter().any(|(n, s)| a == &format!("xdigicore/{n}") && val == s) {
+                bail!("{uid} {a} = {val}: M20K setting outside the model");
+            }
+        }
+        let bus = |f: &dyn Fn(u32) -> u32, n: u32| (0..n).rev().map(|i| req(f(i))).collect::<Vec<_>>().join(", ");
+        let init_hex: String = init.iter().rev().map(|w| format!("{w:08x}")).collect();
         writeln!(d, "  wire [31:0] m{x}_{y}_q;")?;
+        for k in 0..32u32 {
+            writeln!(d, "  wire m{x}_{y}_q{} = m{x}_{y}_q[{k}];", 83 + pos(k))?;
+        }
         writeln!(
             v,
-            "  A5_M20K m{x}_{y} (.CLK({}), .WE(1'b1), .WADDR({{{}}}), .WDATA({{{}}}), .RADDR({{{}}}), .RDATA(m{x}_{y}_q));",
-            eab(77),
+            "  A5_M20K #(.INIT(16384'h{init_hex}), .OUTREG({})) m{x}_{y} (.CLK({}), .WE({we}), .BE({{{}, {}, {}, {}}}), .RE({}), .WADDR({{{}}}), .WDATA({{{}}}), .RADDR({{{}}}), .RDATA(m{x}_{y}_q));",
+            outreg as u8,
+            req(77),
+            en(21),
+            en(22),
+            en(56),
+            en(55),
+            en(39),
             bus(&|i| 25 + i, 9),
-            bus(&|k| if k < 20 { 57 + k } else { 40 - k }, 32),
+            bus(&|k| { let j = pos(k); if j < 20 { 57 + j } else { 40 - j } }, 32),
             bus(&|i| 52 - i, 9)
         )?;
     }
     for (name, n) in &outputs {
-        writeln!(v, "  assign {} = {};", name.replace(['[', ']'], "_"), sig(Some(*n)))?;
+        writeln!(v, "  assign {} = {};", name.replace(['[', ']'], "_"), sig(Some(*n)).unwrap_or_else(|| "1'bx".into()))?;
     }
     writeln!(v, "endmodule")?;
+    let uu = used_unknown.into_inner();
+    if !uu.is_empty() {
+        bail!("{} used pins are reached from more than one source, e.g. {}", uu.len(), uu[0]);
+    }
     std::fs::write(out, head + &d + &v)?;
     eprintln!("readback: {} M20Ks, {} LABs, {} ALMs, {} flops, {} active edges, {} inputs, {} outputs", m20ks.len(), labs.len(), nalms, nffs, active.len(), inputs.len(), outputs.len());
+    Ok(())
+}
+
+/// Every node reached from a source in a decoded design whose name starts
+/// with `prefix`, with that source (pins named by ball and role).
+pub fn drivers(g: &Graph, db: &str, extract: &str, prefix: &str) -> Result<()> {
+    let text = std::fs::read_to_string(extract).with_context(|| format!("reading {extract}"))?;
+    let mut active: HashSet<(u32, u32)> = HashSet::new();
+    let mut sources: Vec<(String, u32)> = Vec::new();
+    let mut node_of: HashMap<(String, String), u32> = HashMap::new();
+    for l in std::fs::read_to_string(format!("{db}/io/pin_nodes.tsv"))?.lines() {
+        let f: Vec<&str> = l.split('\t').collect();
+        if f.len() == 5 && !l.starts_with('#') && f[0] != "ball" {
+            if let Some(n) = g.node(f[3]) {
+                node_of.insert((f[0].to_owned(), f[2].to_owned()), n);
+            }
+        }
+    }
+    let mut srcs: BTreeMap<String, ()> = BTreeMap::new();
+    for l in text.lines() {
+        let f: Vec<&str> = l.split('\t').collect();
+        match f[0] {
+            "pin" => {
+                let (b, _) = f[1].split_once('=').context("pin")?;
+                for role in ["in0", "in1", "clock"] {
+                    if let Some(&n) = node_of.get(&(b.to_owned(), role.to_owned())) {
+                        sources.push((format!("{b}.{role}"), n));
+                    }
+                }
+            }
+            "edge" => {
+                let (a, b) = (g.node(f[1]).with_context(|| f[1].to_owned())?, g.node(f[2]).with_context(|| f[2].to_owned())?);
+                active.insert((a, b));
+                srcs.insert(f[1].to_owned(), ());
+            }
+            _ => {}
+        }
+    }
+    // Every edge source that is a block output (LAB_RE, MEDIUM_EAB_RE, ...)
+    // with no active edge into it is a source too.
+    let dsts: HashSet<u32> = active.iter().map(|e| e.1).collect();
+    for n in srcs.keys() {
+        let m = g.node(n).unwrap();
+        if !dsts.contains(&m) && ["LAB_RE", "MEDIUM_EAB_RE", "MP_MAC_RE"].contains(&g.type_name(m)) {
+            sources.push((n.clone(), m));
+        }
+    }
+    for (s, n0) in &sources {
+        let mut q = VecDeque::from([*n0]);
+        let mut seen = HashSet::from([*n0]);
+        while let Some(m) = q.pop_front() {
+            for e in g.fanout(m) {
+                let d = g.dst[e];
+                if (g.class[e] == PASS || active.contains(&(m, d))) && seen.insert(d) {
+                    if g.name(d).starts_with(prefix) {
+                        println!("{}\t{s}", g.name(d));
+                    }
+                    q.push_back(d);
+                }
+            }
+        }
+    }
     Ok(())
 }

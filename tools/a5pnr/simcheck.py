@@ -23,10 +23,12 @@ widths = {}
 for name, nn in mod['netnames'].items():
     widths[name] = len(nn['bits'])
 ports = [(n, p['direction'], len(p['bits'])) for n, p in mod['ports'].items()]
-clock = None
-for n, d, w in ports:
-    if d == 'input' and w == 1 and n in used and ('CLOCK' in n.upper() or n.lower().startswith('clk')):
-        clock = n
+# Clock inputs: the ports that drive a flop's or M20K's clock.
+clk_bits = set()
+for c in mod['cells'].values():
+    for port in ('C', 'CLK'):
+        clk_bits.update(b for b in c['connections'].get(port, []) if isinstance(b, int))
+clocks = [n for n, d, w in ports if d == 'input' and w == 1 and n in used and mod['ports'][n]['bits'][0] in clk_bits]
 regs = []
 for l in open(ffmap):
     net, flop = l.split()
@@ -60,8 +62,11 @@ for n, d, w in ports:
                 compare.append(f'      if (od_{n}[{i}] !== or_{n}[{i}]) begin bad = bad + 1; if (bad < 10) $display("cycle %0d: {n}[{i}] rtl %b image %b", cyc, od_{n}[{i}], or_{n}[{i}]); end')
 for ref, flop in regs:
     compare.append(f'      if ({ref} !== {flop}) begin bad = bad + 1; if (bad < 10) $display("cycle %0d: {ref} rtl %b image %b", cyc, {ref}, {flop}); end')
-inputs = [f'      i_{n} = $random(seed);' for n, d, w in ports if d == 'input' and n != clock]
-clk = [f'      #4 i_{clock} = 1; #4 i_{clock} = 0; #1;' if clock else '      #9;']
+inputs = [f'      i_{n} = $random(seed);' for n, d, w in ports if d == 'input' and n not in clocks]
+# All clocks tick together: the check is of logic, not of clock-domain timing.
+up = ' '.join(f'i_{c} = 1;' for c in clocks)
+down = ' '.join(f'i_{c} = 0;' for c in clocks)
+clk = [f'      #4 {up} #4 {down} #1;' if clocks else '      #9;']
 tb.append('  initial begin')
 tb.append('    #1;')
 # Phase 1: every cycle from a fresh random state, the same on both sides;

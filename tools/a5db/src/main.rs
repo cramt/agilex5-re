@@ -403,11 +403,11 @@ fn main() -> Result<()> {
             let (mut db, g) = route::open(dbdir, g)?;
             let mut j = graph::Join::new(&mut db, &g);
             let u = route::usable(&mut j, &g)?;
-            let mut n = [0usize; 4];
+            let mut n = [0usize; 5];
             for &k in &u {
                 n[k as usize] += 1;
             }
-            eprintln!("{} edges: {} unusable, {} mux, {} pass-through, {} clock", u.len(), n[0], n[1], n[2], n[3]);
+            eprintln!("{} edges: {} unusable, {} mux, {} pass-through, {} clock, {} at the mux's idle setting", u.len(), n[0], n[1], n[2], n[3], n[4]);
             std::fs::write(out, &u)?;
             Ok(())
         }

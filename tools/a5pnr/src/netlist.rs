@@ -19,8 +19,45 @@ pub enum Cell {
     /// Half an ALM in arithmetic mode (yosys/cells.v): p and g over
     /// {D, C, B, A}; after folding, only C and D carry nets.
     Arith { p: u16, g: u16, c: Option<u32>, d: Option<u32>, ci: Sig, so: Option<u32>, co: Option<u32> },
-    Ff { d: Sig, clk: u32, q: u32 },
-    M20k { clk: u32, we: Sig, waddr: Vec<Sig>, wdata: Vec<Sig>, raddr: Vec<Sig>, rdata: Vec<Option<u32>> },
+    Ff(Ff),
+    M20k(M20k),
+}
+
+/// An M20K as a 512 x 32 simple dual-port RAM (yosys/cells_sim.v).
+#[derive(Clone, Debug)]
+pub struct M20k {
+    pub clk: u32,
+    pub we: Sig,
+    pub be: Vec<Sig>,
+    pub re: Sig,
+    pub waddr: Vec<Sig>,
+    pub wdata: Vec<Sig>,
+    pub raddr: Vec<Sig>,
+    pub rdata: Vec<Option<u32>>,
+    pub outreg: bool,
+    /// 512 words.
+    pub init: Vec<u32>,
+}
+
+/// A flop: positive-edge clock, optional clock enable, synchronous clear
+/// (to 0) and asynchronous clear (to 0); powers up at 0. `sclr_first`: the
+/// clear acts whether or not the enable is high (yosys `$_SDFFE_`), else
+/// only when it is (`$_SDFFCE_`).
+#[derive(Clone, Debug)]
+pub struct Ff {
+    pub d: Sig,
+    pub clk: u32,
+    pub ce: Option<u32>,
+    pub sclr: Option<u32>,
+    pub sclr_first: bool,
+    pub aclr: Option<Aclr>,
+    pub q: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Aclr {
+    pub net: u32,
+    pub active_low: bool,
 }
 
 pub struct Port {
@@ -49,6 +86,9 @@ fn bits(v: &Value) -> Result<Vec<Sig>> {
 }
 
 fn param(v: &Value, name: &str) -> Result<Vec<bool>> {
+    if let Some(n) = v.get(name).and_then(Value::as_u64) {
+        return Ok((0..64).map(|i| n >> i & 1 == 1).collect());
+    }
     let s = v.get(name).and_then(Value::as_str).with_context(|| format!("parameter {name}"))?;
     // yosys writes parameters MSB first.
     Ok(s.bytes().rev().map(|c| c == b'1').collect())
@@ -113,7 +153,7 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
     let max = names.keys().copied().max().unwrap_or(0) as usize + 1;
     let mut nets: Vec<String> = (0..max).map(|i| names.get(&(i as u32)).cloned().unwrap_or_else(|| format!("n{i}"))).collect();
     let mut cells = Vec::new();
-    let mut fresh = |nets: &mut Vec<String>, name: String| -> u32 {
+    let fresh = |nets: &mut Vec<String>, name: String| -> u32 {
         nets.push(name);
         nets.len() as u32 - 1
     };
@@ -139,7 +179,39 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
                 let mask = t.iter().enumerate().fold(0u64, |a, (i, &b)| a | (b as u64) << i);
                 cells.push(Cell::Lut { ins, mask, out: net(one("Y")?)? });
             }
-            "$_DFF_P_" => cells.push(Cell::Ff { d: one("D")?, clk: net(one("C")?)?, q: net(one("Q")?)? }),
+            t if t.starts_with("$_DFF") || t.starts_with("$_SDFF") => {
+                // yosys' fine flop cells, as tools/a5pnr/synth.sh legalises them.
+                let (ce, sclr, sclr_first, aclr) = match t {
+                    "$_DFF_P_" => (false, false, false, None),
+                    "$_DFFE_PP_" => (true, false, false, None),
+                    "$_SDFF_PP0_" => (false, true, false, None),
+                    "$_SDFFE_PP0P_" => (true, true, true, None),
+                    "$_SDFFCE_PP0P_" => (true, true, false, None),
+                    "$_DFF_PP0_" => (false, false, false, Some(false)),
+                    "$_DFF_PN0_" => (false, false, false, Some(true)),
+                    "$_DFFE_PP0P_" => (true, false, false, Some(false)),
+                    "$_DFFE_PN0P_" => (true, false, false, Some(true)),
+                    _ => bail!("{name}: flop type {t} is not supported"),
+                };
+                let ctl = |port: &str| -> Result<Option<u32>> {
+                    Ok(match one(port)? {
+                        Sig::Net(n) => Some(n),
+                        Sig::Const(_) => bail!("{name}: {port} tied to a constant"),
+                    })
+                };
+                cells.push(Cell::Ff(Ff {
+                    d: one("D")?,
+                    clk: net(one("C")?)?,
+                    ce: if ce { ctl("E")? } else { None },
+                    sclr: if sclr { ctl("R")? } else { None },
+                    sclr_first,
+                    aclr: match aclr {
+                        Some(active_low) => Some(Aclr { net: ctl("R")?.unwrap(), active_low }),
+                        None => None,
+                    },
+                    q: net(one("Q")?)?,
+                }))
+            }
             "A5_ARITH" => {
                 let ins = [one("A")?, one("B")?, one("C")?, one("D")?];
                 let (pt, gt) = (param(p, "P")?, param(p, "G")?);
@@ -185,14 +257,21 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
             }
             "A5_M20K" => {
                 let rdata = bits(&conn["RDATA"])?.into_iter().map(|s| if let Sig::Net(n) = s { Some(n) } else { None }).collect();
-                cells.push(Cell::M20k {
+                let init_bits = p.get("INIT").map(|_| param(p, "INIT")).transpose()?.unwrap_or_default();
+                let init = (0..512).map(|a| (0..32).fold(0u32, |w, k| w | (init_bits.get(32 * a + k).copied().unwrap_or(false) as u32) << k)).collect();
+                let outreg = p.get("OUTREG").map(|_| param(p, "OUTREG")).transpose()?.is_some_and(|v| v.iter().any(|&b| b));
+                cells.push(Cell::M20k(M20k {
                     clk: net(one("CLK")?)?,
                     we: one("WE")?,
+                    be: bits(&conn["BE"])?,
+                    re: one("RE")?,
                     waddr: bits(&conn["WADDR"])?,
                     wdata: bits(&conn["WDATA"])?,
                     raddr: bits(&conn["RADDR"])?,
                     rdata,
-                });
+                    outreg,
+                    init,
+                }));
             }
             _ => bail!("{name}: cell type {t} is not supported"),
         }
@@ -207,13 +286,46 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
     }
     // A flop with a constant D still needs a driver it can sit behind.
     for k in 0..cells.len() {
-        if let Cell::Ff { d: Sig::Const(v), .. } = cells[k] {
+        if let Cell::Ff(Ff { d: Sig::Const(v), .. }) = cells[k] {
             let n = fresh(&mut nets, format!("const{}", v as u8));
             cells.push(Cell::Lut { ins: vec![], mask: v as u64, out: n });
-            if let Cell::Ff { d, .. } = &mut cells[k] {
-                *d = Sig::Net(n);
+            if let Cell::Ff(f) = &mut cells[k] {
+                f.d = Sig::Net(n);
             }
         }
+    }
+    // M20K inputs tied to a constant: an address or data bit, or an enable
+    // held low, needs a driver (an unrouted pin's level is only known for
+    // the enables, high).
+    let mut consts: [Option<u32>; 2] = [None, None];
+    for k in 0..cells.len() {
+        let Cell::M20k(m) = &cells[k] else { continue };
+        let mut m = m.clone();
+        let mut tie = |s: &mut Sig, idle_high: bool, cells: &mut Vec<Cell>, nets: &mut Vec<String>| {
+            if let Sig::Const(v) = *s {
+                if idle_high && v {
+                    return;
+                }
+                let n = *consts[v as usize].get_or_insert_with(|| {
+                    let n = fresh(nets, format!("const{}", v as u8));
+                    cells.push(Cell::Lut { ins: vec![], mask: v as u64, out: n });
+                    n
+                });
+                *s = Sig::Net(n);
+            }
+        };
+        // WE held low needs no driver: the pin's inverter (README (y)).
+        if m.we != Sig::Const(false) {
+            tie(&mut m.we, true, &mut cells, &mut nets);
+        }
+        tie(&mut m.re, true, &mut cells, &mut nets);
+        for s in m.be.iter_mut() {
+            tie(s, true, &mut cells, &mut nets);
+        }
+        for s in m.waddr.iter_mut().chain(m.wdata.iter_mut()).chain(m.raddr.iter_mut()) {
+            tie(s, false, &mut cells, &mut nets);
+        }
+        cells[k] = Cell::M20k(m);
     }
     Ok(Netlist { nets, cells, ports })
 }

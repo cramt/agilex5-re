@@ -324,15 +324,33 @@ pub fn encode(lay: &Layout, cram: [&[u8]; 2], s4_flags: &[Vec<(u16, u8)>]) -> En
     Encoded { libs, offs: [(offs[1] << 16 | offs[0]) as u32, (offs[3] << 16 | offs[2]) as u32, offs[4] as u32], bbm, frames }
 }
 
-/// The block pfg stores after the first codebook: 47 groups x 4 records of
-/// (8, w, 128, 2) and 2,564 zero bytes, w = 12, 16, 20, 25 (482,784 bytes;
-/// the same in every specimen).
-pub fn zero_block() -> Vec<u8> {
+/// A sector's M20K contents as the CORE stream carries them (README (y)):
+/// one record per M20K in the stored row groups (0, 2, 3, …, 47; group 1
+/// isn't stored, as for the frames) and the sector's four M20K columns,
+/// each `(8, w, 128, 2)`, four zero bytes (w = 12, 16, 20, 25 by column)
+/// and 2,560 bytes: address a's 40-bit word at bits 40 (511 − a) .. +39,
+/// LSB first. In the `.sof`'s ram part a group is 256 rows of 320 bits,
+/// row r holding addresses 2r (bits 40c ..) and 2r + 1 (bits 160 + 40c ..)
+/// of column c (`eram_array_r<r>`, db/sm4revb/bits/cw_mm_m20k). With no
+/// contents this is the all-zero block every phase-2 specimen had; checked
+/// byte for byte against pfg on mq (512 words) and blinky.
+pub fn ram_block(ram: &[u8]) -> Vec<u8> {
+    let bit = |o: usize| ram[o >> 3] >> (o & 7) & 1;
     let mut out = Vec::with_capacity(482_784);
-    for _ in 0..47 {
-        for w in [12u8, 16, 20, 25] {
-            out.extend_from_slice(&[8, w, 128, 2]);
-            out.extend(std::iter::repeat_n(0, 2564));
+    for g in std::iter::once(0).chain(2..48) {
+        for (c, w) in [12u8, 16, 20, 25].into_iter().enumerate() {
+            out.extend_from_slice(&[8, w, 128, 2, 0, 0, 0, 0]);
+            let mut rec = vec![0u8; 2560];
+            for a in 0..512usize {
+                let base = g * 81_920 + (a >> 1) * 320 + (a & 1) * 160 + 40 * c;
+                for i in 0..40 {
+                    if bit(base + i) == 1 {
+                        let k = 40 * (511 - a) + i;
+                        rec[k >> 3] |= 1 << (k & 7);
+                    }
+                }
+            }
+            out.extend(rec);
         }
     }
     out

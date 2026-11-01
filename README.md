@@ -2004,6 +2004,86 @@ change to a design cost the better part of an hour to check. Profiled with
   for acc); `a5db attrs-of` does them in one run. asm2's own part is about
   80 s for 86 K attributes, not the bottleneck it looked like.
 
+### (y) Phase 7: what real designs need from the flow
+
+Two Quartus designs were compiled for this (`designs/ct`: two clock
+enables, a synchronous clear, an active-high and an active-low
+asynchronous clear, both priorities of enable and clear, a second clock, a
+carry-in from a pin, a subtraction, I/O registers; `designs/mq`: an M20K
+with contents, write and byte enables, another with a read enable and an
+output register), extracted with `a5db extract` (no `bit` or `raw` lines)
+and read with `a5pnr drivers` (which source reaches each node) and
+quartus_sta's port-named paths (`tools/timing/sta.sh`).
+
+- **LAB control lines** [obs, ct]: LAB_RE 80 and 81 are the enable lines
+  CLKEN0 and CLKEN1 (an ALM picks one with
+  `xcw_la_le_regctrl/xce_la_le_regctrl_mux/regclk_ens`), 82 the
+  synchronous clear, 83 LAB clock 0, 86 the clear `regclr` CLR1 selects
+  (its idle setting); CLR2 is LAB_RE 85 [inf: the other line], which
+  Quartus leaves unrouted for every flop without a clear. 86 comes from the
+  routing tile's `iss/xclrb` mux through the inverter `iss/xclrb_rpi`: an
+  active-low clear is `iss/xclrb_rpi/sel = INV` instead of the edge's
+  non-inverting setting (RPII I5 → RPI I5). Per flop, `xreg0` has `ce_sel`
+  and `sclr_sel` (opt in to the ALM's enable line and the LAB's clear);
+  `xreg1` has neither in the BCM, and Quartus puts no enabled or cleared
+  flop there. Clock and clear are per half (`xcw_la_le_reg{h}`).
+- **Enable over synchronous clear** [obs, ct]: `if (CE) q <= SCLR ? 0 : d`
+  maps onto the lines directly (r7: CEA on 80, SCLR on 82); for
+  `if (SCLR) q <= 0; else if (CE) q <= d` Quartus routes a LUT's CE | SCLR
+  to the enable line. So the enable gates the clear (yosys
+  `$_SDFFCE_`).
+- **Two clock domains** [obs, ct]: each LAB on one domain, both on LAB
+  clock 0 (83, row clock → GLOBAL_LOCAL_SEL I2); Quartus didn't use clock
+  1 (84), and a5pnr allows one clock per LAB.
+- **LEIM flops** [obs, hx and mm's quartus_sta paths]: a flop with
+  `reg_input = LEIM` takes D from the ALM's input A (LAB_RE 8k + 3) in
+  half 0, B (8k + 4) in half 1. A flop with no logic of its own shares an
+  ALM with unrelated logic this way.
+- **Where a carry chain starts** [obs, 13 LABs of ar, hx, ct, mq]:
+  `secmux_bto = DISABLE_BTO` is set exactly in the LABs where a chain runs
+  from ALM 4 into ALM 5 (top half into bottom half), and `hipi_clken =
+  COMB_PATH` where a chain leaves ALM 9 for the LAB below (ar, 1 LAB). A
+  chain-start half Quartus makes for a carry-in has p = ¬D, g = D, so
+  cout = D | cin: it relies on the hardware carry into a chain's first
+  half being 0 [inf: chains start at ALM 0 or 5 with the settings idle].
+  Phase 6 set both settings only in the LAB where a chain starts, so its
+  ram (17 arithmetic ALMs: the second LAB runs ALM 4 into 5) and acc (the
+  middle of three LABs) images lack them where needed and are probably
+  wrong on silicon [inf]; phase 7 rebuilds them.
+- **M20K pins** [obs, mq's quartus_sta paths]: write enable 37
+  (`portawe`), read enable 39, byte enables 55, 56, 22, 21 for bytes 0–3
+  (`portabyteenamasks`). With byte enables Quartus lays the 32 data bits in
+  four 10-bit lanes: bit k at position j = 10 (k / 8) + k % 8, written at
+  57 + j (j < 20) or 40 − j and read at 83 + j (mq's block A reads 83–90,
+  93–100, 103–110, 113–120); without, contiguously (phase 6). An unrouted
+  enable is high. The output register is on when both `m20k_*_outreg_byp`
+  stay idle (mq's block B); a ROM's write enable is the unrouted pin through
+  `xsecmux/xwe0/m20k_invsel = INV_LEIM_SEL` (mm).
+- **M20K contents** [obs, mq: 512 of 512 words]: `m20k_eram_add<a>` is word
+  a in the lane layout, MSB first.
+- **M20K contents in the `.rbf`** [obs]: what README (g) called a deflated
+  all-zero block in each sector's CORE stream is the sector's M20K
+  contents: per stored row group (0, 2, …, 47) and each of the sector's
+  four M20K columns a record `(8, w, 128, 2)`, four zero bytes (w = 12,
+  16, 20, 25) and 2,560 bytes holding address a's 40-bit word at bits
+  40 (511 − a) onwards, LSB first; its pages go in the frame pages'
+  interleave, and the header byte sum at +0x78 covers the contents too.
+  **a5db's `.rbf` dropped M20K contents until now** (every phase-4 to -6
+  specimen pair had none). Now byte-identical to pfg on mq (used to work
+  it out), blinky, and held-out mm (1024 x 16 ROM) and hx (2048 x 10 true
+  dual port with contents).
+- **Edges a router must not take** [obs]: 896 graph edges (416 fabric,
+  480 clock) select their mux's idle setting. They write no bit, so an
+  image can't show them, and whether an unconfigured mux passes that
+  input is [unk]: rom's first route took one (a vertical seam tap) and its
+  clock never reached the LABs in the readback. `a5db usable` now gives
+  them class 4, which a5pnr doesn't route over. And 18,000 nodes outside
+  LABs have more than one pass-through fanin (`a5pnr ambiguous`: 16,640
+  `HIPI_M_MUX`, 1,128 `SCLKMUX_RE`, …): which one drives them is a
+  setting nobody knows [unk], so the router doesn't enter them over a
+  pass-through, and the readback treats a node two sources reach as
+  unknown (an error only if a used pin depends on it).
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
