@@ -225,7 +225,7 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
         attrs.push((lab_uid(labs, l), "xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off".into(), "DISABLE_TIEOFF".into()));
     }
     // Carry between the LAB's halves and into the LAB below (README (y)).
-    let lab_at: std::collections::HashMap<(u32, u32), usize> = labs.iter().enumerate().map(|(i, l)| ((l.x, l.y), i)).collect();
+    let lab_at: crate::det::HashMap<(u32, u32), usize> = labs.iter().enumerate().map(|(i, l)| ((l.x, l.y), i)).collect();
     for c in &p.chains {
         for w in c.windows(2) {
             let ((l0, k0), (l1, k1)) = (pl.at[w[0]], pl.at[w[1]]);

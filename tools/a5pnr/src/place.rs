@@ -8,7 +8,7 @@
 //! synchronous clear and two asynchronous clears (README (y)); no move may
 //! ask a LAB for more.
 
-use std::collections::HashMap;
+use crate::det::HashMap;
 
 use anyhow::{bail, Context, Result};
 
@@ -148,7 +148,7 @@ pub fn place(
     let lab_at: HashMap<(u32, u32), usize> = labs.iter().enumerate().map(|(i, l)| ((l.x, l.y), i)).collect();
     let n = p.alms.len();
     let ctls: Vec<Vec<Ctl>> = p.alms.iter().map(|a| a.ctls(nl)).collect();
-    let mut occ: HashMap<(usize, u8), usize> = HashMap::new();
+    let mut occ: HashMap<(usize, u8), usize> = HashMap::default();
     let mut uses: Vec<LabUse> = vec![LabUse::default(); labs.len()];
     let mut at = vec![(usize::MAX, 0u8); n];
     // Start near the ports' centre.
@@ -173,11 +173,12 @@ pub fn place(
             chain_of[a] = ci;
         }
     }
-    // A chain's slots from LAB (x, y) ALM k0 (0 or 5: the hardware carry
-    // in there is 0, README (y)), if all free and legal.
+    // A chain's slots from LAB (x, y) ALM k0, if all free and legal. Chains
+    // start at ALM 0: every Quartus chain does (cql's six, README (z4)), and
+    // Quartus' fitter rejects one that starts at ALM 5 and runs on.
     let chain_slots = |occ: &HashMap<(usize, u8), usize>, uses: &[LabUse], c: &[usize], x: u32, y: u32, k0: usize| -> Option<Vec<(usize, u8)>> {
         let mut slots = Vec::new();
-        let mut trial: HashMap<usize, LabUse> = HashMap::new();
+        let mut trial: HashMap<usize, LabUse> = HashMap::default();
         for (j, &a) in c.iter().enumerate() {
             let l = *lab_at.get(&(x, y.checked_sub(((k0 + j) / 10) as u32)?))?;
             let s = (l, ((k0 + j) % 10) as u8);
@@ -192,7 +193,7 @@ pub fn place(
     for (ci, c) in p.chains.iter().enumerate() {
         let slots = by_dist
             .iter()
-            .flat_map(|&l| [(l, 0), (l, 5)])
+            .map(|&l| (l, 0))
             .find_map(|(l, k0)| chain_slots(&occ, &uses, c, labs[l].x, labs[l].y, k0))
             .with_context(|| format!("chain {ci} ({} ALMs) doesn't fit; its control lines: {:?}", c.len(), c.iter().map(|&a| &ctls[a]).collect::<Vec<_>>()))?;
         for (j, s) in slots.into_iter().enumerate() {
@@ -352,7 +353,7 @@ pub fn place(
         let mut moved: Vec<(usize, (usize, u8), (usize, u8))> = Vec::new();
         if chain_of[a] != usize::MAX {
             let c = &p.chains[chain_of[a]];
-            let k0 = 5 * rng.below(2);
+            let k0 = 0;
             for (j, &m) in c.iter().enumerate() {
                 let l = *lab_at.get(&(labs[tl].x, labs[tl].y.checked_sub(((k0 + j) / 10) as u32)?))?;
                 let s = (l, ((k0 + j) % 10) as u8);
@@ -375,7 +376,7 @@ pub fn place(
             }
         }
         // LAB control lines.
-        let mut trial: HashMap<usize, LabUse> = HashMap::new();
+        let mut trial: HashMap<usize, LabUse> = HashMap::default();
         for &(m, from, to) in &moved {
             trial.entry(from.0).or_insert_with(|| uses[from.0].clone()).add(&ctls[m], -1);
             trial.entry(to.0).or_insert_with(|| uses[to.0].clone()).add(&ctls[m], 1);
@@ -395,7 +396,7 @@ pub fn place(
             at[m] = to;
         }
         // LABs emptied and newly used.
-        let mut dl: HashMap<usize, i32> = HashMap::new();
+        let mut dl: HashMap<usize, i32> = HashMap::default();
         for &(_, from, to) in &moved {
             *dl.entry(from.0).or_default() -= 1;
             *dl.entry(to.0).or_default() += 1;

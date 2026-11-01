@@ -8,7 +8,7 @@
 //! analysed. No clock skew and no hold: it is the model's view, not
 //! sign-off.
 
-use std::collections::HashMap;
+use crate::det::HashMap;
 
 use crate::netlist::{Cell, Netlist};
 use crate::pack::{pin_letter, six_pins, Alm, End, HalfLut, Logic, Packed, Slot, Src, ARITH_IN, LEIM_PIN};
@@ -49,6 +49,12 @@ pub struct Report {
     pub crit: Vec<f32>,
     /// Per connection: slack against the worst path.
     pub slack: Vec<f32>,
+    /// The worst path from a clocked start (flop, M20K) to a clocked capture
+    /// in the same domain: what quartus_sta's Fmax counts (README (z4)).
+    pub core_worst: f32,
+    /// Per capture point with a clocked arrival: its name and that arrival
+    /// plus setup.
+    pub core_ends: Vec<(String, f32)>,
 }
 
 fn ff_clock(nl: &Netlist, ff: usize) -> u32 {
@@ -61,7 +67,7 @@ fn ff_clock(nl: &Netlist, ff: usize) -> u32 {
 impl Sta {
     pub fn new(nl: &Netlist, p: &Packed, d: &HashMap<String, f32>) -> Sta {
         let get = |k: &str| d.get(k).copied().unwrap_or(0.0);
-        let mut ids: HashMap<(u8, usize, u32), u32> = HashMap::new();
+        let mut ids: HashMap<(u8, usize, u32), u32> = HashMap::default();
         let mut n = 0u32;
         let mut id = |k: (u8, usize, u32)| -> u32 {
             *ids.entry(k).or_insert_with(|| {
@@ -73,13 +79,13 @@ impl Sta {
         // 5 capture point.
         let mut edges = Vec::new();
         let mut conns = Vec::new();
-        let mut conn_of = HashMap::new();
+        let mut conn_of = HashMap::default();
         let mut starts = Vec::new();
         let mut ends = Vec::new();
-        let mut clock_of_start = HashMap::new();
-        let clocks: std::collections::HashSet<u32> = p.clocks.iter().copied().collect();
+        let mut clock_of_start = HashMap::default();
+        let clocks: crate::det::HashSet<u32> = p.clocks.iter().copied().collect();
         // Chain predecessor of each arithmetic half.
-        let mut prev_half: HashMap<(usize, u8), (usize, u8)> = HashMap::new();
+        let mut prev_half: HashMap<(usize, u8), (usize, u8)> = HashMap::default();
         for c in &p.chains {
             let mut last: Option<(usize, u8)> = None;
             for &a in c {
@@ -250,6 +256,36 @@ impl Sta {
                 }
             }
         }
+        // The same without the ports' launches, for the register-to-register
+        // figure.
+        let mut core = vec![f32::NEG_INFINITY; self.n];
+        let mut core_clk = vec![u32::MAX; self.n];
+        for &(s, t, c) in &self.starts {
+            if c != u32::MAX {
+                core[s as usize] = t;
+                core_clk[s as usize] = c;
+            }
+        }
+        for &u in &order {
+            if core[u as usize] == f32::NEG_INFINITY {
+                continue;
+            }
+            for &e in &out[u as usize] {
+                let (_, v, a) = &self.edges[e];
+                let t = core[u as usize] + delay(a);
+                if t > core[*v as usize] {
+                    core[*v as usize] = t;
+                    core_clk[*v as usize] = core_clk[u as usize];
+                }
+            }
+        }
+        let core_ends: Vec<(String, f32)> = self
+            .ends
+            .iter()
+            .filter(|(x, _, c, _)| c.is_some_and(|c| core_clk[*x as usize] == c) && core[*x as usize] > f32::NEG_INFINITY)
+            .map(|(x, extra, _, what)| (what.clone(), core[*x as usize] + extra))
+            .collect();
+        let core_worst = core_ends.iter().map(|e| e.1).fold(0.0, f32::max);
         // Capture: paths launched by another clock than the capturing one
         // (ports launch on any) aren't timed.
         let mut worst = (0.0f32, String::new());
@@ -295,7 +331,7 @@ impl Sta {
             }
         }
         let _ = &self.clock_of_start;
-        Report { worst: worst.0, at: worst.1, crit, slack }
+        Report { worst: worst.0, at: worst.1, crit, slack, core_worst, core_ends }
     }
 }
 

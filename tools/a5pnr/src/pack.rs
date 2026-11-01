@@ -27,7 +27,8 @@
 //! the halves' xreg0 have `ce_sel` and `sclr_sel`, which act on the whole half,
 //! so a half's two flops share their enable and synchronous clear (README (z3)).
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
+use crate::det::{HashMap, HashSet};
 
 use anyhow::{bail, Result};
 
@@ -411,8 +412,8 @@ pub enum PackMode {
 }
 
 pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
-    let mut driver: HashMap<u32, usize> = HashMap::new();
-    let mut loads: HashMap<u32, Vec<(usize, &'static str)>> = HashMap::new();
+    let mut driver: HashMap<u32, usize> = HashMap::default();
+    let mut loads: HashMap<u32, Vec<(usize, &'static str)>> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
         let mut add = |s: Sig, port: &'static str| {
             if let Sig::Net(n) = s {
@@ -482,7 +483,7 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
     };
     let mut placed: HashSet<usize> = Default::default();
     let mut alms: Vec<Alm> = Vec::new();
-    let mut ffs_on: HashMap<u32, Vec<usize>> = HashMap::new();
+    let mut ffs_on: HashMap<u32, Vec<usize>> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
         if let Cell::Ff(Ff { d: Sig::Net(d), .. }) = c {
             ffs_on.entry(*d).or_default().push(i);
@@ -493,8 +494,8 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
         f
     };
     // Carry chains, from their heads.
-    let mut next: HashMap<usize, usize> = HashMap::new();
-    let mut has_prev = HashSet::new();
+    let mut next: HashMap<usize, usize> = HashMap::default();
+    let mut has_prev = HashSet::default();
     for (i, c) in nl.cells.iter().enumerate() {
         if let Cell::Arith { co: Some(co), .. } = c {
             for &(l, port) in loads.get(co).map(|v| v.as_slice()).unwrap_or(&[]) {
@@ -546,7 +547,7 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
         chains.push(chain);
     }
     // Each LUT's own flop: the first one on its output not taken yet.
-    let mut own_ff: HashMap<usize, usize> = HashMap::new();
+    let mut own_ff: HashMap<usize, usize> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
         if let Cell::Lut { out, .. } = c {
             if let Some(f) = ffs_on.get(out).and_then(|v| v.iter().copied().find(|f| !placed.contains(f))) {
@@ -596,8 +597,8 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
         // with any whose inputs still fit, the largest that does.
         let mut order = small.clone();
         order.sort_by_key(|&i| std::cmp::Reverse(ins_of(i).len()));
-        let mut paired: HashSet<usize> = HashSet::new();
-        let mut readers: HashMap<u32, Vec<usize>> = HashMap::new();
+        let mut paired: HashSet<usize> = HashSet::default();
+        let mut readers: HashMap<u32, Vec<usize>> = HashMap::default();
         for &i in &small {
             for &n in ins_of(i) {
                 readers.entry(n).or_default().push(i);
@@ -617,7 +618,7 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
             }
             paired.insert(u);
             let iu = ins_of(u);
-            let mut score: HashMap<usize, i32> = HashMap::new();
+            let mut score: HashMap<usize, i32> = HashMap::default();
             for n in iu {
                 for &v in readers.get(n).map(|v| v.as_slice()).unwrap_or(&[]).iter().take(64) {
                     *score.entry(v).or_default() += 4;
@@ -684,7 +685,7 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
     // Every other flop: first in an ALM whose logic it is connected to (its
     // D's driver or one of its Q's loads), then in any ALM with room, then
     // in an ALM of its own.
-    let mut alm_of_cell: HashMap<usize, usize> = HashMap::new();
+    let mut alm_of_cell: HashMap<usize, usize> = HashMap::default();
     for (a, alm) in alms.iter().enumerate() {
         match &alm.logic {
             Logic::Six { cell, .. } => {
@@ -709,7 +710,7 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
     // over logic ALMs, each enable would cost every LAB it touches one of
     // its two enable lines (a register file's 31 enables left the CPU at
     // four ALMs per LAB).
-    let mut by_ce: HashMap<u32, Vec<usize>> = HashMap::new();
+    let mut by_ce: HashMap<u32, Vec<usize>> = HashMap::default();
     let mut rest = Vec::new();
     for (i, c) in nl.cells.iter().enumerate() {
         let Cell::Ff(f) = c else { continue };

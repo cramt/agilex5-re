@@ -2321,6 +2321,168 @@ oracle: a register Quartus duplicated gets the same random value in every
 copy, and with 0 random cycles the power-up run leaves the RTL at its own
 initial values.
 
+### (z4) Phase 8: density, and Quartus timing a5pnr's placement
+
+**Density** [obs]. The CPU (designs/p7/cpu: FemtoRV32 Quark with its
+register file in flops, as a5pnr's yosys flow maps it), in ALMs, against
+Quartus Pro's fit of the same RTL (`designs/p8/cql`, register file forced
+into logic; `designs/p8/cq` lets Quartus choose, and it puts the register
+file in two M20Ks):
+
+| | ALMs / LABs | LUTs from yosys | model Fmax | all four checks |
+|---|---|---|---|---|
+| phase 7 (one LUT per ALM) | 2,628 / 395 | 2,036 | 128 MHz | yes |
+| two 5-LUTs per ALM, half's flops share enable and clear (r3) | 1,557 / 228 | 2,036 | 121 MHz | yes |
+| + 4:1 muxes as 6-LUTs (`muxcover`), chains from ALM 0 (r5) | **1,396 / 203** | 1,395 | 125 MHz | yes |
+| Quartus Pro, register file in flops (cql) | 1,082 | (1,171 LUT + 195 arithmetic cells) | 300.7 MHz (quartus_sta) | |
+| Quartus Pro, its own choice (cq) | 334 + 2 M20K | | | |
+
+- **Two LUTs per ALM**: a5pnr pairs LUTs of up to five inputs that fit
+  one ALM's pins (A and B shared, each half's C, D, E its own; README
+  (z3)), the pair sharing the most inputs or a connection first. The
+  register file's 992 enabled flops now go four to an ALM (two through
+  LEIM, two through pass-through 5-LUTs), since a half's two flops may
+  share an enable (z3): flop-only ALMs 501 → 251.
+- **Synthesis was the other half of the gap**: yosys' `abc -lut 6` built
+  each 32:1 register-file read mux from 2:1 muxes first (1,024 3-LUTs, 21
+  LUTs per bit and port instead of 11). `muxcover -mux4 -nodecode` before
+  abc, with each `$_MUX4_` a 6-LUT (`yosys/mux4_map.v`), takes the CPU
+  from 2,036 to 1,395 LUTs; abc's area scripts (`dch`, `if -a`, `mfs2`)
+  change it by < 1 % either way [obs, /tmp bench of 6 variants].
+- What is left (1,396 vs 1,082): Quartus' LUT count is still lower
+  (extended 7-input LUTs, `shared_arith`, its own synthesis), and a5pnr
+  doesn't yet put a LUT with its unrelated flops in one ALM half when the
+  flop needs the half's LEIM pin.
+- Every design through `tools/a5pnr/suite.sh` (`specimens/p8/s4`; flow
+  and all four checks, current code):
+
+  | design | ALMs / LABs (phase 7) | M20K | route iterations | model Fmax | extract = design | simcheck | asm2 differ | pfg |
+  |---|---|---|---|---|---|---|---|---|
+  | blinky | 13 / 2 (13) | 0 | 1 | 393 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | leds | 19 / 2 (24) | 0 | 5 | 306 MHz | yes | 0 | 0 | identical, OK |
+  | acc | 37 / 6 (31) | 0 | 5 | 193 MHz | yes | 0 | 0 | identical, OK |
+  | ram | 16 / 2 (16) | 1 | 3 | 338 MHz | yes | 0 | 0 | identical, OK |
+  | ctl | 39 / 8 (45) | 0 | 4 | 389 MHz | yes | 0 | 0 | identical, OK |
+  | arith | 23 / 4 (25) | 0 | 3 | 352 MHz | yes | 0 | 0 | identical, OK |
+  | rom | 17 / 2 (17) | 1 | 3 | 345 MHz | yes | 0 | 0 | identical, OK |
+  | ramx | 17 / 3 (17) | 1 | 4 | 338 MHz | yes | 0 | 0 | identical, OK |
+  | pll | 27 / 4 (27) | 0 | 1 | 375 MHz | yes | 0 | 0 | identical, OK |
+  | fr (Quartus: 233 ALMs) | 505 / 75 | 0 | 12 | 179 MHz | yes | 0 | 0 | identical, OK |
+
+  acc grew because its accumulator's flops no longer share a half with a
+  flop the LAB's clear or an enable doesn't apply to (z3). fr is random
+  2- to 7-input functions: yosys makes 879 LUTs of them, and `muxcover`
+  would make 1,458 (848 ALMs), so synth.sh maps both ways and keeps the
+  smaller (the CPU takes muxcover, every other design abc alone).
+
+**Quartus timing a5pnr's placement** (`a5pnr --quartus <dir>`,
+`src/export.rs`). Quartus Pro takes no routing constraints: its ECO Tcl
+reads a route (`eco get_info routing_path <iterm>` lists it as routing
+GIDs, and GID − 0x80000000 is the node's line in
+`specimens/rg/full/nodes.tsv`: exactly our graph's names [obs]), but
+`eco reroute <iterm>` ignores any path given and just rips the route up,
+and the other editing commands answer "Unsupported command" [obs, three ECO
+probes]. So the import is **placement only**: a WYSIWYG netlist
+(`tennm_lcell_comb` per LUT and arithmetic half, `tennm_ff` per flop, the
+M20K as inferred RTL) with a location assignment for every atom
+(`LABCELL_X_Y_N(6k + 3h)`, `FF_X_Y_N(6k + 3h + 1 + r)`), retiming off, and
+Quartus routes it. quartus_sta then times a5pnr's placement on Quartus'
+routes, and a5pnr writes its own model's view of its own routes beside the
+project (`a5pnr_timing.txt`); `tools/timing/compare.py` puts them side by
+side.
+
+- **Quartus keeps the placement** [obs]: on ctl every atom on a reported
+  path (69 of 69) sits where a5pnr put it. Two fixes came out of it: Quartus
+  rejects a carry chain that starts at ALM 5 and runs on ("Illegal location
+  assignments for LEs in carry chain"), and its own chains all start at ALM
+  0 (cql's six), so a5pnr's do now; a chain's first `cin` is left open.
+- **The model on Quartus' routes** [obs, `tools/timing/fit.py eval`,
+  held out]: Quartus' own CPU (cql, 1,508 paths launched by flops): mean
+  −2.4 %, |error| median 3.3 %, 95th percentile 12.5 %; a5pnr's ctl
+  placement routed by Quartus (442 paths): mean +1.5 %, median 12.5 %, 95th
+  21.6 %, nearly all of it carry chains. Refitting on rt, ar, hx and mm
+  (twice phase 6's training set) moves these by under a point, so the
+  per-hop means stand; what is off is how a5pnr's STA strings the carry
+  arcs together: quartus_sta charges `cin → cout` once per ALM (0.05–0.08
+  ns) and a data input to the chain runs to the half-LAB's end in one
+  look-ahead step (0.56 ns over 6 halves and over 10), where a5pnr charges
+  `cin → cout` per half and ripples [obs, ctl2's paths]. The paths cql's
+  M20K launches (tco 1.43 ns) show as a −40 % tail in `fit.py eval`,
+  which files that launch under `tco`; a5pnr's STA has the M20K's own.
+- **a5pnr's routes against Quartus'** on the same placement [obs, ctl]:
+  per flop endpoint the model on a5pnr's routes is +0.56 ns (+57 %) over
+  quartus_sta on Quartus' (median of 32); register to register 2.55 ns
+  (393 MHz) against quartus_sta's 664 MHz (slow 100 °C corner; 365 MHz
+  "restricted" by the clock's minimum pulse width). The model prices
+  Quartus' own path into the worst endpoint (a carry chain fed from its own
+  LAB: LL, LEIM, then the chain) at 1.54 ns against quartus_sta's 1.37, so
+  about 0.9 ns of a5pnr's 2.46 there is routing [inf]: Quartus' critical
+  paths run LAB_RE → LL → LEIM inside a LAB, where a5pnr's routes for the
+  design use 160 H0, 79 H1 and 77 V1 hops.
+- **The CPU**: Quartus' legalizer rejects one LAB of a5pnr's r5 placement,
+  "too many LAB line inputs": a5pnr routed 76 local lines into LAB X75 Y25,
+  where Quartus' own LABs use at most 73 (cql, fr) [obs]; a5pnr has no such
+  budget yet. A rerun leaves that LAB's 35 cells to Quartus.
+
+Other a5pnr changes: hash maps with a fixed hasher (`src/det.rs`), so a seed
+gives the same placement every run (std's RandomState didn't: the CPU's r2
+and a rerun differed); PathFinder's present-congestion factor capped at
+1,000 (×1.8 per iteration reached 10²⁰ by iteration 80, where every path
+costs the same and the last two nets on a node never part); a placement
+whose routing doesn't converge is placed again with the next seed (the
+CPU's r4: two nets that each needed the same local line, LUT inputs being
+fixed to pins at packing).
+
+### (z5) Phase 8: MLAB RAM, read from Quartus' own image
+
+`designs/p8/ml`: two RAMs Quartus Pro is told to put in MLABs (a 32 x 20
+with an asynchronous read and a 16 x 8, written and read from an LFSR and a
+counter so that each pin carries its own signal; retiming off), compiled
+(`specimens/runs/ml0`), its atoms dumped (`specimens/p8/alm/ml0`), its image
+decoded (`specimens/p8/ex/ml.txt`). Each `LUTRAM` atom is one data bit; its
+ports name every signal, and `a5pnr drivers` names what the decoded image
+routes to each LAB_RE pin [obs]:
+
+- **One bit per half-ALM, 32 words in its 32 mask bits.** A 32 x 20 RAM is
+  one MLAB (10 ALMs, 20 halves), a 16 x 8 four ALMs of another.
+- **Read**: address bits 0–4 on A, B, C1, D1 and E (E0 and E1 both, the
+  same signal) in every ALM, i.e. the index of the half-1 5-LUT; the data
+  comes out through `LUTOUT_5LUT` into the half's register slots, as a
+  logic 5-LUT's does (WIRE_MODE for an asynchronous read, a flop on **LAB
+  clock 1**, `regclk = DFF_LABCLK1`, where Quartus pulls the read register
+  into the MLAB).
+- **Write**: address bits 0–4 on LAB_RE 156, 157, 160, 161, 155 (a 16-word
+  RAM leaves 155 and E unrouted); write enable on 80 (the LAB's CLKEN0
+  line); half 0's data on C0, half 1's on D0; the clock on the LAB clock
+  lines (83, 84 and 149–171 all carry it).
+- **RAM or logic**: every MLAB Quartus uses as logic sets
+  `xpwrmgmt/lutram_mode_vcchg_power_saving = ENABLE_POWER_SAVING` (fr 16,
+  cq 24, cql 167 of 167) and `ram_mode = LUT_MODE` on its bottom-half
+  ALMs; the two RAM MLABs set neither (RAM is the idle mode). Their masks
+  are all 0 (the RAMs start empty).
+
+`a5pnr readback` now models it: an MLAB without the power-saving setting is
+RAM, each half a 32-bit memory written on LAB clock 0 when CLKEN0 is high
+and read at {E, D1, C1, B, A}; unrouted address pins read 0 on both ports
+[inf]. Registers on LAB clock 1 are modelled too. **The netlist rebuilt
+from Quartus' ml image runs like `ml.v` for 3,000 cycles from power-up (49
+registers, 4 outputs, 0 mismatches) and 1,000 with KEY0 low (the 16 x 8's
+write enable gated off), 0 mismatches** (`tools/alm/oracle.sh
+specimens/p8/alm/ml0 ml designs/p8/ml/ml.pins <out> 3000
+designs/p8/ml/ml.v`, `SIMCHECK_HOLD=KEY0=1`). `tools/alm/ffmap.py` now
+maps a register that starts at 1 inverted (Quartus keeps `lfsr[0]`, which
+`lfsr = 32'h1` starts at 1, as an inverted flop: the device's flops power
+up 0).
+
+Not done [unk]: a5pnr doesn't place MLAB RAM yet (a yosys `memory_libmap`
+library for 32 x 1 per half with one synchronous write and one
+asynchronous read port, MLAB placement in a5pnr, emit); which mask bit is
+which word for an initial content other than 0 (the read index is the
+5-LUT's, so stored[32h + address] is [inf]); whether the write clock is
+83 or the 149–171 lines. Quartus didn't put the CPU's register file in an
+MLAB by itself ("Unsupported Mixed Feed Through Setting in Auto MLAB
+Conversion"): in cq it used two M20Ks, one per read port.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -2473,6 +2635,38 @@ SHA-256 (phase 7, each equal to its `_pfg.rbf`): `blinky.rbf` 0bb02a06…,
 bd4d0148…, `arith.rbf` 963e69dc…, `rom.rbf` 16b9d4ba…, `ramx.rbf`
 19e17400…, `pll.rbf` f4d1724b…, `cpu.rbf` 285321e8….
 
+**Phase 8** (z3)–(z5), in `specimens/board/p8/` (git-ignored). Phase 8
+found that every phase 4–7 image with a LUT in it computes each LUT on
+inverted inputs (z3): **steps 4, 8, 9, 12, 14–17 are expected to fail with
+the earlier files** (blinky in steps 7 and 11 is pure carry chain and
+should work). The steps below test the fix directly; run them first. Each
+`<d>.rbf` is a5db's and equals `quartus_pfg`'s `<d>_pfg.rbf`.
+
+18. **`scratch_p8.rbf` against `scratch_a5db.rbf`** (phase 5's, step 4): the
+    hand-placed 25-bit counter of `designs/blinky_a5db`, rebuilt with the
+    corrected LUT rule. `scratch_p8.rbf`: LED0 blinks at about 1.5 Hz.
+    `scratch_a5db.rbf`: LED0 stays dark (its first counter bit can't
+    toggle). Both configure. The reverse (old blinks, new dark) means the
+    phase 8 rule is wrong; both dark, look at the idle state (step 4).
+19. **`ctl_p7.rbf` against `ctl.rbf`**: phase 7's and phase 8's builds of
+    the LAB-controls design, behaviour as step 12. Phase 8's should do what
+    step 12 says; phase 7's shouldn't (its LUTs, e.g. the XOR reductions
+    and the enable logic, are on inverted inputs).
+20. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `arith.rbf`, `rom.rbf`,
+    `ramx.rbf`, `pll.rbf`: as steps 11–16, now with two LUTs per ALM.
+21. **`cpu.rbf`** (FemtoRV32, 1,396 ALMs): as step 17.
+22. If step 18 passes but 20 or 21 fail: suspect what only phase 8 added,
+    in this order: a 5-LUT's output (`LUTOUT_5LUT`, which no earlier image
+    used), two flops sharing a half's enable (the CPU's register file),
+    the C1/D1 copies of a 6-LUT's inputs.
+
+Rebuild: `designs/blinky_a5db/build.py specimens/p8/scratch` (checked
+against a 25-bit counter in `specimens/p8/scratch/check`: 1,000 cycles from
+random states and 3,000 from power-up, 0 mismatches), `tools/a5pnr/suite.sh
+specimens/p8/s4 designs/p6/<d> …`, `designs/p7/cpu/go.sh r6` with
+`OUT=specimens/p8/cpu`; `ctl_p7.rbf` is `specimens/board/p7/ctl.rbf`.
+SHA-256: in the next commit, once the files are built.
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
@@ -2500,6 +2694,53 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 8 status** (branch `phase8`): the ALM checked against Quartus' own
+images, two LUTs per ALM, and quartus_sta on a5pnr's placement.
+
+- The oracle (z3): Quartus' fr and ml images, decoded and rebuilt, run like
+  their RTL. It found that **phases 2–7 wrote every LUT on inverted
+  inputs** (the LUT rule came from Quartus' port convention, and a5pnr's
+  writer and reader shared it), that a half's enable and clear cover both
+  its flops, the direct LUT outputs and the spare-row hops. Every phase 6–7
+  board file with a LUT in it is wrong; phase 8's replace them.
+- Step 1 (density): **done for LUTs and flops** (z4). Two 5-LUTs per ALM,
+  four register-file bits per ALM, 4:1 muxes as 6-LUTs: the CPU 2,628 →
+  1,396 ALMs (Quartus: 1,082 for the same RTL). Every design passes every
+  check.
+- Step 2 (timing truth): **placement only** (z4). `a5pnr --quartus` writes
+  the placement as Quartus atoms with locations, and Quartus keeps it; it
+  takes no routing constraints. The model on Quartus' routes: 3.3 %
+  median error on Quartus' own CPU, 12.5 % on a5pnr's placement (carry
+  chains, whose arcs a5pnr's STA strings wrongly). a5pnr's routes cost
+  more than Quartus' on the same placement (ctl: +57 % per endpoint).
+- Step 3 (I/O registers): **not done**.
+- Step 4 (MLAB RAM): **the bits and the readback, checked on Quartus' ml
+  image** (z5); a5pnr doesn't map RAMs to MLABs yet.
+- Step 5: **LAB clock 1** (in the readback, from ml). CLR2 carrying a
+  signal, other PLL outputs, PLL reset and lock, `secmux_bto` and
+  `hipi_clken`: not done.
+- Board: steps 18–22 of "Board test", files in `specimens/board/p8/`.
+
+Open after phase 8 [unk]:
+
+- Everything on silicon, still; the phase 7 → 8 LUT fix is the first
+  thing the board can confirm (step 19's A/B pair).
+- a5pnr's routes: why they cost more than Quartus' on the same placement
+  (LAB-local feedback through LL/LEIM; LUT input pins are fixed at
+  packing, so the router can't swap them).
+- The STA's carry arcs: `cin → cout` per ALM and data → `cout` to the
+  half-LAB's end in one step, as quartus_sta reports them.
+- Exact routes in Quartus: no command found that sets one.
+- MLAB RAM in a5pnr (a yosys `memory_libmap` library, placement, emit) and
+  the word order of an initial content; I/O registers; CLR2; PLL outputs
+  other than V16's 0, PLL reset and lock.
+- Synthesis: Quartus' CPU needs 1,171 LUTs to yosys' 1,392 (extended
+  7-input LUTs, `shared_arith`).
+
+Next: the board test (phase 8 files first); then the router (LUT input
+swapping, local feedback) and the STA's carry arcs, measured with
+`--quartus` and `tools/timing/compare.py`; MLAB RAM in a5pnr.
 
 **Phase 7 status** (branch `phase7`): from four toy designs to a RISC-V
 CPU through the open flow.

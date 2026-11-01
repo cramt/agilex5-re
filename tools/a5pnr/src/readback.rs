@@ -7,7 +7,8 @@
 //! (README (t)). What the image does that this model doesn't know is an
 //! error, not a guess.
 
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
+use crate::det::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use anyhow::{bail, Context, Result};
@@ -30,8 +31,8 @@ const M20K_KNOWN: [&str; 2] = ["xdigicore/m20k_a_outreg_byp", "xdigicore/m20k_b_
 
 pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str) -> Result<()> {
     let text = std::fs::read_to_string(extract).with_context(|| format!("reading {extract}"))?;
-    let mut active: HashSet<(u32, u32)> = HashSet::new();
-    let mut attr: HashMap<(String, String), String> = HashMap::new();
+    let mut active: HashSet<(u32, u32)> = HashSet::default();
+    let mut attr: HashMap<(String, String), String> = HashMap::default();
     let mut balls: Vec<(String, String)> = Vec::new();
     let mut plls: std::collections::BTreeSet<String> = Default::default();
     for l in text.lines() {
@@ -57,7 +58,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     }
     // Routing-tile attributes: only the clear inverters are modelled. An
     // inverted clear's last hop (RPII → RPI) conducts, inverted.
-    let mut inverted_lab: HashSet<(u32, u32)> = HashSet::new();
+    let mut inverted_lab: HashSet<(u32, u32)> = HashSet::default();
     for ((u, a), v) in &attr {
         let Some(rest) = u.strip_prefix("cw_rt_lab_base_r") else {
             if u.starts_with("cw_rt_") || u.starts_with("hvio") || u.starts_with("pio") {
@@ -77,15 +78,15 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         }
     }
     // Port names by ball (pins.txt) and boundary nodes (io/pin_nodes.tsv).
-    let mut port_of: HashMap<String, String> = HashMap::new();
+    let mut port_of: HashMap<String, String> = HashMap::default();
     for l in std::fs::read_to_string(pins)?.lines() {
         let f: Vec<&str> = l.split_whitespace().collect();
         if f.len() >= 2 && !f[0].starts_with('#') {
             port_of.insert(f[1].to_owned(), f[0].to_owned());
         }
     }
-    let mut node_of: HashMap<(String, String), u32> = HashMap::new();
-    let mut io96: HashMap<String, bool> = HashMap::new();
+    let mut node_of: HashMap<(String, String), u32> = HashMap::default();
+    let mut io96: HashMap<String, bool> = HashMap::default();
     for l in std::fs::read_to_string(format!("{db}/io/pin_nodes.tsv"))?.lines() {
         let f: Vec<&str> = l.split('\t').collect();
         if f.len() == 5 && !l.starts_with('#') && f[0] != "ball" {
@@ -162,11 +163,11 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     }
     let single = g.single_fanin();
     let follow = |e: usize, m: u32, d: u32| g.class[e] == PASS || (g.class[e] == NO && single[d as usize]) || active.contains(&(m, d));
-    let mut reach: HashMap<u32, Src> = HashMap::new();
+    let mut reach: HashMap<u32, Src> = HashMap::default();
     let mut conflict: Vec<u32> = Vec::new();
     for &(s, n0) in &sources {
         let mut q = VecDeque::from([n0]);
-        let mut seen = HashSet::from([n0]);
+        let mut seen = HashSet::from_iter([n0]);
         while let Some(m) = q.pop_front() {
             for e in g.fanout(m) {
                 let d = g.dst[e];
@@ -184,7 +185,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     // A node two sources reach over pass-through edges (some clock-network
     // nodes have several, README (y)) is unknown, and so is everything it
     // reaches; that only matters if a used pin is among them.
-    let mut unknown: HashSet<u32> = HashSet::new();
+    let mut unknown: HashSet<u32> = HashSet::default();
     let mut q: VecDeque<u32> = conflict.iter().copied().collect();
     while let Some(m) = q.pop_front() {
         if !unknown.insert(m) {
@@ -248,7 +249,22 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         // through the routing tile's clrb inverter) and CLR2 (85). An
         // unrouted clear is inactive (as in Quartus' images).
         let clk = lab_sig(x, y, 83);
+        // LAB clock 1: `regclk = DFF_LABCLK1` (Quartus' MLAB RAM output
+        // registers, ml) [obs].
+        let clk1 = lab_sig(x, y, 84);
         let ces = [lab_sig(x, y, 80), lab_sig(x, y, 81)];
+        // An MLAB in RAM mode [obs, ml: README (z5)]: Quartus marks every MLAB
+        // it uses as logic with `lutram_mode_vcchg_power_saving` (fr, cq and
+        // cql: 207 of 207) and leaves it idle in the RAM's. Each half of an
+        // ALM is one bit of a 32-word RAM held in its 32 mask bits: read at
+        // {E, D1, C1, B, A} through LUTOUT_5LUT as in logic mode, written on
+        // LAB clock 0 when CLKEN0 (80) is high, at the address on LAB_RE 156,
+        // 157, 160, 161, 155 (bits 0..4), with half 0's data from C0 and half
+        // 1's from D0. An address pin left unrouted (a 16-word RAM's bit 4)
+        // reads 0 on both ports [inf].
+        let ram = kd == "ml" && lab_attr(x, y, "xpwrmgmt/lutram_mode_vcchg_power_saving") != Some("ENABLE_POWER_SAVING");
+        let pin0 = |pin: u32| sig(lab_node(x, y, pin)).unwrap_or_else(|| "1'b0".into());
+        let waddr = format!("{{{}, {}, {}, {}, {}}}", pin0(155), pin0(161), pin0(160), pin0(157), pin0(156));
         let sclr = lab_sig(x, y, 82);
         let clr1 = match sig(lab_node(x, y, 86)) {
             Some(s) if inverted_lab.contains(&(x, y)) => format!("~{s}"),
@@ -334,6 +350,17 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     writeln!(v, "  assign {n}_s{h} = {cin} ^ {n}_pp{h};")?;
                     outs[h as usize] = format!("{n}_s{h}");
                 }
+            } else if ram {
+                let w: String = (0..64usize).rev().map(|i| (b'0' + stored[i]) as char).collect();
+                let lp = |q: u32| sig(lab_node(x, y, 8 * k + q)).unwrap_or_else(|| "1'b0".into());
+                let raddr = format!("{{{}, {}, {}, {}, {}}}", lp(7), lp(6), lp(5), lp(4), lp(3));
+                writeln!(d, "  reg [63:0] {n}_m = 64'b{w}; wire {n}_q0, {n}_q1;")?;
+                for h in 0..2u32 {
+                    let data = if h == 0 { lp(2) } else { lp(1) };
+                    writeln!(v, "  assign {n}_q{h} = {n}_m[{} + {raddr}];", 32 * h)?;
+                    writeln!(v, "  always @(posedge {clk}) if ({}) {n}_m[{} + {waddr}] <= {data};", ces[0], 32 * h)?;
+                    outs[h as usize] = format!("{n}_q{h}");
+                }
             } else {
                 // The pins are E0, D0, C0, A, B, C1, D1, E1 [obs, fr's atoms].
                 // Half h's 5-LUT (`LUTOUT_5LUT`) is stored bits 32h.. over
@@ -393,9 +420,11 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     let o = format!("l{x}_{y}_o{}", 89 + 4 * k + 2 * h + r);
                     match mode {
                         Some("DFF_LATCH") => {
-                            if get(&format!("{rb}/xlabclk_mux/regclk")) != Some("DFF_LABCLK0") {
-                                bail!("{uid} {p} {rb}: not on LAB clock 0");
-                            }
+                            let clk = match get(&format!("{rb}/xlabclk_mux/regclk")) {
+                                Some("DFF_LABCLK0") => clk.clone(),
+                                Some("DFF_LABCLK1") => clk1.clone(),
+                                o => bail!("{uid} {p} {rb}: regclk {o:?}"),
+                            };
                             // xreg0's ce_sel and sclr_sel serve both registers
                             // of the half [obs, Quartus' fr and cql, README (z3)].
                             let ce = if get(&format!("{rb}/xreg0/ce_sel")) == Some("CE") { ce.clone() } else { "1'b1".into() };
@@ -484,9 +513,9 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
 /// with `prefix`, with that source (pins named by ball and role).
 pub fn drivers(g: &Graph, db: &str, extract: &str, prefix: &str) -> Result<()> {
     let text = std::fs::read_to_string(extract).with_context(|| format!("reading {extract}"))?;
-    let mut active: HashSet<(u32, u32)> = HashSet::new();
+    let mut active: HashSet<(u32, u32)> = HashSet::default();
     let mut sources: Vec<(String, u32)> = Vec::new();
-    let mut node_of: HashMap<(String, String), u32> = HashMap::new();
+    let mut node_of: HashMap<(String, String), u32> = HashMap::default();
     for l in std::fs::read_to_string(format!("{db}/io/pin_nodes.tsv"))?.lines() {
         let f: Vec<&str> = l.split('\t').collect();
         if f.len() == 5 && !l.starts_with('#') && f[0] != "ball" {
@@ -526,7 +555,7 @@ pub fn drivers(g: &Graph, db: &str, extract: &str, prefix: &str) -> Result<()> {
     }
     for (s, n0) in &sources {
         let mut q = VecDeque::from([*n0]);
-        let mut seen = HashSet::from([*n0]);
+        let mut seen = HashSet::from_iter([*n0]);
         while let Some(m) = q.pop_front() {
             for e in g.fanout(m) {
                 let d = g.dst[e];

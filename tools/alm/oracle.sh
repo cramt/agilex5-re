@@ -31,5 +31,7 @@ PY
 )
 "$repo/tools/cap.sh" 12G "$repo/tools/a5db/target/release/a5db" extract "$db" "$graph" "$run/output_files/$top.sof" $specs > "$out/extract.txt" 2> "$out/extract.log"
 "$repo/tools/cap.sh" 6G "$repo/tools/a5pnr/target/release/a5pnr" readback "$graph" "$db" "$out/extract.txt" "$pins" "$top" "$out/readback.v" 2> "$out/readback.log"
-python3 -I "$here/ffmap.py" "$run/atoms.txt" > "$out/$top.ffmap"
+# The RTL's initial values, before synthesis inverts flops that start at 1.
+nix shell nixpkgs#yosys -c yosys -q -p "read_verilog $*; hierarchy -top $top; proc; flatten; write_json $out/$top.init.json" > /dev/null
+python3 -I "$here/ffmap.py" "$run/atoms.txt" "$out/$top.init.json" "$top" > "$out/$top.ffmap"
 SIMCHECK_RUN=$cycles python3 -I "$repo/tools/a5pnr/simcheck.py" "$out/$top.json" "$top" "$pins" "$out/$top.ffmap" "$out/readback.v" 0 "$@" | tail -3

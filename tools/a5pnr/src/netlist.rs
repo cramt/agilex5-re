@@ -1,6 +1,6 @@
 //! yosys JSON (tools/a5pnr/synth.sh) → cells with constants folded.
 
-use std::collections::HashMap;
+use crate::det::HashMap;
 
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
@@ -140,8 +140,8 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
     // A net's name: a visible register or wire name over a port's, over
     // yosys' own `$` names (simcheck sets registers by these names).
     let ports_obj = m["ports"].as_object().context("ports")?;
-    let mut names: HashMap<u32, (u8, String)> = HashMap::new();
-    let mut aliases: HashMap<u32, Vec<String>> = HashMap::new();
+    let mut names: HashMap<u32, (u8, String)> = HashMap::default();
+    let mut aliases: HashMap<u32, Vec<String>> = HashMap::default();
     for (n, v) in m["netnames"].as_object().context("netnames")? {
         let hidden = v.get("hide_name").and_then(Value::as_u64) == Some(1) || n.starts_with('$');
         let rank = if hidden { 2 } else if ports_obj.contains_key(n) { 1 } else { 0 };
