@@ -1739,8 +1739,8 @@ table against design files extracted from Quartus images.
   first (last) routing edge of the pin's net leaves (enters) it, allowing up
   to 3 non-wire hops for edges a design file can't list (RPI inputs and the
   HIOL 4:1 data mux are pass-throughs; MUXIN settings equal to the idle state
-  aren't decoded). The rule was worked out on ph1 alone; 429 of 432 pin uses in 14 designs
-  match, and the 3 misses are explained.
+  aren't decoded). The rule was worked out on ph1 alone; 429 of 432 pin
+  uses in 14 designs match, and the 3 misses are explained.
 
   | design | pin uses | at the predicted node |
   |---|---|---|
@@ -2075,7 +2075,7 @@ arguments). After step 4 above works, load each with
     of the slowly stepping read address); all off or frozen means the M20K
     isn't being written or read.
 
-SHA-256 of the files as built here (each equal to its `_pfg.rbf`): `blinky.rbf` ab5e1d19…, `leds.rbf` d9a3618e…, `acc.rbf` aa25d7f5…, `ram.rbf` 03f8d88f….
+SHA-256 of the files as built here (each equal to its `_pfg.rbf`): `blinky.rbf` ab5e1d19…, `leds.rbf` d9a3618e…, `acc.rbf` aa25d7f5…, `ram.rbf` 03f8d88f…
 
 ## Oracle
 
