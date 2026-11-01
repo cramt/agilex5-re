@@ -852,7 +852,8 @@ u32 uid id, u32 config id`, with gids minus `0x80000000`. Line k of
 
 [unk]:
 - Which resource "Direct links" (526,400) is.
-- Edge delays and timing (`DYGR_ROUTE_TIMING_INFO`, not dumped).
+- Edge delays and timing (`DYGR_ROUTE_TIMING_INFO`, not dumped; a model
+  fitted to quartus_sta's paths is in (u)).
 - The meaning of `CONFIG_DATA`'s first word and tail.
 - The attribute mapping of sub-mux configurations.
 - Only one tile and one design were checked against a bitstream; checking
@@ -1463,9 +1464,9 @@ in banks 6A–6H (6G and 6H at 1.8 V, the rest 3.3 V) and 22 IO96 pins in bank
 - **Not covered**: the D-PHY standard (used here single-ended at 1.1 V),
   bidirectional pins, pull-ups, bus hold, current strength and slew
   settings (the DE25-Nano manual sets none), IO96 lanes 0–3 and 6–7 and the
-  second IO96 bank (no DE25-Nano pins), differential I/O, and the pin ↔
+  second IO96 bank (no DE25-Nano pins), differential I/O. The pin ↔
   routing-graph node map (which fabric node carries a pin's input or
-  output; phase 4 took V16's and DF35's from Quartus routes).
+  output; phase 4 took V16's and DF35's from Quartus routes) is now (t).
 
 ### (q) Phase 5: core features, rebuilt from a design file
 
@@ -1645,9 +1646,8 @@ ck2 the other 16.
   covers. V16 as a PLL reference leaves the ioclk mux at P0: the reference
   doesn't use the clock-pin path. The PLL output enters the clock network
   as an ordinary graph edge (`HVIOWR_RE … I16 → DCM_mux`). How counters and
-  trims follow from the requested frequencies is [unk]: one PLL was
-  compiled, so a writer can reproduce this 50 → 100 MHz PLL verbatim and
-  nothing else yet.
+  trims follow from the requested frequencies was [unk] here (one PLL
+  compiled); phase 6 has the rule, held out on four more PLLs (v).
 
 ### (s) Phase 5: leftover unknowns
 
@@ -1814,8 +1814,13 @@ read from the device database.
   position), so the model is for costs, not sign-off. The biggest residual
   is a carry chain's data input to cout (0.17–0.59 ns, depending on the
   ALM) [unk].
-- a5pnr (w) uses the `re:` means as PathFinder base costs. Timing-driven
-  placement and a path-delay report are not written yet.
+- a5pnr (w) uses the `re:` means as PathFinder base costs, and after
+  routing prints the model's longest path into a flop (driver tco or 0 at a
+  pin, each routed hop's mean, LUT and carry arcs, `reg_d`, `tsu` 0.084 ns):
+  blinky 2.44 ns, leds 3.51, acc 5.75, ram 2.85 [inf: model estimates; no
+  clock skew, no hold]. For scale, quartus_sta gives Quartus' own 25-bit
+  counter blinky a worst data delay of 1.37 ns. Placement is not
+  timing-driven.
 
 ### (v) Phase 6: IOPLL settings from frequencies
 
@@ -1950,10 +1955,26 @@ Results (`designs/p6`, pins in `designs/p6/*.pins`):
 
 | design | cells | ALMs (arith) / LABs | M20K | nets | edges | route iterations | a5pnr time | extract = design | simcheck | asm2 | pfg |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| blinky (25-bit counter → LED0) | 26 A5_ARITH, 25 FF | 13 (13) / 2 | 0 | 26 | 108 | 1 | 19 s | yes | 0 mismatches, 25 registers | 0 of 25,821 differ | `.rbf` identical, integrity OK |
+| blinky (25-bit counter → LED0) | 26 A5_ARITH, 25 FF | 13 (13) / 2 | 0 | 26 | 108 | 1 | 20 s | yes | 0 mismatches, 25 registers | 0 of 25,821 differ (18 instances) | `.rbf` identical, integrity OK |
+| leds (27-bit counter, KEY0 clear, KEY1 invert, SW0 reverse → LED[7:0]) | 35 LUT, 28 A5_ARITH, 27 FF | 49 (14) / 28 | 0 | 66 | 700 | 2 | 35 s | yes | 0, 27 registers | 0 of 102,056 (152) | identical, OK |
+| acc (56-bit accumulator + 32-bit LFSR, chain over 3 LABs) | 58 LUT, 57 A5_ARITH, 88 FF | 117 (29) / 30 | 0 | 147 | 1,287 | 3 | 36 s | yes | 0, 87 registers | 0 of 86,320 (130) | identical, OK |
+| ram (512 x 32 M20K, counter writes, slow read → LED[7:0]) | 33 A5_ARITH, 32 FF, 1 A5_M20K | 17 (17) / 2 | 1 | 41 | 391 | 3 | 29 s | yes | 0, 32 registers | 0 of 46,723 (51) | identical, OK |
 
-Times are on the shared machine (load 20–40): synth 38 s, a5pnr 19 s (18 s
-of it loading the graph), `a5db build` 276 s, `a5db rbf` 9 s.
+"cells" are yosys' after mapping, "edges" the configured routing edges in
+the design file (pass-throughs not counted), "a5pnr time" includes about
+18 s of loading the graph. The other steps, on the shared machine (load
+20–40): synth 12–38 s, `a5db build` 190–276 s, `a5db rbf` 4–9 s; `check.sh`
+about 45 min, most of it `a5db extract` and asm2.
+
+- The M20K [obs, mm's quartus_sta paths, `report_path` for the read side]:
+  in its 512 x 32 simple dual-port use Quartus splits the RAM into 32 one-bit
+  `ram_block2a<k>` atoms in one block, and the block's `MEDIUM_EAB_RE` pins
+  are: clock 77, write address bit i 25 + i, read address bit i 52 − i,
+  write data bit k 57 + k (k < 20) or 40 − k, read data bit k 83 + k. The
+  block's settings are the 20 `xdigicore` delay and enable settings mm's
+  such block differs from idle in; widths and modes stay idle. Write enable
+  is tied high (mm writes every cycle); a5pnr refuses any other. The clock
+  enters through an RPI from the row clock, as a LAB's does.
 
 ### quartus_sta fails under chipsmith [obs]
 
@@ -2030,6 +2051,32 @@ On the board (DE25-Nano, on-board USB-Blaster III, JTAG; MSEL as shipped):
 Record for each: LED behaviour, openFPGALoader's exit status, and the SDM
 status it prints (`ISC_SR`).
 
+**Phase 6: designs from the open flow** (w), in `specimens/board/p6/`
+(git-ignored). Each `<d>.rbf` is a5db's and equals `quartus_pfg`'s
+(`<d>_pfg.rbf`); `<d>.sof` is a5db's container. Rebuild them with
+`tools/a5pnr/flow.sh <d> designs/p6/<d>.pins specimens/p6/flow/<d>
+designs/p6/<d>.v` and check them with `tools/a5pnr/check.sh` (same
+arguments). After step 4 above works, load each with
+`openFPGALoader -c usb-blasterIII <d>.rbf`:
+
+7. `blinky.rbf`: LED0 blinks at about 1.5 Hz. This is the first image whose
+   placement and routing are entirely a5pnr's: if step 4 worked and this
+   doesn't, suspect the carry chain (it is the counter) or a5pnr's clock
+   route (DCM input 1, not Quartus' 2).
+8. `leds.rbf`: LED7 toggles every 1.3 s (counter bit 26), LED6 twice as
+   fast, the lower LEDs too fast to see. Holding KEY0 turns them all off
+   (the counter is held at 0); holding KEY1 inverts them; SW0 up reverses
+   their order. Tests HVIO inputs (KEY0, KEY1), an IO96 input (SW0) and
+   eight IO96 outputs.
+9. `acc.rbf`: LED7 changes about every 0.3 s and the lower LEDs faster, an
+   irregular pattern (the top byte of a 56-bit accumulator adding an LFSR);
+   KEY0 held clears them. Tests a carry chain over three LABs.
+10. `ram.rbf`: LED[7:0] counts up in binary at about 6 Hz (the M20K's copy
+    of the slowly stepping read address); all off or frozen means the M20K
+    isn't being written or read.
+
+SHA-256 of the files as built here (each equal to its `_pfg.rbf`): `blinky.rbf` ab5e1d19…, `leds.rbf` d9a3618e…, `acc.rbf` aa25d7f5…, `ram.rbf` 03f8d88f….
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
@@ -2057,6 +2104,50 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 6 status** (branch `phase6`): from "a5db rebuilds Quartus images" to
+an open flow that places and routes Verilog itself.
+
+- Step 1 (pin ↔ routing-graph nodes): **done** (t). `a5db pinmap` derives
+  every ball's boundary nodes from the graph; 429 of 432 pin uses in 14
+  Quartus designs start or end at the predicted node, rule fitted on ph1
+  alone; the 3 misses are explained (an unloaded input, a PLL reference, a
+  clock routed as data).
+- Step 2 (timing): **done as a fitted model** (u). quartus_sta runs with
+  brotli on `LD_LIBRARY_PATH`; per-node-type and per-cell-arc means from
+  its paths predict held-out path delays within 3.8–11.9 % median (95th
+  percentile 8.7–22 %). Quartus' own RC model is located, not decoded.
+  a5pnr routes on these delays as costs; there is no timing report.
+- Step 3 (IOPLL): **done for PFDs of 10, 25, 50 MHz** (v). The IP's counter
+  choice is a rule (10 of 10 held-out frequency sets match), the bits are a
+  template plus counters and trims (held-out pb: 2,776 of 2,776 bits).
+- Step 4 (open flow): **done** (w). yosys → a5pnr → a5db build → a5db rbf
+  for four designs (counter, keys and LEDs, a carry chain over three LABs,
+  an M20K); each image decodes back to exactly a5pnr's design file, its
+  rebuilt netlist simulates like the RTL, asm2 agrees with every decodable
+  attribute, and pfg's `.rbf` is byte-identical with integrity OK.
+
+Open after phase 6 [unk]:
+
+- Everything on silicon: the board is still off. The phase-6 files add
+  four open-flow images to "Board test".
+- Two LAB settings Quartus writes where a chain starts (`secmux_bto`,
+  `hipi_clken`): copied, not understood. The hardware carry-in at a chain's
+  start (a5pnr's chains begin with a p = 0 cell, so it doesn't matter).
+- Pin map: IO96 `direct` and HVIO `out2` roles, output enables, pio_1_0.
+- IOPLL: other PFD frequencies, bank-half 0 reference pads, the IP's output
+  ceiling (1.2 GHz refused), phase shifts, cascading.
+- M20K: only the 512 x 32 simple dual-port use with write enable tied high;
+  other widths, enables, output registers and true dual port need their
+  pins and settings (hx, mm have Quartus examples).
+- Timing: Quartus' RC model, hold and clock skew; an STA for a5pnr's output.
+- a5pnr: one clock domain; no LAB control signals (enables and resets
+  become LUT logic), MLAB RAM, DSP, IO registers, PLLs; placement packs
+  loosely (leds: 49 ALMs in 28 LABs).
+
+Next: the board test (phase 4–6 files); then widen a5pnr (enables and
+clears on the LAB lines, more M20K modes, PLLs, DSP) and grow it into a
+nextpnr (himbaechel) target fed from `db/`, as Plan step 7 said.
 
 **Phase 5 status** (branch `phase5`): coverage for a real toolchain. The
 summary for a toolchain author is [docs/toolchain.md](docs/toolchain.md).
