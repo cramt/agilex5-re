@@ -1,0 +1,45 @@
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY pb
+set_global_assignment -name VERILOG_FILE pb.v
+set_global_assignment -name SDC_FILE pb.sdc
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
+set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+
+set_location_assignment PIN_CE19 -to r0
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to r0
+set_global_assignment -name IP_FILE pll0.ip
+set_location_assignment PIN_BV19 -to l0
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to l0
+set_location_assignment PIN_BV11 -to o0_0
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to o0_0
+set_location_assignment PIN_BV16 -to o0_1
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to o0_1
+set_location_assignment PIN_V16 -to r1
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to r1
+set_global_assignment -name IP_FILE pll1.ip
+set_location_assignment PIN_AG31 -to l1
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to l1
+set_location_assignment PIN_AE19 -to o1_0
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to o1_0
+set_location_assignment PIN_AH16 -to o1_1
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to o1_1
+set_location_assignment PIN_BF23 -to r2
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to r2
+set_global_assignment -name IP_FILE pll2.ip
+set_location_assignment PIN_AT19 -to l2
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to l2
+set_location_assignment PIN_AT11 -to o2_0
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to o2_0
+set_location_assignment PIN_AE11 -to r3
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to r3
+set_global_assignment -name IP_FILE pll3.ip
+set_location_assignment PIN_AE6 -to l3
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to l3
+set_location_assignment PIN_AE14 -to o3_0
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to o3_0
+set_location_assignment PIN_AE8 -to o3_1
+set_instance_assignment -name IO_STANDARD "1.8-V LVCMOS" -to o3_1
