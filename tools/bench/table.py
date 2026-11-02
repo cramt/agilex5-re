@@ -58,8 +58,14 @@ for d in designs:
             res = quartus_res(r1['dir']); f = fmax(f'{out}/sta/q_{d}/fmax.txt')
             fs = f'{f[0]:.0f} (restricted {f[1]:.0f})' if f else '?'
         else:
-            res = a5pnr_res(r1['dir']); f = fmax(f'{out}/sta/x_{d}/fmax.txt')
-            fs = f'{f[0]:.0f} (restricted {f[1]:.0f}), model {res.get("model", "?")}' if f else f'model {res.get("model", "?")}'
+            res = a5pnr_res(r1['dir']); f = fmax(f'{out}/sta/x_{d}/fmax.txt'); note = ''
+            # x2: the export with the LABs Quartus' legalizer rejected left
+            # unlocked (README (z13)).
+            if not f and fmax(f'{out}/sta/x2_{d}/fmax.txt'):
+                f = fmax(f'{out}/sta/x2_{d}/fmax.txt')
+                n = len(open(f'{out}/runs/x2_{d}/unlocked.txt').read().split())
+                note = f', {n} LAB{"s" if n > 1 else ""} left to Quartus'
+            fs = f'{f[0]:.0f} (restricted {f[1]:.0f}){note}, model {res.get("model", "?")}' if f else f'model {res.get("model", "?")}'
         print(f'| {d} | {tool} | {w[0]:.0f} [{w[1]:.0f}-{w[2]:.0f}] | {c[0]:.0f} [{c[1]:.0f}-{c[2]:.0f}] | {ld:.0f} | {res.get("alms", "?")} | {res.get("labs", "?")} | {res.get("m20k", "?")} | {res.get("dsp", "?")} | {fs} |')
     if q and a:
         speed.append((d, med([float(r['wall_s']) for r in q])[0] / med([float(r['wall_s']) for r in a])[0], med([float(r['cpu_s']) for r in q])[0] / max(1e-9, med([float(r['cpu_s']) for r in a])[0])))
