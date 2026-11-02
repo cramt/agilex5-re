@@ -8,10 +8,10 @@
 //! analysed. No clock skew and no hold: it is the model's view, not
 //! sign-off.
 
-use std::collections::HashMap;
+use crate::det::HashMap;
 
 use crate::netlist::{Cell, Netlist};
-use crate::pack::{Alm, End, Logic, Packed, Slot, Src, ARITH_IN, LEIM_POS, LUT_IN};
+use crate::pack::{pin_letter, six_pins, Alm, End, HalfLut, Logic, Packed, Slot, Src, ARITH_IN, LEIM_PIN};
 
 /// M20K read data comes out 1.43 ns after the clock (mm's report_path).
 pub const M20K_TCO: f32 = 1.429;
@@ -49,6 +49,12 @@ pub struct Report {
     pub crit: Vec<f32>,
     /// Per connection: slack against the worst path.
     pub slack: Vec<f32>,
+    /// The worst path from a clocked start (flop, M20K) to a clocked capture
+    /// in the same domain: what quartus_sta's Fmax counts (README (z4)).
+    pub core_worst: f32,
+    /// Per capture point with a clocked arrival: its name and that arrival
+    /// plus setup.
+    pub core_ends: Vec<(String, f32)>,
 }
 
 fn ff_clock(nl: &Netlist, ff: usize) -> u32 {
@@ -61,7 +67,7 @@ fn ff_clock(nl: &Netlist, ff: usize) -> u32 {
 impl Sta {
     pub fn new(nl: &Netlist, p: &Packed, d: &HashMap<String, f32>) -> Sta {
         let get = |k: &str| d.get(k).copied().unwrap_or(0.0);
-        let mut ids: HashMap<(u8, usize, u32), u32> = HashMap::new();
+        let mut ids: HashMap<(u8, usize, u32), u32> = HashMap::default();
         let mut n = 0u32;
         let mut id = |k: (u8, usize, u32)| -> u32 {
             *ids.entry(k).or_insert_with(|| {
@@ -73,13 +79,13 @@ impl Sta {
         // 5 capture point.
         let mut edges = Vec::new();
         let mut conns = Vec::new();
-        let mut conn_of = HashMap::new();
+        let mut conn_of = HashMap::default();
         let mut starts = Vec::new();
         let mut ends = Vec::new();
-        let mut clock_of_start = HashMap::new();
-        let clocks: std::collections::HashSet<u32> = p.clocks.iter().copied().collect();
+        let mut clock_of_start = HashMap::default();
+        let clocks: crate::det::HashSet<u32> = p.clocks.iter().copied().collect();
         // Chain predecessor of each arithmetic half.
-        let mut prev_half: HashMap<(usize, u8), (usize, u8)> = HashMap::new();
+        let mut prev_half: HashMap<(usize, u8), (usize, u8)> = HashMap::default();
         for c in &p.chains {
             let mut last: Option<(usize, u8)> = None;
             for &a in c {
@@ -105,7 +111,7 @@ impl Sta {
                     Some(Slot::Ff { ff, .. }) => {
                         starts.push((src, get("tco"), ff_clock(nl, ff)));
                     }
-                    Some(Slot::Wire { src: Src::Lut }) => edges.push((id((2, alm, 0)), src, Arc::Fixed(0.0))),
+                    Some(Slot::Wire { src: Src::Lut }) => edges.push((id((2, alm, lut_key(&p.alms[alm], slot as usize))), src, Arc::Fixed(0.0))),
                     Some(Slot::Wire { src: Src::Sum }) => edges.push((id((3, alm, slot as u32 / 2)), src, Arc::Fixed(0.0))),
                     _ => {}
                 },
@@ -148,12 +154,21 @@ impl Sta {
         }
         for (a, alm) in p.alms.iter().enumerate() {
             match &alm.logic {
-                Logic::Lut { cell, pins } => {
-                    let Cell::Lut { ins, .. } = &nl.cells[*cell] else { unreachable!() };
-                    for k in 0..ins.len() {
-                        let pos = pins[k] as usize;
-                        let letter = b"abcdef"[pos] as char;
-                        edges.push((id((1, a, LUT_IN[pos] as u32)), id((2, a, 0)), Arc::Fixed(get(&format!("lut:data{letter}")))));
+                // LUT outputs: key (2, a, h) for half h's 5-LUT, (2, a, 0) for
+                // a 6-LUT; an arc from every pin the LUT reads.
+                Logic::Six { pos, .. } => {
+                    for &p in pos {
+                        for pin in six_pins(p) {
+                            edges.push((id((1, a, pin as u32)), id((2, a, 0)), Arc::Fixed(get(&format!("lut:data{}", pin_letter(pin))))));
+                        }
+                    }
+                }
+                Logic::Five { halves } => {
+                    for (h, half) in halves.iter().enumerate() {
+                        let Some(half) = half else { continue };
+                        for &pin in &half.pins {
+                            edges.push((id((1, a, pin as u32)), id((2, a, h as u32)), Arc::Fixed(get(&format!("lut:data{}", pin_letter(pin))))));
+                        }
                     }
                 }
                 Logic::Arith { halves } => {
@@ -176,14 +191,13 @@ impl Sta {
                         }
                     }
                 }
-                Logic::None => {}
             }
             for s in 0..4usize {
                 let Some(Slot::Ff { ff, src }) = alm.slots[s] else { continue };
                 let from = match src {
-                    Src::Lut => id((2, a, 0)),
+                    Src::Lut => id((2, a, lut_key(alm, s))),
                     Src::Sum => id((3, a, s as u32 / 2)),
-                    Src::Leim => id((1, a, LUT_IN[LEIM_POS[s / 2] as usize] as u32)),
+                    Src::Leim => id((1, a, LEIM_PIN[s / 2] as u32)),
                 };
                 let x = id((5, usize::MAX - a * 4 - s, 1));
                 edges.push((from, x, Arc::Fixed(get("reg_d"))));
@@ -242,6 +256,36 @@ impl Sta {
                 }
             }
         }
+        // The same without the ports' launches, for the register-to-register
+        // figure.
+        let mut core = vec![f32::NEG_INFINITY; self.n];
+        let mut core_clk = vec![u32::MAX; self.n];
+        for &(s, t, c) in &self.starts {
+            if c != u32::MAX {
+                core[s as usize] = t;
+                core_clk[s as usize] = c;
+            }
+        }
+        for &u in &order {
+            if core[u as usize] == f32::NEG_INFINITY {
+                continue;
+            }
+            for &e in &out[u as usize] {
+                let (_, v, a) = &self.edges[e];
+                let t = core[u as usize] + delay(a);
+                if t > core[*v as usize] {
+                    core[*v as usize] = t;
+                    core_clk[*v as usize] = core_clk[u as usize];
+                }
+            }
+        }
+        let core_ends: Vec<(String, f32)> = self
+            .ends
+            .iter()
+            .filter(|(x, _, c, _)| c.is_some_and(|c| core_clk[*x as usize] == c) && core[*x as usize] > f32::NEG_INFINITY)
+            .map(|(x, extra, _, what)| (what.clone(), core[*x as usize] + extra))
+            .collect();
+        let core_worst = core_ends.iter().map(|e| e.1).fold(0.0, f32::max);
         // Capture: paths launched by another clock than the capturing one
         // (ports launch on any) aren't timed.
         let mut worst = (0.0f32, String::new());
@@ -287,20 +331,34 @@ impl Sta {
             }
         }
         let _ = &self.clock_of_start;
-        Report { worst: worst.0, at: worst.1, crit, slack }
+        Report { worst: worst.0, at: worst.1, crit, slack, core_worst, core_ends }
     }
 }
 
-/// Unused ALM count by kind, for reports.
-pub fn alm_kinds(p: &Packed) -> (usize, usize, usize) {
-    let (mut lut, mut arith, mut ffonly) = (0, 0, 0);
-    for a in &p.alms {
-        match a.logic {
-            Logic::Lut { .. } => lut += 1,
-            Logic::Arith { .. } => arith += 1,
-            Logic::None => ffonly += 1,
-        }
+/// The STA key of the LUT output slot s reads: half s / 2's 5-LUT, or the
+/// 6-LUT.
+fn lut_key(alm: &Alm, s: usize) -> u32 {
+    match alm.logic {
+        Logic::Six { .. } => 0,
+        _ => s as u32 / 2,
     }
-    let _: Option<&Alm> = None;
-    (lut, arith, ffonly)
+}
+
+/// ALM counts by kind, for reports: 6-LUT, two 5-LUTs, one 5-LUT (with
+/// or without a pass-through half), arithmetic, flops only.
+pub fn alm_kinds(p: &Packed) -> [usize; 5] {
+    let mut n = [0; 5];
+    for a in &p.alms {
+        let k = match &a.logic {
+            Logic::Six { .. } => 0,
+            Logic::Five { halves } => match halves.iter().filter(|h| matches!(h, Some(x) if matches!(x.lut, HalfLut::Cell(_)))).count() {
+                2 => 1,
+                1 => 2,
+                _ => 4,
+            },
+            Logic::Arith { .. } => 3,
+        };
+        n[k] += 1;
+    }
+    n
 }

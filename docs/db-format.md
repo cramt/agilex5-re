@@ -107,7 +107,10 @@ lines `pin <spec>`, `edge <src> <dst>`, `attr <uid> <attribute> <setting>`,
 
 - `lut_mask` as stored (asm2's DIRECT value) is `rb{j>>5}lut[j & 31]` for
   bit j. A WYSIWYG `tennm_lcell_comb` `lut_mask` W relates to it as
-  `W[i] = ¬stored[i XOR 31]` (README (h)).
+  `W[i] = ¬stored[i XOR 31]` (README (h)), but that is Quartus' port
+  convention: what the silicon computes is `¬stored[32·¬F + idx]` through
+  `LUTOUT_6LUT` and `stored[32h + idx]` for half h's 5-LUT
+  (`LUTOUT_5LUT`), idx = {E, D, C, B, A} (README (z3)).
 - Bits that asm2 can't read (`is_bit_defined` false) and spare-row
   instances (`*_rsp*`) are not in the maps.
 - A named bit that touches more than one image bit, or an image bit owned

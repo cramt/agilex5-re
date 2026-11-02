@@ -1,19 +1,34 @@
-//! Packing cells into ALMs (README (w), (y)).
+//! Packing cells into ALMs (README (w), (y), (z3)).
 //!
-//! An ALM is its logic (one 6-LUT, or two halves of a carry chain) and four
-//! register slots. Slot s is register `xcw_la_le_reg{s / 2}/xreg{s % 2}` and
-//! drives LAB_RE pin 89 + 4k + s; it is a flop or a wire (WIRE_MODE, the
-//! combinational output). A slot's input is the 6-LUT, its half's sum, or
-//! (`reg_input` LEIM) the ALM's input pin A for half 0 and B for half 1 [obs,
-//! hx and mm's quartus_sta paths]. So a flop with no logic of its own shares
-//! an ALM with unrelated logic, as long as that logic leaves the pin free.
+//! An ALM has eight input pins, E0, D0, C0, A, B, C1, D1, E1 (offsets 0..7
+//! of its LAB_RE pins 8k..8k + 7), a 64-bit LUT mask and four register
+//! slots [obs, Quartus' images ar, hx, mm, ct, mq and fr, README (z3)]:
+//!
+//! - the low 32 mask bits are a 5-input LUT over (A, B, C0, D0, E0), the
+//!   high 32 one over (A, B, C1, D1, E1); each is a register slot input
+//!   `LUTOUT_5LUT` in its own half (half 0 low, half 1 high), so an ALM
+//!   holds two LUTs of up to five inputs that share A and B;
+//! - `LUTOUT_6LUT` (either half) is E1 ? high(A, B, C1, D1, E0) :
+//!   low(A, B, C0, D0, E0): a 6-LUT's C and D go to C1 and D1 as well,
+//!   wherever the upper half reads them;
+//! - in arithmetic mode half h's C and D are C0, D0 (h = 0) or C1, D1.
+//!
+//! Slot s is register `xcw_la_le_reg{s / 2}/xreg{s % 2}` and drives LAB_RE
+//! pin 89 + 4k + s; it is a flop or a wire (WIRE_MODE, the combinational
+//! output). A slot's input is its half's LUT, its half's sum, or (`reg_input`
+//! LEIM) pin A for half 0 and B for half 1 [obs, hx and mm's quartus_sta
+//! paths]. A flop with no logic of its own shares an ALM with unrelated
+//! logic through LEIM, or through a half with no LUT whose LUT passes one
+//! pin through (Quartus does both, ar and fr).
 //!
 //! Rules an ALM must follow (README (y)): the two slots of a half share a
 //! clock and an asynchronous clear (`regclk`, `regclr` are per half); every
-//! flop with an enable uses the ALM's one enable line (`regclk_ens`); each
-//! flop opts in or out of the enable and of the LAB's synchronous clear.
+//! flop with an enable uses the ALM's one enable line (`regclk_ens`); only
+//! the halves' xreg0 have `ce_sel` and `sclr_sel`, which act on the whole half,
+//! so a half's two flops share their enable and synchronous clear (README (z3)).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+use crate::det::{HashMap, HashSet};
 
 use anyhow::{bail, Result};
 
@@ -22,7 +37,8 @@ use crate::netlist::{Aclr, Cell, Ff, Netlist, Sig};
 /// A register slot's input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Src {
-    /// The ALM's 6-LUT (`LUTOUT_6LUT`).
+    /// The ALM's LUT: `LUTOUT_6LUT` for a 6-LUT, else the slot's half's
+    /// 5-LUT (`LUTOUT_5LUT`).
     Lut,
     /// The half's arithmetic sum (`ARITH_SUMOUT`).
     Sum,
@@ -36,11 +52,29 @@ pub enum Slot {
     Wire { src: Src },
 }
 
+/// What a half's 5-LUT computes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HalfLut {
+    /// A netlist LUT cell.
+    Cell(usize),
+    /// One net passed through, for flops with no logic of their own.
+    Pass(u32),
+}
+
+/// A 5-LUT in one half: its function and, per input, the ALM pin it is on.
+#[derive(Clone, Debug)]
+pub struct Half {
+    pub lut: HalfLut,
+    pub pins: Vec<u8>,
+}
+
 #[derive(Clone, Debug)]
 pub enum Logic {
-    None,
-    /// A LUT cell, its inputs on `pins` (positions in A..F, see LUT_IN).
-    Lut { cell: usize, pins: Vec<u8> },
+    /// A 6-input LUT (`LUTOUT_6LUT`): input k at position pos[k] in A..F.
+    Six { cell: usize, pos: Vec<u8> },
+    /// Up to two 5-input LUTs, one per half (`LUTOUT_5LUT`); none for a
+    /// flop-only ALM.
+    Five { halves: [Option<Half>; 2] },
     Arith { halves: [Option<usize>; 2] },
 }
 
@@ -60,12 +94,39 @@ pub enum Ctl {
     Aclr(Option<(u32, bool)>),
 }
 
-/// LUT input i (A..F) of an ALM is LAB_RE pin 8k + LUT_IN[i] (README (n)).
-pub const LUT_IN: [u8; 6] = [3, 4, 2, 1, 0, 7];
+pub const PIN_A: u8 = 3;
+pub const PIN_B: u8 = 4;
+/// 6-LUT position (A..F) → pin (README (n)); C and D also C1, D1.
+pub const SIX_PIN: [u8; 6] = [3, 4, 2, 1, 0, 7];
+pub const SIX_HI_PIN: [u8; 6] = [3, 4, 5, 6, 0, 7];
+/// A half's own pins C, D, E.
+pub const HALF_PINS: [[u8; 3]; 2] = [[2, 1, 0], [5, 6, 7]];
 /// An arithmetic half's C and D inputs (README (w)).
 pub const ARITH_IN: [[u8; 2]; 2] = [[2, 1], [5, 6]];
-/// Position (in A..F) of the pin a half's LEIM slots read: A, B.
-pub const LEIM_POS: [u8; 2] = [0, 1];
+/// The pin a half's LEIM slots read: A, B.
+pub const LEIM_PIN: [u8; 2] = [PIN_A, PIN_B];
+
+/// Index bit of an ALM pin in half h's 5-input function: A 0, B 1, C 2,
+/// D 3, E 4 (README (z3)).
+pub fn half_bit(h: usize, pin: u8) -> usize {
+    match pin {
+        PIN_A => 0,
+        PIN_B => 1,
+        p => 2 + HALF_PINS[h].iter().position(|&q| q == p).expect("a pin of the half"),
+    }
+}
+
+/// The delay model's LUT input class of a pin (README (u)).
+pub fn pin_letter(pin: u8) -> char {
+    match pin {
+        3 => 'a',
+        4 => 'b',
+        2 | 5 => 'c',
+        1 | 6 => 'd',
+        0 => 'e',
+        _ => 'f',
+    }
+}
 
 /// Where a net comes from or goes to, before placement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -113,7 +174,85 @@ pub struct Packed {
     pub plls: Vec<usize>,
 }
 
+/// A 6-LUT's mask over A..F (bit i: index i = {F, E, D, C, B, A}) with
+/// input k at position pos[k].
+pub fn widen(mask: u64, pos: &[u8]) -> u64 {
+    (0..64u64).fold(0u64, |acc, j| {
+        let idx = pos.iter().enumerate().fold(0usize, |x, (k, &p)| x | ((j >> p & 1) as usize) << k);
+        acc | (mask >> idx & 1) << j
+    })
+}
+
+/// Which pins a 6-LUT's input at position p is read on: C and D go to both
+/// halves' pins (C0 and C1, D0 and D1), as Quartus routes them in every
+/// 6-LUT of fr, so which half reads which is moot (README (z3)).
+pub fn six_pins(p: u8) -> Vec<u8> {
+    if p == 2 || p == 3 {
+        vec![SIX_PIN[p as usize], SIX_HI_PIN[p as usize]]
+    } else {
+        vec![SIX_PIN[p as usize]]
+    }
+}
+
+/// A half's 32-entry function over its pins (bit j: index j = {E, D, C,
+/// B, A} of half h), from a LUT whose input k is on pins[k].
+pub fn half_function(h: usize, mask: u64, pins: &[u8]) -> u32 {
+    (0..32u32).fold(0u32, |acc, j| {
+        let idx = pins.iter().enumerate().fold(0usize, |x, (k, &p)| x | ((j >> half_bit(h, p) & 1) as usize) << k);
+        acc | ((mask >> idx & 1) as u32) << j
+    })
+}
+
+/// Put two LUTs (input nets l0, l1) in the halves of one ALM: the nets on A
+/// and B are read by both, every other input goes on its half's C, D, E.
+/// A and B carry as few nets as possible (they are the LEIM pins). Returns
+/// each LUT's pins.
+pub fn fit_halves(l0: &[u32], l1: &[u32]) -> Option<(Vec<u8>, Vec<u8>)> {
+    if l0.len() > 5 || l1.len() > 5 {
+        return None;
+    }
+    let mut all: Vec<u32> = l0.to_vec();
+    for n in l1 {
+        if !all.contains(n) {
+            all.push(*n);
+        }
+    }
+    // Shared nets first: they save a pin on A or B.
+    all.sort_by_key(|n| !(l0.contains(n) && l1.contains(n)));
+    let mut cands: Vec<Vec<u32>> = vec![vec![]];
+    for i in 0..all.len() {
+        cands.push(vec![all[i]]);
+    }
+    for i in 0..all.len() {
+        for j in i + 1..all.len() {
+            cands.push(vec![all[i], all[j]]);
+        }
+    }
+    for s in cands {
+        let r0: Vec<u32> = l0.iter().copied().filter(|n| !s.contains(n)).collect();
+        let r1: Vec<u32> = l1.iter().copied().filter(|n| !s.contains(n)).collect();
+        if r0.len() > 3 || r1.len() > 3 {
+            continue;
+        }
+        let place = |l: &[u32], r: &[u32], h: usize| -> Vec<u8> {
+            l.iter()
+                .map(|n| match s.iter().position(|m| m == n) {
+                    Some(i) => [PIN_A, PIN_B][i],
+                    // E first: the fastest of a half's pins (README (u)).
+                    None => HALF_PINS[h][2 - r.iter().position(|m| m == n).unwrap()],
+                })
+                .collect()
+        };
+        return Some((place(l0, &r0, 0), place(l1, &r1, 1)));
+    }
+    None
+}
+
 impl Alm {
+    fn empty() -> Alm {
+        Alm { logic: Logic::Five { halves: [None, None] }, slots: [None; 4] }
+    }
+
     fn ff(&self, nl: &Netlist, s: usize) -> Option<Ff> {
         match self.slots[s] {
             Some(Slot::Ff { ff, .. }) => match &nl.cells[ff] {
@@ -148,119 +287,133 @@ impl Alm {
         if self.slots[s].is_some() {
             return false;
         }
-        // Only xreg0 has ce_sel and sclr_sel (bcm_types.json; Quartus puts
-        // no enabled or cleared flop in xreg1, ct).
-        if s % 2 == 1 && (f.ce.is_some() || f.sclr.is_some()) {
-            return false;
+        // xreg0's ce_sel and sclr_sel serve both registers of the half
+        // (README (z3)): the two flops of a half have the same enable and
+        // synchronous clear.
+        if let Some(o) = self.ff(nl, s ^ 1) {
+            if o.ce != f.ce || o.sclr != f.sclr {
+                return false;
+            }
         }
-        let h = s / 2;
+        // The two slots of a half share a clock and a clear.
         let aclr = |a: Option<Aclr>| a.map(|a| (a.net, a.active_low));
-        if let Some(o) = self.ff(nl, 2 * h + 1 - s % 2) {
+        if let Some(o) = self.ff(nl, s ^ 1) {
             if o.clk != f.clk || aclr(o.aclr) != aclr(f.aclr) {
                 return false;
             }
         }
-        // One enable line per ALM; and what the LAB has only one of (a clock,
-        // a synchronous clear, a routed clear: README (y)) can't differ
-        // within an ALM either.
-        for o in (0..4).filter_map(|t| self.ff(nl, t)) {
-            if f.ce.is_some_and(|c| o.ce.is_some_and(|d| d != c))
-                || o.clk != f.clk
-                || f.sclr.is_some_and(|c| o.sclr.is_some_and(|d| d != c))
-                || matches!((aclr(o.aclr), aclr(f.aclr)), (Some(a), Some(b)) if a != b)
-            {
-                return false;
-            }
-        }
-        true
+        (0..4).filter_map(|t| self.ff(nl, t)).all(|o| compatible(&o, f))
     }
 
-    /// The net on input position p (A..F), if the logic uses it.
-    fn lut_net(&self, nl: &Netlist, p: u8) -> Option<u32> {
+    /// The net on each pin, as far as the logic and LEIM flops decide it.
+    pub fn pin_nets(&self, nl: &Netlist) -> [Option<u32>; 8] {
+        let mut out = [None; 8];
         match &self.logic {
-            Logic::Lut { cell, pins } => {
-                let Cell::Lut { ins, .. } = &nl.cells[*cell] else { return None };
-                pins.iter().position(|&q| q == p).map(|i| ins[i])
+            Logic::Six { cell, pos } => {
+                let Cell::Lut { ins, .. } = &nl.cells[*cell] else { unreachable!() };
+                for (k, &p) in pos.iter().enumerate() {
+                    for q in six_pins(p) {
+                        out[q as usize] = Some(ins[k]);
+                    }
+                }
             }
-            _ => None,
+            Logic::Five { halves } => {
+                for half in halves.iter().flatten() {
+                    for (k, &p) in half.pins.iter().enumerate() {
+                        out[p as usize] = Some(match half.lut {
+                            HalfLut::Cell(c) => {
+                                let Cell::Lut { ins, .. } = &nl.cells[c] else { unreachable!() };
+                                ins[k]
+                            }
+                            HalfLut::Pass(n) => n,
+                        });
+                    }
+                }
+            }
+            Logic::Arith { halves } => {
+                for (h, half) in halves.iter().enumerate() {
+                    let Some(c) = half else { continue };
+                    let Cell::Arith { c, d, .. } = &nl.cells[*c] else { unreachable!() };
+                    for (k, n) in [c, d].into_iter().enumerate() {
+                        if let Some(n) = n {
+                            out[ARITH_IN[h][k] as usize] = Some(*n);
+                        }
+                    }
+                }
+            }
         }
+        for s in 0..4 {
+            if let Some(Slot::Ff { ff, src: Src::Leim }) = self.slots[s] {
+                if let Cell::Ff(Ff { d: Sig::Net(d), .. }) = nl.cells[ff] {
+                    out[LEIM_PIN[s / 2] as usize] = Some(d);
+                }
+            }
+        }
+        out
     }
 
-    /// The net a half's LEIM slots read, if one already does.
-    fn leim_net(&self, nl: &Netlist, h: usize) -> Option<u32> {
-        (2 * h..2 * h + 2).find_map(|s| match self.slots[s] {
-            Some(Slot::Ff { ff, src: Src::Leim }) => match &nl.cells[ff] {
-                Cell::Ff(Ff { d: Sig::Net(d), .. }) => Some(*d),
-                _ => None,
-            },
-            _ => None,
-        })
-    }
-
-    /// Put flop f, D = net d, into a LEIM slot if the pin rules allow:
-    /// the half's pin (A or B) must be free or already carry d, moving a
-    /// LUT input off it when the LUT has a spare position.
-    fn try_leim(&mut self, nl: &Netlist, ff: usize, d: u32) -> Option<usize> {
+    /// Put flop ff (D = net d) into a free slot: through LEIM when the
+    /// half's LEIM pin is free or already carries d, else through a half
+    /// with no LUT, which then passes d through (Quartus does both, ar).
+    fn try_flop(&mut self, nl: &Netlist, ff: usize, d: u32) -> Option<usize> {
         let Cell::Ff(f) = &nl.cells[ff] else { return None };
+        let pins = self.pin_nets(nl);
+        for s in 0..4 {
+            if self.fits(nl, s, f) && pins[LEIM_PIN[s / 2] as usize].is_none_or(|n| n == d) {
+                self.slots[s] = Some(Slot::Ff { ff, src: Src::Leim });
+                return Some(s);
+            }
+        }
         for s in 0..4 {
             let h = s / 2;
             if !self.fits(nl, s, f) {
                 continue;
             }
-            if self.leim_net(nl, h).is_some_and(|n| n != d) {
-                continue;
+            let Logic::Five { halves } = &mut self.logic else { return None };
+            match &halves[h] {
+                Some(Half { lut: HalfLut::Pass(n), .. }) if *n == d => {}
+                Some(_) => continue,
+                None => halves[h] = Some(Half { lut: HalfLut::Pass(d), pins: vec![HALF_PINS[h][2]] }),
             }
-            let p = LEIM_POS[h];
-            // The LUT's positions after making room, if it can.
-            let new_pins = match &self.logic {
-                Logic::None | Logic::Arith { .. } => None,
-                Logic::Lut { cell, pins } => {
-                    let Cell::Lut { ins, .. } = &nl.cells[*cell] else { unreachable!() };
-                    let mut pins = pins.clone();
-                    match pins.iter().position(|&q| q == p) {
-                        None => {}
-                        Some(i) if ins[i] == d => {}
-                        Some(i) => {
-                            // Swap with the input already carrying d, or move to a free position.
-                            if let Some(j) = ins.iter().position(|&n| n == d) {
-                                pins.swap(i, j);
-                            } else if let Some(free) = (0..6u8).rev().find(|q| !pins.contains(q) && !LEIM_POS.contains(q)) {
-                                pins[i] = free;
-                            } else {
-                                continue;
-                            }
-                        }
-                    }
-                    // The other half's LEIM pin must still carry its net.
-                    let other = LEIM_POS[1 - h];
-                    if let Some(n) = self.leim_net(nl, 1 - h) {
-                        if pins.iter().position(|&q| q == other).is_some_and(|i| ins[i] != n) {
-                            continue;
-                        }
-                    }
-                    Some(pins)
-                }
-            };
-            if let (Some(np), Logic::Lut { pins, .. }) = (new_pins, &mut self.logic) {
-                *pins = np;
-            }
-            self.slots[s] = Some(Slot::Ff { ff, src: Src::Leim });
+            self.slots[s] = Some(Slot::Ff { ff, src: Src::Lut });
             return Some(s);
         }
         None
     }
 }
 
-/// LUT inputs on positions, the fastest last (F, E, … in the delay model,
-/// README (u)) and A, B left for LEIM flops while there is room.
-fn lut_positions(n: usize) -> Vec<u8> {
+/// Can two flops share an ALM (in different halves): one clock, one enable
+/// line, and what the LAB has only one of (a synchronous clear, a routed
+/// clear: README (y))?
+fn compatible(o: &Ff, f: &Ff) -> bool {
+    let aclr = |a: Option<Aclr>| a.map(|a| (a.net, a.active_low));
+    !(f.ce.is_some_and(|c| o.ce.is_some_and(|d| d != c))
+        || o.clk != f.clk
+        || f.sclr.is_some_and(|c| o.sclr.is_some_and(|d| d != c))
+        || matches!((aclr(o.aclr), aclr(f.aclr)), (Some(a), Some(b)) if a != b))
+}
+
+/// LUT inputs on 6-LUT positions, the fastest first (F, E, … in the delay
+/// model, README (u)).
+fn six_positions(n: usize) -> Vec<u8> {
     const ORDER: [u8; 6] = [5, 4, 3, 2, 1, 0];
     ORDER[..n].to_vec()
 }
 
-pub fn pack(nl: &Netlist) -> Result<Packed> {
-    let mut driver: HashMap<u32, usize> = HashMap::new();
-    let mut loads: HashMap<u32, Vec<(usize, &'static str)>> = HashMap::new();
+/// How a5pnr packs LUTs (`--pack`): `pairs` puts two LUTs of up to five
+/// inputs into one ALM wherever their inputs fit, related ones first;
+/// `related` only pairs LUTs that share an input or a connection; `single`
+/// is phase 7's one LUT per ALM.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PackMode {
+    Pairs,
+    Related,
+    Single,
+}
+
+pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
+    let mut driver: HashMap<u32, usize> = HashMap::default();
+    let mut loads: HashMap<u32, Vec<(usize, &'static str)>> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
         let mut add = |s: Sig, port: &'static str| {
             if let Sig::Net(n) = s {
@@ -328,18 +481,21 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
     let comb_used = |net: u32, ff: Option<usize>| -> bool {
         loads.get(&net).is_some_and(|l| l.iter().any(|&(c, port)| !(Some(c) == ff && port == "d")))
     };
-    let mut placed: std::collections::HashSet<usize> = Default::default();
+    let mut placed: HashSet<usize> = Default::default();
     let mut alms: Vec<Alm> = Vec::new();
-    // The first flop on a net, when it can go with that net's driver.
-    let mut ffs_on: HashMap<u32, Vec<usize>> = HashMap::new();
+    let mut ffs_on: HashMap<u32, Vec<usize>> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
         if let Cell::Ff(Ff { d: Sig::Net(d), .. }) = c {
             ffs_on.entry(*d).or_default().push(i);
         }
     }
+    let ff_of = |i: usize| -> &Ff {
+        let Cell::Ff(f) = &nl.cells[i] else { unreachable!() };
+        f
+    };
     // Carry chains, from their heads.
-    let mut next: HashMap<usize, usize> = HashMap::new();
-    let mut has_prev = std::collections::HashSet::new();
+    let mut next: HashMap<usize, usize> = HashMap::default();
+    let mut has_prev = HashSet::default();
     for (i, c) in nl.cells.iter().enumerate() {
         if let Cell::Arith { co: Some(co), .. } = c {
             for &(l, port) in loads.get(co).map(|v| v.as_slice()).unwrap_or(&[]) {
@@ -376,7 +532,7 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
             for (h, &ci) in pair.iter().enumerate() {
                 let Cell::Arith { so: Some(so), .. } = nl.cells[ci] else { continue };
                 let ff = ffs_on.get(&so).and_then(|v| v.iter().copied().find(|f| !placed.contains(f)));
-                let ff = ff.filter(|&f| matches!(&nl.cells[f], Cell::Ff(x) if alm.fits(nl, 2 * h, x)));
+                let ff = ff.filter(|&f| alm.fits(nl, 2 * h, ff_of(f)));
                 if let Some(f) = ff {
                     alm.slots[2 * h] = Some(Slot::Ff { ff: f, src: Src::Sum });
                     placed.insert(f);
@@ -390,35 +546,163 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
         }
         chains.push(chain);
     }
+    // Each LUT's own flop: the first one on its output not taken yet.
+    let mut own_ff: HashMap<usize, usize> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
-        if let Cell::Lut { ins, out, .. } = c {
-            let mut alm = Alm { logic: Logic::Lut { cell: i, pins: lut_positions(ins.len()) }, slots: [None; 4] };
-            let ff = ffs_on.get(out).and_then(|v| v.iter().copied().find(|f| !placed.contains(f)));
-            if let Some(f) = ff {
-                alm.slots[0] = Some(Slot::Ff { ff: f, src: Src::Lut });
+        if let Cell::Lut { out, .. } = c {
+            if let Some(f) = ffs_on.get(out).and_then(|v| v.iter().copied().find(|f| !placed.contains(f))) {
+                own_ff.insert(i, f);
                 placed.insert(f);
             }
-            if comb_used(*out, ff) {
-                alm.slots[1] = Some(Slot::Wire { src: Src::Lut });
+        }
+    }
+    // A LUT's slots in half h: its flop in xreg0 (which has the enable and
+    // clear selects), its combinational output in xreg1.
+    let lut_slots = |alm: &mut Alm, i: usize, out: u32, h: usize| {
+        let ff = own_ff.get(&i).copied();
+        if let Some(f) = ff {
+            alm.slots[2 * h] = Some(Slot::Ff { ff: f, src: Src::Lut });
+        }
+        if comb_used(out, ff) {
+            alm.slots[2 * h + 1] = Some(Slot::Wire { src: Src::Lut });
+        }
+    };
+    let ins_of = |i: usize| -> &[u32] {
+        let Cell::Lut { ins, .. } = &nl.cells[i] else { unreachable!() };
+        ins
+    };
+    let out_of = |i: usize| -> u32 {
+        let Cell::Lut { out, .. } = &nl.cells[i] else { unreachable!() };
+        *out
+    };
+    let small: Vec<usize> = nl
+        .cells
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| matches!(c, Cell::Lut { ins, .. } if ins.len() <= 5 || mode == PackMode::Single))
+        .map(|(i, _)| i)
+        .collect();
+    for (i, c) in nl.cells.iter().enumerate() {
+        if let Cell::Lut { ins, out, .. } = c {
+            if ins.len() == 6 || mode == PackMode::Single {
+                let mut alm = Alm { logic: Logic::Six { cell: i, pos: six_positions(ins.len()) }, slots: [None; 4] };
+                lut_slots(&mut alm, i, *out, 0);
+                alms.push(alm);
+            }
+        }
+    }
+    if mode != PackMode::Single {
+        // Pairs: each LUT (most inputs first) with the unpaired LUT that
+        // shares the most inputs or a connection with it, else (`pairs`)
+        // with any whose inputs still fit, the largest that does.
+        let mut order = small.clone();
+        order.sort_by_key(|&i| std::cmp::Reverse(ins_of(i).len()));
+        let mut paired: HashSet<usize> = HashSet::default();
+        let mut readers: HashMap<u32, Vec<usize>> = HashMap::default();
+        for &i in &small {
+            for &n in ins_of(i) {
+                readers.entry(n).or_default().push(i);
+            }
+        }
+        let mut by_size: [Vec<usize>; 6] = Default::default();
+        for &i in order.iter().rev() {
+            by_size[ins_of(i).len()].push(i);
+        }
+        let ffs_ok = |a: usize, b: usize| match (own_ff.get(&a), own_ff.get(&b)) {
+            (Some(&x), Some(&y)) => compatible(ff_of(x), ff_of(y)),
+            _ => true,
+        };
+        for &u in &order {
+            if paired.contains(&u) {
+                continue;
+            }
+            paired.insert(u);
+            let iu = ins_of(u);
+            let mut score: HashMap<usize, i32> = HashMap::default();
+            for n in iu {
+                for &v in readers.get(n).map(|v| v.as_slice()).unwrap_or(&[]).iter().take(64) {
+                    *score.entry(v).or_default() += 4;
+                }
+            }
+            for &(l, _) in loads.get(&out_of(u)).map(|v| v.as_slice()).unwrap_or(&[]).iter().take(64) {
+                *score.entry(l).or_default() += 2;
+            }
+            for n in iu {
+                if let Some(&d) = driver.get(n) {
+                    *score.entry(d).or_default() += 2;
+                }
+            }
+            let mut cands: Vec<(i32, usize)> = score
+                .into_iter()
+                .filter(|(v, _)| *v != u && !paired.contains(v) && small.binary_search(v).is_ok())
+                .map(|(v, s)| (s, v))
+                .collect();
+            cands.sort_by_key(|&(s, v)| (std::cmp::Reverse(s), v));
+            let mut pick = None;
+            for &(_, v) in &cands {
+                if !ffs_ok(u, v) {
+                    continue;
+                }
+                if let Some(p) = fit_halves(iu, ins_of(v)) {
+                    pick = Some((v, p));
+                    break;
+                }
+            }
+            if pick.is_none() && mode == PackMode::Pairs {
+                'size: for k in (0..=(8 - iu.len()).min(5)).rev() {
+                    while let Some(&v) = by_size[k].last() {
+                        if paired.contains(&v) {
+                            by_size[k].pop();
+                            continue;
+                        }
+                        if ffs_ok(u, v) {
+                            if let Some(p) = fit_halves(iu, ins_of(v)) {
+                                pick = Some((v, p));
+                                break 'size;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            let mut alm = Alm::empty();
+            match pick {
+                Some((v, (p0, p1))) => {
+                    paired.insert(v);
+                    alm.logic = Logic::Five { halves: [Some(Half { lut: HalfLut::Cell(u), pins: p0 }), Some(Half { lut: HalfLut::Cell(v), pins: p1 })] };
+                    lut_slots(&mut alm, u, out_of(u), 0);
+                    lut_slots(&mut alm, v, out_of(v), 1);
+                }
+                None => {
+                    let (p0, _) = fit_halves(iu, &[]).expect("a LUT of five inputs fits a half");
+                    alm.logic = Logic::Five { halves: [Some(Half { lut: HalfLut::Cell(u), pins: p0 }), None] };
+                    lut_slots(&mut alm, u, out_of(u), 0);
+                }
             }
             alms.push(alm);
         }
     }
-    // Every other flop reads its D on a LEIM slot: first in an ALM whose
-    // logic it is connected to (its D's driver or one of its Q's loads),
-    // then in any ALM with room, then in an ALM of its own.
-    let mut alm_of_cell: HashMap<usize, usize> = HashMap::new();
+    // Every other flop: first in an ALM whose logic it is connected to (its
+    // D's driver or one of its Q's loads), then in any ALM with room, then
+    // in an ALM of its own.
+    let mut alm_of_cell: HashMap<usize, usize> = HashMap::default();
     for (a, alm) in alms.iter().enumerate() {
         match &alm.logic {
-            Logic::Lut { cell, .. } => {
+            Logic::Six { cell, .. } => {
                 alm_of_cell.insert(*cell, a);
+            }
+            Logic::Five { halves } => {
+                for half in halves.iter().flatten() {
+                    if let HalfLut::Cell(c) = half.lut {
+                        alm_of_cell.insert(c, a);
+                    }
+                }
             }
             Logic::Arith { halves } => {
                 for c in halves.iter().flatten() {
                     alm_of_cell.insert(*c, a);
                 }
             }
-            Logic::None => {}
         }
     }
     let mut open: Vec<usize> = (0..alms.len()).collect();
@@ -426,33 +710,39 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
     // over logic ALMs, each enable would cost every LAB it touches one of
     // its two enable lines (a register file's 31 enables left the CPU at
     // four ALMs per LAB).
-    let mut by_ce: HashMap<u32, Vec<usize>> = HashMap::new();
+    let mut by_ce: HashMap<u32, Vec<usize>> = HashMap::default();
+    let mut rest = Vec::new();
     for (i, c) in nl.cells.iter().enumerate() {
         let Cell::Ff(f) = c else { continue };
         if placed.contains(&i) {
             continue;
         }
         let Sig::Net(d) = f.d else { bail!("flop with a constant D") };
-        if let Some(ce) = f.ce {
-            let list = by_ce.entry(ce).or_default();
-            let mut done = false;
-            for &a in list.iter().rev().take(4) {
-                if alms[a].try_leim(nl, i, d).is_some() {
-                    alm_of_cell.insert(i, a);
-                    done = true;
-                    break;
-                }
-            }
-            if !done {
-                let mut alm = Alm { logic: Logic::None, slots: [None; 4] };
-                alm.try_leim(nl, i, d).expect("an empty ALM takes any flop");
-                alm_of_cell.insert(i, alms.len());
-                list.push(alms.len());
-                alms.push(alm);
-            }
-            placed.insert(i);
+        let Some(ce) = f.ce else {
+            rest.push((i, d));
             continue;
+        };
+        let list = by_ce.entry(ce).or_default();
+        let mut done = false;
+        for &a in list.iter().rev().take(4) {
+            if alms[a].try_flop(nl, i, d).is_some() {
+                alm_of_cell.insert(i, a);
+                done = true;
+                break;
+            }
         }
+        if !done {
+            let mut alm = Alm::empty();
+            alm.try_flop(nl, i, d).expect("an empty ALM takes any flop");
+            alm_of_cell.insert(i, alms.len());
+            list.push(alms.len());
+            open.push(alms.len());
+            alms.push(alm);
+        }
+        placed.insert(i);
+    }
+    for (i, d) in rest {
+        let f = ff_of(i);
         let mut near: Vec<usize> = Vec::new();
         if let Some(&dc) = driver.get(&d) {
             near.extend(alm_of_cell.get(&dc));
@@ -462,7 +752,7 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
         }
         let mut done = false;
         for &a in &near {
-            if alms[a].try_leim(nl, i, d).is_some() {
+            if alms[a].try_flop(nl, i, d).is_some() {
                 alm_of_cell.insert(i, a);
                 done = true;
                 break;
@@ -478,7 +768,7 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
                     open.swap_remove(k);
                     continue;
                 }
-                if alms[a].try_leim(nl, i, d).is_some() {
+                if alms[a].try_flop(nl, i, d).is_some() {
                     alm_of_cell.insert(i, a);
                     done = true;
                     break;
@@ -489,8 +779,8 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
             }
         }
         if !done {
-            let mut alm = Alm { logic: Logic::None, slots: [None; 4] };
-            alm.try_leim(nl, i, d).expect("an empty ALM takes any flop");
+            let mut alm = Alm::empty();
+            alm.try_flop(nl, i, d).expect("an empty ALM takes any flop");
             alm_of_cell.insert(i, alms.len());
             open.push(alms.len());
             alms.push(alm);
@@ -502,39 +792,9 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
     let none = End::Port(usize::MAX);
     for (a, alm) in alms.iter().enumerate() {
         let mut sink = |n: u32, e: End| nets.entry(n).or_insert((none, vec![])).1.push(e);
-        match &alm.logic {
-            Logic::Lut { cell, pins } => {
-                let Cell::Lut { ins, .. } = &nl.cells[*cell] else { unreachable!() };
-                for (k, n) in ins.iter().enumerate() {
-                    sink(*n, End::In { alm: a, pin: LUT_IN[pins[k] as usize] });
-                }
-            }
-            Logic::Arith { halves } => {
-                for (h, half) in halves.iter().enumerate() {
-                    let Some(c) = half else { continue };
-                    let Cell::Arith { c, d, .. } = &nl.cells[*c] else { unreachable!() };
-                    for (k, n) in [c, d].into_iter().enumerate() {
-                        if let Some(n) = n {
-                            sink(*n, End::In { alm: a, pin: ARITH_IN[h][k] });
-                        }
-                    }
-                }
-            }
-            Logic::None => {}
-        }
-        for h in 0..2 {
-            let mut leim = None;
-            for s in 2 * h..2 * h + 2 {
-                if let Some(Slot::Ff { ff, src: Src::Leim }) = alm.slots[s] {
-                    let Cell::Ff(Ff { d: Sig::Net(d), .. }) = nl.cells[ff] else { unreachable!() };
-                    leim = Some(d);
-                }
-            }
-            // A LUT input already on the pin brings the net there too.
-            if let Some(d) = leim {
-                if alm.lut_net(nl, LEIM_POS[h]) != Some(d) {
-                    sink(d, End::In { alm: a, pin: LUT_IN[LEIM_POS[h] as usize] });
-                }
+        for (p, n) in alm.pin_nets(nl).iter().enumerate() {
+            if let Some(n) = n {
+                sink(*n, End::In { alm: a, pin: p as u8 });
             }
         }
         for ctl in alm.ctls(nl) {
@@ -548,15 +808,15 @@ pub fn pack(nl: &Netlist) -> Result<Packed> {
         for s in 0..4 {
             let src = End::Out { alm: a, slot: s as u8 };
             let n = match alm.slots[s] {
-                Some(Slot::Ff { ff, .. }) => {
-                    let Cell::Ff(f) = &nl.cells[ff] else { unreachable!() };
-                    f.q
-                }
-                Some(Slot::Wire { src: Src::Lut }) => {
-                    let Logic::Lut { cell, .. } = &alm.logic else { unreachable!() };
-                    let Cell::Lut { out, .. } = &nl.cells[*cell] else { unreachable!() };
-                    *out
-                }
+                Some(Slot::Ff { ff, .. }) => ff_of(ff).q,
+                Some(Slot::Wire { src: Src::Lut }) => match &alm.logic {
+                    Logic::Six { cell, .. } => out_of(*cell),
+                    Logic::Five { halves } => match halves[s / 2].as_ref().map(|x| x.lut) {
+                        Some(HalfLut::Cell(c)) => out_of(c),
+                        _ => unreachable!("a wire slot on a half with no LUT cell"),
+                    },
+                    Logic::Arith { .. } => unreachable!(),
+                },
                 Some(Slot::Wire { src: Src::Sum }) => {
                     let Logic::Arith { halves } = &alm.logic else { unreachable!() };
                     let Cell::Arith { so: Some(so), .. } = &nl.cells[halves[s / 2].unwrap()] else { unreachable!() };

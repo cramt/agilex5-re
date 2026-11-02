@@ -6,7 +6,8 @@
 //! against congestion by the connection's criticality, as VPR does.
 
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::BinaryHeap;
+use crate::det::HashMap;
 
 use anyhow::{bail, Result};
 
@@ -175,13 +176,28 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
         if over.is_empty() {
             return Ok(Routed { trees, iterations: iter });
         }
+        if iter == max_iter {
+            for &k in &over {
+                let users: Vec<&str> = nets
+                    .iter()
+                    .enumerate()
+                    .filter(|(ni, net)| net.source == k as u32 || trees[*ni].iter().any(|&(_, d)| d == k as u32))
+                    .map(|(_, net)| net.name.as_str())
+                    .collect();
+                let sink = nets.iter().filter(|net| net.sinks.contains(&(k as u32))).count();
+                eprintln!("route: overused {} ({sink} nets end there): {}", g.name(k as u32), users.join(", "));
+            }
+        }
         for &k in &over {
             hist[k] += 0.05 * (occ[k] - 1) as f32;
         }
-        pres *= 1.8;
+        // Capped (as VPR caps pres_fac): grown 1.8x every iteration it
+        // reached 1e20 by iteration 80, every path cost the same and the
+        // CPU's last two nets on one node never parted (specimens/p8/cpu/r2).
+        pres = (pres * 1.8).min(1000.0);
         // Next time only the nets on an overused node (VPR's incremental
         // rerouting).
-        let hot: std::collections::HashSet<u32> = over.iter().map(|&k| k as u32).collect();
+        let hot: crate::det::HashSet<u32> = over.iter().map(|&k| k as u32).collect();
         for (ni, net) in nets.iter().enumerate() {
             reroute[ni] = hot.contains(&net.source) || trees[ni].iter().any(|&(_, d)| hot.contains(&d));
         }
@@ -240,7 +256,7 @@ pub fn delay_table(g: &Graph, base_by_type: &[f32], labs: &[crate::place::Lab]) 
     // A LAB near the device's middle, away from the I/O columns.
     let (cx, cy) = (labs.iter().map(|l| l.x).max().unwrap() / 2, labs.iter().map(|l| l.y).max().unwrap() / 2);
     let src_lab = labs.iter().min_by_key(|l| (l.x as i64 - cx as i64).abs() + (l.y as i64 - cy as i64).abs()).unwrap();
-    let mut dist: HashMap<u32, f32> = HashMap::new();
+    let mut dist: HashMap<u32, f32> = HashMap::default();
     let mut heap = BinaryHeap::new();
     for pin in 89..129 {
         if let Some(n) = g.node(&format!("LAB_RE:X{}Y{}Z0I{pin}", src_lab.x, src_lab.y)) {
@@ -249,7 +265,7 @@ pub fn delay_table(g: &Graph, base_by_type: &[f32], labs: &[crate::place::Lab]) 
         }
     }
     // Per destination LAB and input pin, the best delay.
-    let mut best: HashMap<(u8, u8, u32), f32> = HashMap::new();
+    let mut best: HashMap<(u8, u8, u32), f32> = HashMap::default();
     while let Some((Reverse(db), m)) = heap.pop() {
         let dm = f32::from_bits(db);
         if dist.get(&m).is_some_and(|&d| d < dm) {

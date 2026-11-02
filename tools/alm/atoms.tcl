@@ -13,7 +13,9 @@ foreach_in_collection a [get_atom_nodes] {
     set loc ?
     catch {set loc [get_atom_node_info -node $a -key LOCATION]}
     puts $out "A $name $type $loc"
-    foreach k {LUT_MASK EXTENDED_LUT SHARED_ARITH LUT_INPUT_PERMUTATION ATOM_TYPE WYSIWYG_TYPE} {
+    # The LUT mask key is LUTMASK_LUT_MASK (libtss_astr.so's key names: a type
+    # prefix, then the name); LUT_MASK isn't one.
+    foreach k {LUTMASK_LUT_MASK EXTENDED_LUT SHARED_ARITH LUT_INPUT_PERMUTATION ATOM_TYPE WYSIWYG_TYPE} {
         if {![catch {get_atom_node_info -node $a -key $k} v]} { puts $out "K $k $v" }
     }
     foreach p [get_atom_iports -node $a] {

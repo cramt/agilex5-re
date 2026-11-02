@@ -64,11 +64,11 @@ Verification kinds, strongest first:
 
 | feature | modelled as | verified |
 |---|---|---|
-| LUTs | `lut_mask` DIRECT; WYSIWYG mask W relates as `W[i] = ¬stored[i XOR 31]`; LUT input A–F of ALM k is `LAB_RE` pin 8k + 3, 4, 2, 1, 0, 7 | rebuilt (ar, mm, hx), held out (hx), readback; fitter ECO runs (h) |
-| registers | 4 per ALM (`xcw_la_le_reg{0,1}/xreg{0,1}`); `reg_input` LUTOUT_6LUT/5LUT, ARITH_SUMOUT or LEIM (packed with unrelated logic); `register_comb` DFF_LATCH, REGIN, WIRE_MODE (bypass) | rebuilt, held out, readback |
-| register controls | two LAB clocks (`regclk`), two clears (`regclr`), enables (`ce_sel`), synchronous clear (`sclr_sel`), inverted clears through the routing tile's `iss/xclrb_rpi` | rebuilt (ar: async + sync clear, enable, load; hx: up/down, enable, async preset value, sync clear), held out |
+| LUTs | `lut_mask` DIRECT. Pins E0, D0, C0, A, B, C1, D1, E1 are `LAB_RE` 8k + 0..7. Half h's 5-LUT (`LUTOUT_5LUT`) is stored[32h + {E_h, D_h, C_h, B, A}]; the 6-LUT (`LUTOUT_6LUT`) is ¬stored[32·¬F + {E, D, C, B, A}] with E = E0, F = E1, C and D on both halves' pins. Direct outputs `LAB_RE` 129 + k / 139 + k − 5 (half 1's 5-LUT) and 5 above (6-LUT) | **Quartus' own fr image simulated against its RTL** (z3); rebuilt (ar, mm, hx); phases 2–7 used the WYSIWYG relation W[i] = ¬stored[i XOR 31], which is not what the silicon computes |
+| registers | 4 per ALM (`xcw_la_le_reg{0,1}/xreg{0,1}`); `reg_input` LUTOUT_6LUT/5LUT, ARITH_SUMOUT or LEIM (packed with unrelated logic); `register_comb` DFF_LATCH, REGIN, WIRE_MODE (bypass); `xreg0`'s `ce_sel` and `sclr_sel` gate both registers of the half | rebuilt, held out, readback; Quartus' fr and cql (z3) |
+| register controls | two LAB clocks (`regclk`; clock 1 is LAB_RE 84, which Quartus uses for MLAB RAM output registers), two clears (`regclr`), enables (`ce_sel`), synchronous clear (`sclr_sel`), inverted clears through the routing tile's `iss/xclrb_rpi` | rebuilt (ar: async + sync clear, enable, load; hx: up/down, enable, async preset value, sync clear), held out |
 | carry chains, shared arithmetic | `adder_mode` ENABLE_ADDER, `adder_or_packed_mode`, `reg_input` ARITH_SUMOUT | rebuilt (32-bit accumulator, ternary and 4-input adders), held out |
-| MLAB RAM | `ram_mode` LUTRAM_32DEEP on the MLAB's `din`, `csel` and `lram_sigctrl` | rebuilt (32 x 16, 16 x 8), held out |
+| MLAB RAM | RAM is the MLAB's idle mode (a logic MLAB sets `lutram_mode_vcchg_power_saving` and `ram_mode` LUT_MODE); one bit per half-ALM in its 32 mask bits; read address {E, D1, C1, B, A}, data out through LUTOUT_5LUT; write address LAB_RE 156, 157, 160, 161, 155 (bits 0–4), write enable 80 (CLKEN0), data C0 (half 0) and D0 (half 1) | rebuilt (32 x 16, 16 x 8), held out; **Quartus' ml image simulated against its RTL** (z5) |
 | M20K | CUSTOM settings for modes, widths, ports and registers (42 in mm) plus contents: `m20k_eram_add<k>` = `eram_array_r<k/2>[40(k mod 2) + 39 .. ]` in the sector's RAM part | rebuilt (512 x 32 SDP, 1024 x 16 ROM, 2048 x 10 TDP with init), held out |
 | DSP | `dsp_mode` (`rmode[4:0]`, a 5-bit code), register and clock selects, signs, `dsp_proginv_{l,h}` | rebuilt (18x18, 27x27 MAC, 9x9 + 18x19), held out |
 | general routing | graph edges → mux settings (`MUXINk_` per `muxin[k]`), plus `flop_mode = FAST_WIRE` on every used mux with a hyper-register except LEIMs into LAB control inputs (I80+) | rebuilt (every design), routes of rt0 and fz0 (k), held out |
@@ -115,13 +115,16 @@ Verification kinds, strongest first:
   through the LAB's 20 halves and on into the LAB one row down (README (w)).
 - **Arithmetic LUT masks** are stored as written: half h's p (propagate) in
   bits 32h..32h + 15 and g (generate) in 32h + 16..32h + 31, with
-  sum = cin ^ p, cout = p ? cin : g; only the 6-LUT is stored inverted.
+  sum = cin ^ p, cout = p ? cin : g. A 5-LUT is stored as written too;
+  the 6-LUT output is inverted, with its half select inverted (README (z3)).
 - **Never route over** an edge whose mux setting is the mux's idle state
   (`usable` class 4), and don't enter a non-LAB node with several
   pass-through fanins over one of them: neither shows in an image, and
   what such a node passes is unknown (README (y)).
 - **LABs**: one clock, two enables (one per ALM), one synchronous clear, one
-  routed asynchronous clear; a chain starts at ALM 0 or 5.
+  routed asynchronous clear; a chain starts at ALM 0 (Quartus' fitter
+  rejects one from ALM 5 that runs on, README (z4)). A half's two flops
+  share their enable and synchronous clear (z3).
 - **Group 1 / spare row**: never write the spare row (`_rsp5_` instances)
   or the redundancy tiles; the image has no place for them (s).
 
@@ -140,11 +143,14 @@ Verification kinds, strongest first:
 - Timing: the delay model is per node type, fitted to Quartus' paths
   (README (u)); Quartus' own RC model (`DYGR_ROUTE_TIMING_INFO`, the
   `timing_routing_delays_*` databases) is not decoded. a5pnr's own STA
-  uses the model (README (z)); quartus_sta has not seen an a5pnr result.
+  uses the model (README (z)). quartus_sta times an a5pnr placement on
+  Quartus' routes (`a5pnr --quartus`, README (z4)); Quartus Pro takes no
+  routing constraints, so a5pnr's own routes are timed by the model only.
 - I/O registers from a5pnr (their clock enters through the HIOL's
   `GLOBAL_LOCAL_SEL` I5 and RPI I29; Quartus inverts their data RPIs, why
-  is [unk]), MLAB RAM from yosys, LAB clock 1, the second asynchronous
-  clear line, PLL outputs other than V16's output 0 (README (y)).
+  is [unk]), MLAB RAM from yosys and a5pnr (the readback models it), the
+  second asynchronous clear line, PLL outputs other than V16's output 0
+  (README (y), (z5)).
 - Hyper-registers used as registers (`flop_mode` FLOP), clock gating in the
   clock network, LAB `lut_mode`/`latch_mode` (no bits in asm2).
 - Any check on silicon: the DE25-Nano was off for all of phase 5; see the

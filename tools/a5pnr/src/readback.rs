@@ -7,12 +7,13 @@
 //! (README (t)). What the image does that this model doesn't know is an
 //! error, not a guess.
 
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
+use crate::det::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use anyhow::{bail, Context, Result};
 
-use crate::graph::{Graph, PASS};
+use crate::graph::{Graph, NO, PASS};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 enum Src {
@@ -30,8 +31,8 @@ const M20K_KNOWN: [&str; 2] = ["xdigicore/m20k_a_outreg_byp", "xdigicore/m20k_b_
 
 pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str) -> Result<()> {
     let text = std::fs::read_to_string(extract).with_context(|| format!("reading {extract}"))?;
-    let mut active: HashSet<(u32, u32)> = HashSet::new();
-    let mut attr: HashMap<(String, String), String> = HashMap::new();
+    let mut active: HashSet<(u32, u32)> = HashSet::default();
+    let mut attr: HashMap<(String, String), String> = HashMap::default();
     let mut balls: Vec<(String, String)> = Vec::new();
     let mut plls: std::collections::BTreeSet<String> = Default::default();
     for l in text.lines() {
@@ -57,7 +58,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     }
     // Routing-tile attributes: only the clear inverters are modelled. An
     // inverted clear's last hop (RPII → RPI) conducts, inverted.
-    let mut inverted_lab: HashSet<(u32, u32)> = HashSet::new();
+    let mut inverted_lab: HashSet<(u32, u32)> = HashSet::default();
     for ((u, a), v) in &attr {
         let Some(rest) = u.strip_prefix("cw_rt_lab_base_r") else {
             if u.starts_with("cw_rt_") || u.starts_with("hvio") || u.starts_with("pio") {
@@ -77,15 +78,15 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         }
     }
     // Port names by ball (pins.txt) and boundary nodes (io/pin_nodes.tsv).
-    let mut port_of: HashMap<String, String> = HashMap::new();
+    let mut port_of: HashMap<String, String> = HashMap::default();
     for l in std::fs::read_to_string(pins)?.lines() {
         let f: Vec<&str> = l.split_whitespace().collect();
         if f.len() >= 2 && !f[0].starts_with('#') {
             port_of.insert(f[1].to_owned(), f[0].to_owned());
         }
     }
-    let mut node_of: HashMap<(String, String), u32> = HashMap::new();
-    let mut io96: HashMap<String, bool> = HashMap::new();
+    let mut node_of: HashMap<(String, String), u32> = HashMap::default();
+    let mut io96: HashMap<String, bool> = HashMap::default();
     for l in std::fs::read_to_string(format!("{db}/io/pin_nodes.tsv"))?.lines() {
         let f: Vec<&str> = l.split('\t').collect();
         if f.len() == 5 && !l.starts_with('#') && f[0] != "ball" {
@@ -110,7 +111,9 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         if role == "out" { outputs.push((name, n)) } else { inputs.push((name, n)) }
     }
     // Used LABs and M20Ks.
-    let mut labs: BTreeMap<(u32, u32), ()> = BTreeMap::new();
+    // A LAB or an MLAB used as logic (Quartus does, fr): the same ALMs on
+    // the same LAB_RE pins, `xcw_ml_le_*` for `xcw_la_le_*` [obs].
+    let mut labs: BTreeMap<(u32, u32), &str> = BTreeMap::new();
     let mut m20ks: BTreeMap<(u32, u32), ()> = BTreeMap::new();
     for (u, _) in attr.keys() {
         if let Some(rest) = u.strip_prefix("cw_mm_m20k_r") {
@@ -118,7 +121,10 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             m20ks.insert((x.parse()?, y.parse()?), ());
         } else if let Some(rest) = u.strip_prefix("cw_la_lab_r") {
             let (y, x) = rest.split_once("_c").context("uid")?;
-            labs.insert((x.parse()?, y.parse()?), ());
+            labs.insert((x.parse()?, y.parse()?), "la");
+        } else if let Some(rest) = u.strip_prefix("cw_ml_mlab_r") {
+            let (y, x) = rest.split_once("_c").context("uid")?;
+            labs.insert((x.parse()?, y.parse()?), "ml");
         } else if !u.starts_with("cw_rt_lab_base") {
             bail!("{u}: block type outside the model");
         }
@@ -127,7 +133,9 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     // graph's pass-through/hardwired ones.
     let mut sources: Vec<(Src, u32)> = Vec::new();
     for &(x, y) in labs.keys() {
-        for pin in 89..=128 {
+        // Register slots (89..128) and the ALMs' direct LUT outputs
+        // (129..148, README (z3)).
+        for pin in 89..=148 {
             if let Some(n) = g.node(&format!("LAB_RE:X{x}Y{y}Z0I{pin}")) {
                 sources.push((Src::Lab(x, y, pin), n));
             }
@@ -153,15 +161,17 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             }
         }
     }
-    let mut reach: HashMap<u32, Src> = HashMap::new();
+    let single = g.single_fanin();
+    let follow = |e: usize, m: u32, d: u32| g.class[e] == PASS || (g.class[e] == NO && single[d as usize]) || active.contains(&(m, d));
+    let mut reach: HashMap<u32, Src> = HashMap::default();
     let mut conflict: Vec<u32> = Vec::new();
     for &(s, n0) in &sources {
         let mut q = VecDeque::from([n0]);
-        let mut seen = HashSet::from([n0]);
+        let mut seen = HashSet::from_iter([n0]);
         while let Some(m) = q.pop_front() {
             for e in g.fanout(m) {
                 let d = g.dst[e];
-                if (g.class[e] == PASS || active.contains(&(m, d))) && seen.insert(d) {
+                if follow(e, m, d) && seen.insert(d) {
                     if let Some(o) = reach.insert(d, s) {
                         if o != s {
                             conflict.push(d);
@@ -175,7 +185,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     // A node two sources reach over pass-through edges (some clock-network
     // nodes have several, README (y)) is unknown, and so is everything it
     // reaches; that only matters if a used pin is among them.
-    let mut unknown: HashSet<u32> = HashSet::new();
+    let mut unknown: HashSet<u32> = HashSet::default();
     let mut q: VecDeque<u32> = conflict.iter().copied().collect();
     while let Some(m) = q.pop_front() {
         if !unknown.insert(m) {
@@ -183,7 +193,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         }
         for e in g.fanout(m) {
             let d = g.dst[e];
-            if g.class[e] == PASS || active.contains(&(m, d)) {
+            if follow(e, m, d) {
                 q.push_back(d);
             }
         }
@@ -214,24 +224,47 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     writeln!(head, "  function automatic lut4(input [15:0] m, input [3:0] i); reg [7:0] a; reg [3:0] b; reg [1:0] c;")?;
     writeln!(head, "    begin a = i[3] ? m[15:8] : m[7:0]; b = i[2] ? a[7:4] : a[3:0]; c = i[1] ? b[3:2] : b[1:0]; lut4 = i[0] ? c[1] : c[0]; end")?;
     writeln!(head, "  endfunction")?;
-    writeln!(head, "  function automatic lut6(input [63:0] m, input [5:0] i); reg [15:0] a;")?;
-    writeln!(head, "    begin a = i[5] ? (i[4] ? m[63:48] : m[47:32]) : (i[4] ? m[31:16] : m[15:0]); lut6 = lut4(a, i[3:0]); end")?;
+    writeln!(head, "  function automatic lut5(input [31:0] m, input [4:0] i);")?;
+    writeln!(head, "    begin lut5 = i[4] ? lut4(m[31:16], i[3:0]) : lut4(m[15:0], i[3:0]); end")?;
     writeln!(head, "  endfunction")?;
     let alm = |k: u32| if k < 5 { format!("xtophalf/xale{k}") } else { format!("xbothalf/xale{}", k - 5) };
-    let lab_attr = |x: u32, y: u32, a: &str| attr.get(&(format!("cw_la_lab_r{y}_c{x}"), a.to_owned())).map(String::as_str);
-    let is_arith = |x: u32, y: u32, k: u32| lab_attr(x, y, &format!("{}/xcw_la_le_lut/adder_mode", alm(k))) == Some("ENABLE_ADDER");
+    let lab_uid = |x: u32, y: u32| match labs.get(&(x, y)) {
+        Some(&"ml") => format!("cw_ml_mlab_r{y}_c{x}"),
+        _ => format!("cw_la_lab_r{y}_c{x}"),
+    };
+    let lab_attr = |x: u32, y: u32, a: &str| attr.get(&(lab_uid(x, y), a.to_owned())).map(String::as_str);
+    let kind = |x: u32, y: u32| labs.get(&(x, y)).copied().unwrap_or("la");
+    let is_arith = |x: u32, y: u32, k: u32| lab_attr(x, y, &format!("{}/xcw_{}_le_lut/adder_mode", alm(k), kind(x, y))) == Some("ENABLE_ADDER");
     // Declarations first: cells refer to each other in any order.
     let mut d = String::new();
     let mut nffs = 0;
     let mut nalms = 0;
-    for &(x, y) in labs.keys() {
-        let uid = format!("cw_la_lab_r{y}_c{x}");
+    for (&(x, y), &kd) in &labs {
+        let uid = lab_uid(x, y);
+        // An MLAB's LUT and register-control blocks: xcw_ml_le_*.
+        let lut = format!("xcw_{kd}_le_lut");
+        let regctrl = format!("xcw_{kd}_le_regctrl");
         // The LAB's control lines (README (y)): clock 0 (83), enables
         // CLKEN0/1 (80, 81), synchronous clear (82), clears CLR1 (86,
         // through the routing tile's clrb inverter) and CLR2 (85). An
         // unrouted clear is inactive (as in Quartus' images).
         let clk = lab_sig(x, y, 83);
+        // LAB clock 1: `regclk = DFF_LABCLK1` (Quartus' MLAB RAM output
+        // registers, ml) [obs].
+        let clk1 = lab_sig(x, y, 84);
         let ces = [lab_sig(x, y, 80), lab_sig(x, y, 81)];
+        // An MLAB in RAM mode [obs, ml: README (z5)]: Quartus marks every MLAB
+        // it uses as logic with `lutram_mode_vcchg_power_saving` (fr, cq and
+        // cql: 207 of 207) and leaves it idle in the RAM's. Each half of an
+        // ALM is one bit of a 32-word RAM held in its 32 mask bits: read at
+        // {E, D1, C1, B, A} through LUTOUT_5LUT as in logic mode, written on
+        // LAB clock 0 when CLKEN0 (80) is high, at the address on LAB_RE 156,
+        // 157, 160, 161, 155 (bits 0..4), with half 0's data from C0 and half
+        // 1's from D0. An address pin left unrouted (a 16-word RAM's bit 4)
+        // reads 0 on both ports [inf].
+        let ram = kd == "ml" && lab_attr(x, y, "xpwrmgmt/lutram_mode_vcchg_power_saving") != Some("ENABLE_POWER_SAVING");
+        let pin0 = |pin: u32| sig(lab_node(x, y, pin)).unwrap_or_else(|| "1'b0".into());
+        let waddr = format!("{{{}, {}, {}, {}, {}}}", pin0(155), pin0(161), pin0(160), pin0(157), pin0(156));
         let sclr = lab_sig(x, y, 82);
         let clr1 = match sig(lab_node(x, y, 86)) {
             Some(s) if inverted_lab.contains(&(x, y)) => format!("~{s}"),
@@ -255,10 +288,20 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             {
                 bail!("{uid} {a} = {val}: LAB setting outside the model");
             }
+            // Settings Quartus writes in MLABs used as logic, with no
+            // function in a LAB (whose ALMs work with them idle) [inf, fr].
+            if *u == uid && kd == "ml" && a.contains('/') {
+                let leaf = a.rsplit('/').next().unwrap();
+                let ok = matches!((leaf, val.as_str()), ("ram_mode", "LUT_MODE") | ("lut5_powerdown", "LUT5_OUT") | ("lut6_powerdown", "LUT6_OUT") | ("lutram_mode_vcchg_power_saving", "ENABLE_POWER_SAVING"));
+                let known = ok || a.contains("/xcw_la_le_reg") || a.ends_with("lut_mask") || a.contains("_le_regctrl/") || a.ends_with("adder_mode") || a.ends_with("adder_or_packed_mode") || a.starts_with("xsecmux");
+                if !known {
+                    bail!("{uid} {a} = {val}: MLAB setting outside the model");
+                }
+            }
         }
         for k in 0..10u32 {
             let p = alm(k);
-            let mask = attr.get(&(uid.clone(), format!("{p}/xcw_la_le_lut/lut_mask")));
+            let mask = attr.get(&(uid.clone(), format!("{p}/{lut}/lut_mask")));
             let get = |a: &str| attr.get(&(uid.clone(), format!("{p}/{a}"))).map(String::as_str);
             let used = (0..2).any(|h| (0..2).any(|r| get(&format!("xcw_la_le_reg{h}/xreg{r}/register_comb")).is_some()));
             if mask.is_none() && !used {
@@ -268,8 +311,9 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             let stored: Vec<u8> = mask.map_or(vec![1; 64], |m| m.bytes().rev().map(|c| c - b'0').collect());
             let pin = |q: u32| lab_sig(x, y, 8 * k + q);
             let n = format!("l{x}_{y}_a{k}");
-            let arith = get("xcw_la_le_lut/adder_mode") == Some("ENABLE_ADDER");
+            let arith = get(&format!("{lut}/adder_mode")) == Some("ENABLE_ADDER");
             let mut outs: [String; 2] = [String::new(), String::new()];
+            let mut lut6 = String::new();
             if arith {
                 // Half h: p over {D, C, B, A} at 32h, g at 32h + 16 (README (w)).
                 let (a, b) = (pin(3), pin(4));
@@ -306,14 +350,50 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     writeln!(v, "  assign {n}_s{h} = {cin} ^ {n}_pp{h};")?;
                     outs[h as usize] = format!("{n}_s{h}");
                 }
+            } else if ram {
+                let w: String = (0..64usize).rev().map(|i| (b'0' + stored[i]) as char).collect();
+                let lp = |q: u32| sig(lab_node(x, y, 8 * k + q)).unwrap_or_else(|| "1'b0".into());
+                let raddr = format!("{{{}, {}, {}, {}, {}}}", lp(7), lp(6), lp(5), lp(4), lp(3));
+                writeln!(d, "  reg [63:0] {n}_m = 64'b{w}; wire {n}_q0, {n}_q1;")?;
+                for h in 0..2u32 {
+                    let data = if h == 0 { lp(2) } else { lp(1) };
+                    writeln!(v, "  assign {n}_q{h} = {n}_m[{} + {raddr}];", 32 * h)?;
+                    writeln!(v, "  always @(posedge {clk}) if ({}) {n}_m[{} + {waddr}] <= {data};", ces[0], 32 * h)?;
+                    outs[h as usize] = format!("{n}_q{h}");
+                }
             } else {
-                // W[i] = ¬stored[i ^ 31] over {F, E, D, C, B, A} (README (h)).
-                let w: String = (0..64).rev().map(|i| if stored[i ^ 31] == 1 { '0' } else { '1' }).collect();
-                writeln!(d, "  wire [63:0] {n}_w = 64'b{w}; wire {n}_lut;")?;
-                writeln!(v, "  assign {n}_lut = lut6({n}_w, {{{}, {}, {}, {}, {}, {}}});", pin(7), pin(0), pin(1), pin(2), pin(4), pin(3))?;
-                outs[0] = format!("{n}_lut");
+                // The pins are E0, D0, C0, A, B, C1, D1, E1 [obs, fr's atoms].
+                // Half h's 5-LUT (`LUTOUT_5LUT`) is stored bits 32h.. over
+                // {E_h, D_h, C_h, B, A}; the 6-LUT (`LUTOUT_6LUT`) is
+                // ¬(E1 ? low : high) with E0 as both halves' E [obs, Quartus'
+                // fr against its RTL, README (z3)]. That the 6-LUT's high half
+                // reads C1, D1 is [inf]: Quartus and a5pnr route C and D to both.
+                let w: String = (0..64usize).rev().map(|i| (b'0' + stored[i]) as char).collect();
+                writeln!(d, "  wire [63:0] {n}_w = 64'b{w}; wire {n}_lo, {n}_hi6, {n}_hi5, {n}_lut6;")?;
+                let (e0, d0, c0, a, b, c1, d1, e1) = (pin(0), pin(1), pin(2), pin(3), pin(4), pin(5), pin(6), pin(7));
+                writeln!(v, "  assign {n}_lo = lut5({n}_w[31:0], {{{e0}, {d0}, {c0}, {b}, {a}}});")?;
+                writeln!(v, "  assign {n}_hi6 = lut5({n}_w[63:32], {{{e0}, {d1}, {c1}, {b}, {a}}});")?;
+                writeln!(v, "  assign {n}_hi5 = lut5({n}_w[63:32], {{{e1}, {d1}, {c1}, {b}, {a}}});")?;
+                writeln!(v, "  assign {n}_lut6 = ~({e1} ? {n}_lo : {n}_hi6);")?;
+                lut6 = format!("{n}_lut6");
+                outs = [format!("{n}_lo"), format!("{n}_hi5")];
             }
-            let ce = match get("xcw_la_le_regctrl/xce_la_le_regctrl_mux/regclk_ens") {
+            // The direct outputs [obs, fr: the fitted atoms behind 52 direct
+            // pins in 31 LABs, tools/alm/direct.py]: lut5_powerdown =
+            // LUT5_OUT drives LAB_RE 129 + 10 [k >= 5] + k % 5 from the high
+            // half's 5-LUT, lut6_powerdown = LUT6_OUT the pin 5 above from
+            // the 6-LUT; idle, neither is driven.
+            if !arith {
+                let base = 129 + if k >= 5 { 10 } else { 0 } + k % 5;
+                let five = outs[1].clone();
+                for (setting, val, pin, src) in [("lut5_powerdown", "LUT5_OUT", base, five), ("lut6_powerdown", "LUT6_OUT", base + 5, lut6.clone())] {
+                    if get(&format!("{lut}/{setting}")) == Some(val) {
+                        writeln!(d, "  wire l{x}_{y}_o{pin};")?;
+                        writeln!(v, "  assign l{x}_{y}_o{pin} = {src};")?;
+                    }
+                }
+            }
+            let ce = match get(&format!("{regctrl}/xce_la_le_regctrl_mux/regclk_ens")) {
                 None | Some("CLKEN0") => ces[0].clone(),
                 Some("CLKEN1") => ces[1].clone(),
                 Some(o) => bail!("{uid} {p}: regclk_ens {o}"),
@@ -330,7 +410,8 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     let input = get(&format!("{rb}/xreg{r}/reg_input")).unwrap_or("ARITH_SUMOUT");
                     let src = match (input, arith) {
                         ("ARITH_SUMOUT", true) => outs[h as usize].clone(),
-                        ("LUTOUT_6LUT", false) => outs[0].clone(),
+                        ("LUTOUT_6LUT", false) => lut6.clone(),
+                        ("LUTOUT_5LUT", false) => outs[h as usize].clone(),
                         // LEIM: the ALM's pin A (half 0) or B (half 1) (README (y)).
                         ("LEIM", _) => pin(3 + h),
                         (_, _) if mode.is_none() => continue,
@@ -339,11 +420,15 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     let o = format!("l{x}_{y}_o{}", 89 + 4 * k + 2 * h + r);
                     match mode {
                         Some("DFF_LATCH") => {
-                            if get(&format!("{rb}/xlabclk_mux/regclk")) != Some("DFF_LABCLK0") {
-                                bail!("{uid} {p} {rb}: not on LAB clock 0");
-                            }
-                            let ce = if get(&format!("{rb}/xreg{r}/ce_sel")) == Some("CE") { ce.clone() } else { "1'b1".into() };
-                            let sc = if get(&format!("{rb}/xreg{r}/sclr_sel")) == Some("SCLR") { sclr.clone() } else { "1'b0".into() };
+                            let clk = match get(&format!("{rb}/xlabclk_mux/regclk")) {
+                                Some("DFF_LABCLK0") => clk.clone(),
+                                Some("DFF_LABCLK1") => clk1.clone(),
+                                o => bail!("{uid} {p} {rb}: regclk {o:?}"),
+                            };
+                            // xreg0's ce_sel and sclr_sel serve both registers
+                            // of the half [obs, Quartus' fr and cql, README (z3)].
+                            let ce = if get(&format!("{rb}/xreg0/ce_sel")) == Some("CE") { ce.clone() } else { "1'b1".into() };
+                            let sc = if get(&format!("{rb}/xreg0/sclr_sel")) == Some("SCLR") { sclr.clone() } else { "1'b0".into() };
                             writeln!(d, "  reg {o} = 1'b0;")?;
                             // The enable gates the synchronous clear (README (y)).
                             writeln!(v, "  always @(posedge {clk} or posedge {clr}) if ({clr}) {o} <= 1'b0; else if ({ce}) {o} <= {sc} ? 1'b0 : {src};")?;
@@ -428,9 +513,9 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
 /// with `prefix`, with that source (pins named by ball and role).
 pub fn drivers(g: &Graph, db: &str, extract: &str, prefix: &str) -> Result<()> {
     let text = std::fs::read_to_string(extract).with_context(|| format!("reading {extract}"))?;
-    let mut active: HashSet<(u32, u32)> = HashSet::new();
+    let mut active: HashSet<(u32, u32)> = HashSet::default();
     let mut sources: Vec<(String, u32)> = Vec::new();
-    let mut node_of: HashMap<(String, String), u32> = HashMap::new();
+    let mut node_of: HashMap<(String, String), u32> = HashMap::default();
     for l in std::fs::read_to_string(format!("{db}/io/pin_nodes.tsv"))?.lines() {
         let f: Vec<&str> = l.split('\t').collect();
         if f.len() == 5 && !l.starts_with('#') && f[0] != "ball" {
@@ -470,7 +555,7 @@ pub fn drivers(g: &Graph, db: &str, extract: &str, prefix: &str) -> Result<()> {
     }
     for (s, n0) in &sources {
         let mut q = VecDeque::from([*n0]);
-        let mut seen = HashSet::from([*n0]);
+        let mut seen = HashSet::from_iter([*n0]);
         while let Some(m) = q.pop_front() {
             for e in g.fanout(m) {
                 let d = g.dst[e];

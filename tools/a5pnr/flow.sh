@@ -4,7 +4,8 @@
 # Writes <out>/<top>.json (netlist), .design.txt (a5db design file, plus
 # .ffmap), .sof and .rbf, and <out>/times.txt. Needs specimens/rg/full with
 # usable.bin (tools/rgdump/rgdump.sh, then a5db usable) and the two keys from
-# tools/sof.py key and tools/bitstream.py key in specimens/.
+# tools/sof.py key and tools/bitstream.py key in specimens/. A5PNR_OPTS goes to
+# a5pnr (e.g. "--pack single").
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd); repo=$(dirname "$(dirname "$here")")
 top=$1; pins=$(realpath "$2"); out=$(realpath -m "$3"); shift 3
@@ -14,7 +15,7 @@ db=$repo/db/sm4revb; graph=$repo/specimens/rg/full
 mkdir -p "$out"; : > "$out/times.txt"
 step() { local name=$1; shift; local t0=$SECONDS; "$@"; echo "$name $((SECONDS - t0)) s" >> "$out/times.txt"; }
 step synth "$here/synth.sh" "$top" "$out/$top.json" "${srcs[@]}"
-step pnr "$repo/tools/cap.sh" 6G "$here/target/release/a5pnr" "$db" "$graph" "$db/timing/delays.tsv" "$out/$top.json" "$top" "$pins" "$out/$top.design.txt" 2> >(tee "$out/pnr.log" >&2)
+step pnr "$repo/tools/cap.sh" 6G "$here/target/release/a5pnr" "$db" "$graph" "$db/timing/delays.tsv" "$out/$top.json" "$top" "$pins" "$out/$top.design.txt" ${A5PNR_OPTS:-} 2> >(tee "$out/pnr.log" >&2)
 step build "$repo/tools/cap.sh" 12G "$repo/tools/a5db/target/release/a5db" build "$db" "$graph" "$Q" "$repo/specimens/sof_hmac.key" "$out/$top.design.txt" "$out/$top.sof"
 step rbf "$repo/tools/cap.sh" 8G "$repo/tools/a5db/target/release/a5db" rbf "$db" "$out/$top.sof" "$out/$top.rbf" "$Q" "$repo/specimens/rbf_keyed_hash.key"
 cat "$out/times.txt"

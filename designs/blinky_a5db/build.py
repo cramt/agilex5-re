@@ -34,8 +34,10 @@ RBF_KEY = os.path.join(REPO, 'specimens/rbf_keyed_hash.key')
 X, ROWS = 107, (6, 7, 8)
 # LAB_RE pins of ALM k (README (n)): LUT inputs A..F, reg0/xreg0 and
 # reg0/xreg1 outputs, the LAB clock.
-IN = {'A': 3, 'B': 4, 'C': 2, 'D': 1, 'E': 0, 'F': 7}
-def in_pin(k, port): return 8 * k + IN[port]
+# C and D go to both halves' pins (C0 and C1, D0 and D1), as Quartus routes
+# a 6-LUT's (README (z3)).
+IN = {'A': [3], 'B': [4], 'C': [2, 5], 'D': [1, 6], 'E': [0], 'F': [7]}
+def in_pins(k, port): return [8 * k + p for p in IN[port]]
 def q_pin(k): return 89 + 4 * k
 def wire_pin(k): return 90 + 4 * k
 LAB_CLOCK = 83
@@ -49,10 +51,12 @@ def alm_path(k):
 
 
 def stored_mask(fn):
-    """asm2's DIRECT lut_mask, MSB first, for a function of the WYSIWYG
-    index i (bit 0 = DATAA ... bit 5 = DATAF): stored[j] = not W[j ^ 31]."""
+    """asm2's DIRECT lut_mask, MSB first, for a 6-LUT read through
+    LUTOUT_6LUT computing fn of index i (bit 0 = pin A ... bit 5 = pin F):
+    stored[j] = not W[j ^ 32] (README (z3); phase 4 to 7 used W[j ^ 31],
+    which computes fn of the inverted inputs)."""
     w = [fn(i) for i in range(64)]
-    stored = [1 - w[j ^ 31] for j in range(64)]
+    stored = [1 - w[j ^ 32] for j in range(64)]
     return ''.join(str(stored[63 - c]) for c in range(64))
 
 
@@ -108,7 +112,7 @@ def main(outdir):
     for name, ins in cs:
         r, k = place[name]
         for port, sig in zip('ABCDEF', ins):
-            sinks.setdefault(sig, []).append(node(r, in_pin(k, port)))
+            sinks.setdefault(sig, []).extend(node(r, p) for p in in_pins(k, port))
     sinks.setdefault('q24', []).append(LED_SINK)
     # The clock takes the path Quartus uses for V16 in blinky, fz0 and rt0 up
     # to the switchbox (DCM output 2, the Y51 P2C mux 8 input 2), then a5db's
