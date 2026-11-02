@@ -1,0 +1,18 @@
+[package]
+name = "a5synth"
+version = "0.1.0"
+edition = "2021"
+description = "chipsmith's synthesis for a5pnr: Verilog to 6-LUTs, carry chains, flops and MLAB RAM, in a5pnr's yosys-JSON vocabulary"
+
+[dependencies]
+# chipsmith's front end and device-independent synthesis with its K-input
+# LUT mapper (chipsmith ADR-0013), pinned like cyclone2-re's cram pins
+# chipsmith-cyclone2.
+chipsmith-netlist = { git = "https://github.com/A-H-Technology/chipsmith", rev = "0fd59912625c4a8396c20c6bb6f6ba7fafe7bb38" }
+chipsmith-synth = { git = "https://github.com/A-H-Technology/chipsmith", rev = "0fd59912625c4a8396c20c6bb6f6ba7fafe7bb38" }
+chipsmith-verilog = { git = "https://github.com/A-H-Technology/chipsmith", rev = "0fd59912625c4a8396c20c6bb6f6ba7fafe7bb38" }
+anyhow = "1"
+rustc-hash = "2"
+
+[profile.release]
+debug = 1

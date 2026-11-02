@@ -181,7 +181,18 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
         }
     }
     let names: HashMap<u32, String> = names.into_iter().map(|(k, (_, v))| (k, v)).collect();
-    let max = names.keys().copied().max().unwrap_or(0) as usize + 1;
+    // Nets no netname covers (chipsmith's synthesis purges unnamed wires,
+    // tools/a5synth) still get a slot.
+    let mut max = names.keys().copied().max().unwrap_or(0) as usize + 1;
+    for c in m["cells"].as_object().context("cells")?.values() {
+        for v in c["connections"].as_object().into_iter().flat_map(|o| o.values()) {
+            for b in v.as_array().into_iter().flatten() {
+                if let Some(n) = b.as_u64() {
+                    max = max.max(n as usize + 1);
+                }
+            }
+        }
+    }
     let mut nets: Vec<String> = (0..max).map(|i| names.get(&(i as u32)).cloned().unwrap_or_else(|| format!("n{i}"))).collect();
     let mut cells = Vec::new();
     let fresh = |nets: &mut Vec<String>, name: String| -> u32 {

@@ -210,6 +210,10 @@ if run:
     for n in outs:
         tb.append(f'    last_{n} = od_{n};')
     tb.append(f'    for (cyc = 0; cyc < {run}; cyc = cyc + 1) begin')
+    # SIMCHECK_RUN_RANDOM=1: the inputs not held take a new random value
+    # every cycle (I/O registers' data and controls, README (z10)).
+    if os.environ.get('SIMCHECK_RUN_RANDOM'):
+        tb += [f'      i_{n} = $random(seed);' for n, d, w in ports if d == 'input' and n not in clocks and n not in hold]
     tb += clk + compare
     for n in outs:
         tb.append(f'      if (od_{n} !== last_{n}) begin changes = changes + 1; if (changes <= 4 || changes % 16 == 0) $display("run: cycle %0d: {n} %0d", cyc, od_{n}); last_{n} = od_{n}; end')

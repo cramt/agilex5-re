@@ -1,0 +1,191 @@
+//! a5synth: chipsmith's synthesis as a5pnr's front end (README (z12)).
+//!
+//!   a5synth <top> <out.json> <design.v>...
+//!
+//! The same cells tools/a5pnr/synth.sh gets from yosys, from chipsmith's
+//! Verilog front end and device-independent passes (chipsmith-synth, in the
+//! order its Cyclone II synthesis runs them) with its LUT mapper at K = 6
+//! (chipsmith ADR-0013): `$lut` of up to six inputs, `A5_ARITH` carry chains
+//! ([`arith`]), flops with the LAB's controls ([`ff`]), memories that fit as
+//! `$__A5_MLAB_` RAM ([`ram`]; A5_MLAB=0 keeps them in flops), and the
+//! hand-instantiated `A5_M20K` and `A5_IOPLL` as they are. The JSON is
+//! yosys', so a5pnr reads it unchanged.
+
+mod arith;
+mod ff;
+mod ram;
+
+use std::path::Path;
+
+use anyhow::{bail, Context, Result};
+use chipsmith_netlist::{attr, is_set, CellKind, Const, Design, Lut, Module, SigBit, State};
+use chipsmith_synth::lutmap::{self, LutSize};
+use chipsmith_synth::rewrite::{define_inits, Subst};
+use chipsmith_synth::{alumacc, clean, divmod, fsm, memory, opt, restructure, rom, techmap, tribuf, undef, wreduce};
+
+/// a5pnr's cells as Verilog blackboxes, for the front end.
+const LIBRARY: &str = include_str!("../../a5pnr/yosys/cells.v");
+/// Cells that are pure functions of their inputs: unused ones go.
+const REMOVABLE: &[&str] = &[arith::ARITH, ram::MLAB];
+
+fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    let [_, top, out, srcs @ ..] = args.as_slice() else {
+        bail!("usage: a5synth <top> <out.json> <design.v>...");
+    };
+    let t0 = std::time::Instant::now();
+    let mut fe = chipsmith_verilog::Frontend::new();
+    fe.read_library_source("a5pnr/yosys/cells.v", LIBRARY)?;
+    for f in srcs {
+        let p = Path::new(f);
+        if let Some(d) = p.parent() {
+            fe.include_dir(d);
+        }
+        fe.read_file(p)?;
+    }
+    let mut design = fe.elaborate(top)?;
+    chipsmith_synth::flatten::flatten(&mut design)?;
+    let mut tops: Vec<Module> = design.modules.into_iter().filter(|m| is_set(&m.attributes, attr::TOP)).collect();
+    let mut m = match tops.len() {
+        1 => tops.pop().expect("one"),
+        n => bail!("expected one top module, found {n}"),
+    };
+    let mlab = std::env::var("A5_MLAB").map_or(true, |v| v != "0");
+    let s = run(&mut m, mlab).with_context(|| format!("synthesizing {top}"))?;
+    let file = std::fs::File::create(out).with_context(|| format!("creating {out}"))?;
+    chipsmith_netlist::write_json(&Design { modules: vec![m] }, file)?;
+    eprintln!(
+        "a5synth: {} gates to {} LUTs (depth {}), {} flops ({} inverted), {} carry halves in {} chains, {} MLAB RAM bits; {:.1} s",
+        s.lutmap.gates,
+        s.luts,
+        s.lutmap.depth,
+        s.ffs.flops,
+        s.ffs.inverted,
+        s.arith.halves,
+        s.arith.chains,
+        s.mlab_bits,
+        t0.elapsed().as_secs_f64()
+    );
+    Ok(())
+}
+
+struct Stats {
+    lutmap: lutmap::Stats,
+    luts: usize,
+    ffs: ff::Counts,
+    arith: arith::Counts,
+    mlab_bits: usize,
+}
+
+fn run(m: &mut Module, mlab: bool) -> Result<Stats> {
+    if let Some(c) = m.cells.iter().find(|c| match &c.kind {
+        CellKind::Other(g) => !g.ty.starts_with('$') && !LIBRARY.contains(&format!("module {} ", g.ty)),
+        _ => false,
+    }) {
+        bail!("cell {} instantiates {}: the design must be flat", c.name, c.kind.type_name());
+    }
+    let clean = |m: &mut Module| clean::clean(m, REMOVABLE);
+    clean(m);
+    tribuf::tribuf(m);
+    // Read registers stay where the RTL has them: an MLAB reads with no
+    // clock (README (z9), as synth.sh's -nordff).
+    memory::collect(m)?;
+    opt::opt_word(m);
+    opt::opt_merge(m);
+    undef::refine(m)?;
+    rom::tables(m);
+    fsm::compare_states(m);
+    opt::lower_bitwise(m)?;
+    opt::opt_seq(m, REMOVABLE)?;
+    if divmod::lower(m) {
+        opt::opt(m, REMOVABLE);
+    }
+    while wreduce::wreduce(m) {
+        opt::opt(m, REMOVABLE);
+    }
+    alumacc::alumacc(m);
+    opt::opt(m, REMOVABLE);
+    let mlab_bits = if mlab { ram::map(m) } else { 0 };
+    memory::map_to_logic(m)?;
+    define_inits(m);
+    opt::lower_bitwise(m)?;
+    opt::opt_seq(m, REMOVABLE)?;
+    restructure::restructure(m);
+    let arith = arith::map(m);
+    techmap::lower(m, |k| techmap::is_lowerable(k) || matches!(k, CellKind::Ff(_)))?;
+    opt::opt_seq(m, REMOVABLE)?;
+    let ffs = ff::map(m)?;
+    let lutmap = lutmap::map_module_k(m, LutSize::SIX)?;
+    let luts = merge_luts(m);
+    clean(m);
+    clean::purge_wires(m);
+    Ok(Stats { lutmap, luts, ffs, arith, mlab_bits })
+}
+
+/// Constant and repeated LUT inputs folded out, constant LUTs replaced by
+/// their value, and LUTs with the same inputs and table made one (the
+/// mapper writes a LUT per gate output it maps; yosys' flow merges them
+/// with `opt_merge -share_all`). Returns the LUTs left.
+fn merge_luts(m: &mut Module) -> usize {
+    let cells = std::mem::take(&mut m.cells);
+    let mut subst = Subst::new(m);
+    let mut seen: std::collections::HashMap<(Vec<SigBit>, u64), SigBit> = Default::default();
+    for c in cells {
+        let CellKind::Lut(lut) = &c.kind else {
+            m.cells.push(c);
+            continue;
+        };
+        let mut table: u64 = (0..lut.table.0.len()).filter(|&i| lut.table.0[i] == State::One).fold(0, |t, i| t | 1 << i);
+        let mut inputs: Vec<SigBit> = Vec::new();
+        let mut width = lut.a.len();
+        let mut i = 0;
+        for &a in &lut.a {
+            let fold = match a {
+                SigBit::Const(s) => Some((None, s == State::One)),
+                SigBit::Net(_) => inputs.iter().position(|&k| k == a).map(|k| (Some(k), false)),
+            };
+            match fold {
+                None => {
+                    inputs.push(a);
+                    i += 1;
+                }
+                Some((same_as, v)) => {
+                    table = cofactor(table, width, i, same_as, v);
+                    width -= 1;
+                }
+            }
+        }
+        let SigBit::Net(y) = lut.y else { continue };
+        if inputs.is_empty() {
+            subst.set(y, SigBit::Const(State::from(table & 1 == 1)));
+            continue;
+        }
+        match seen.entry((inputs, table)) {
+            std::collections::hash_map::Entry::Occupied(e) => subst.set(y, *e.get()),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let (a, t) = e.key().clone();
+                let table = Const((0..1usize << a.len()).map(|j| State::from(t >> j & 1 == 1)).collect());
+                m.cells.push(chipsmith_netlist::Cell { kind: CellKind::Lut(Lut { a: a.into(), y: lut.y, table }), ..c });
+                e.insert(lut.y);
+            }
+        }
+    }
+    subst.apply(m);
+    m.cells.iter().filter(|c| matches!(c.kind, CellKind::Lut(_))).count()
+}
+
+/// The `width`-input table with input `i` removed: fixed at `v`, or equal
+/// to input `same_as` (`< i`).
+fn cofactor(table: u64, width: usize, i: usize, same_as: Option<usize>, v: bool) -> u64 {
+    let mut out = 0u64;
+    for idx in 0..1u64 << (width - 1) {
+        let low = idx & ((1 << i) - 1);
+        let high = (idx >> i) << (i + 1);
+        let bit = match same_as {
+            Some(k) => idx >> k & 1,
+            None => u64::from(v),
+        };
+        out |= (table >> (low | bit << i | high) & 1) << idx;
+    }
+    out
+}

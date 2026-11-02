@@ -12,6 +12,13 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 top=$1; out=$2; shift 2
+# A5_SYNTH=chipsmith: chipsmith's synthesis instead (tools/a5synth, README
+# (z12)), the same cells in the same JSON.
+if [[ ${A5_SYNTH:-yosys} == chipsmith ]]; then
+    "$here/../cap.sh" 12G "$here/../a5synth/target/release/a5synth" "$top" "$out" "$@" 2> "${out%.json}.a5synth.log"
+    cat "${out%.json}.a5synth.log"
+    exit 0
+fi
 inc=""; for f in "$@"; do inc="$inc -I$(dirname "$(realpath "$f")")"; done
 base=${out%.json}
 nix shell nixpkgs#yosys -c yosys -q -l "$base.yosys.log" -p "

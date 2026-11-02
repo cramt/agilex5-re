@@ -39,6 +39,7 @@
 //!       extract, build from the written file, and print the bits that differ
 //!   a5db usable <db> <graph> <out.bin>          one byte per graph edge: may a router take it (route::usable)
 //!   a5db pinmap <db> <graph>                    every ball's boundary nodes (db/sm4revb/io/pin_nodes.tsv)
+//!   a5db rpimap <graph>                         the I/O routing tiles' programmable inverters (db/sm4revb/io/rpi.tsv)
 //!   a5db pincheck <db> <graph> <design>...      do a design file's pins start/end at the predicted nodes?
 //!   a5db trace <graph> <node> <depth>              downstream edges, breadth first
 //!   a5db traceback <graph> <node> <depth>          upstream edges, breadth first
@@ -409,6 +410,37 @@ fn main() -> Result<()> {
             }
             eprintln!("{} edges: {} unusable, {} mux, {} pass-through, {} clock, {} at the mux's idle setting", u.len(), n[0], n[1], n[2], n[3], n[4]);
             std::fs::write(out, &u)?;
+            Ok(())
+        }
+        ["rpimap", g] => {
+            // Each RPII → RPI hop of an I/O routing tile (HIOL, VIO) is a
+            // programmable inverter, `<config>/rpi_sel` (README (z10)): the
+            // edge's config names the attribute, the RPI node is where the
+            // signal comes out inverted.
+            let g = graph::Graph::load(std::path::Path::new(g))?;
+            println!("# I/O routing tiles' programmable inverters (README (z10)), written by `a5db rpimap`:");
+            println!("# the tile, the inverter's attribute path (<path>/rpi_sel = INV inverts) and its RPI node.");
+            println!("uid\tpath\tnode");
+            let mut rows = Vec::new();
+            for src in 0..g.names.len() as u32 {
+                if !g.names[src as usize].starts_with("RPII:") {
+                    continue;
+                }
+                for e in g.fanout(src) {
+                    let d = g.dst[e] as usize;
+                    let uid = &g.uids[g.uid[e] as usize];
+                    if !g.names[d].starts_with("RPI:") || !(uid.starts_with("cw_rt_hiol") || uid.starts_with("cw_rt_vio")) {
+                        continue;
+                    }
+                    let cfg = g.cfgs[g.cfg[e] as usize].split(' ').next().unwrap_or("").to_owned();
+                    rows.push((uid.clone(), cfg, g.names[d].clone()));
+                }
+            }
+            rows.sort();
+            rows.dedup();
+            for (u, c, n) in rows {
+                println!("{u}\t{c}\t{n}");
+            }
             Ok(())
         }
         ["pinmap", dbdir, g] => {

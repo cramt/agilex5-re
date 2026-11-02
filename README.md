@@ -2714,6 +2714,82 @@ STA's own chain error.
   the read register inside the MLAB (Quartus uses LAB clock 1 for it, (z5)),
   MLAB RAM in the Quartus export.
 
+### (z10) Phase 10: I/O registers
+
+`designs/p10/iq` (Quartus' oracle for this): input, output and OE registers
+on 13 HVIO pins in two blocks (hvio_3_1, hvio_0_1) and 9 IO96 pins (bank 2A's
+switches and LEDs), plain, with a clock enable, an active-high and an
+active-low asynchronous clear, a preset (a clear to 1) and a synchronous
+clear, each control on its own pin (`FAST_INPUT_REGISTER`,
+`FAST_OUTPUT_REGISTER`, `FAST_OUTPUT_ENABLE_REGISTER`, retiming off). Quartus
+packed all 23 into the I/O cells (`iq.fit.rpt`, "Fitter Netlist
+Optimizations"). Run `specimens/runs/iq0`, atoms `specimens/p10/alm/iq0`,
+readback `specimens/p10/oracle/iq`.
+
+- **Where the controls enter** [obs, `a5pnr drivers` on iq's decode, every
+  register]: each control is a pin of the I/O block next to the pin's own
+  data pins. On an HVIO pin, with O the block pin its OE path enters
+  (`pin_nodes.tsv` role `oe`): O − 4 the input register's synchronous
+  clear, O − 3 the asynchronous clear or preset all three registers share,
+  O − 2 the output and OE registers' clock enable, O − 1 the input
+  register's clock enable, O + 1 the output data (16 HVIO controls in
+  iq). On an IO96 pin, with U the block pin its output data enters (role
+  `out`): U + 2 the asynchronous clear, U + 4 the input register's clock
+  enable, U + 5 the output and OE registers' clock enable (13 controls;
+  the OE data enters at the `oe` boundary, which on DN25 is another block
+  pin than U's neighbours). An IO96 synchronous clear wasn't seen [unk].
+  The fabric ends at an I/O routing tile's RPI; the hops after it
+  (REDMUX, the block pin) have no bits.
+- **The clock** [obs]: a register clock pin of the block, entered from the
+  HIOL tile's `GLOBAL_LOCAL_SEL` I5 (each HIOL row has three, I5–I7, into
+  three block pins); every register of hvio_3_1 used the one at row 49
+  (`HVIOWR_RE` I2009), whichever row its pin sits in.
+- **Every control is active low** [obs]: the settings say so
+  (`a_rb_ncein_ireg_ena`, `a_rb_nceout_oreg_ena`, `a_rb_naclr_*_ena`,
+  `a_rb_nsclr_ireg_ena` turn each one on), and Quartus drives every clock
+  enable, every active-high clear and the synchronous clear through the
+  I/O routing tile's programmable inverter (`<path>/rpi_sel = INV` on a
+  HIOL or VIO tile), the active-low clear (ACLRN) straight. A register with
+  no enable still has its enable on, driven by a constant LUT through an
+  inverter. **So ct's two HIOL inverters (README (y)) are its two I/O
+  registers' clock enables, not "data inverters around both registers".**
+  `a5db rpimap` lists every HIOL and VIO inverter with its RPI node
+  (`db/sm4revb/io/rpi.tsv`, 20,982: the RPII → RPI edge's config is the
+  attribute's path).
+- **A preset is `a_rb_naclr_*_sel = *_NPRE_SEL`** on the shared clear
+  [obs]; an input register's synchronous clear is its own
+  (`a_rb_nsclr_ireg_ena`, O − 4); an output register's synchronous clear
+  Quartus folds into the data (qf).
+- **The OE register holds the inverse** [obs]: Quartus reports all three as
+  "Inverted", drives their data through an inverted RPI, and the buffer
+  drives the pad while the register holds 0. With a clear, an OE
+  register's shared clear is then a preset (`EREG_NPRE_SEL`, ZB, whose
+  RTL OE clears to 0).
+- **The input register's clock inverter** `xinv_fr_in_clk` is IN_INV on
+  every input register (ct and iq, 12 of 12); its idle setting is IN_BUF.
+  So IN_INV is what a rising-edge input register needs [obs]; that IN_BUF
+  would capture on the falling edge is [inf].
+- A registered input leaves on the pin's `in1` node, IO96 too; on IO96 its
+  4:1 `ireg_4to1_mux0` stays at its idle SEL3, and its header bit
+  45,136 + 229 L + p is 0, as for an output [obs: SW0–3 decoded as 4 `raw`
+  bits until the template got an IO96 `in_reg` use with that row]. The
+  IO96 lane's input flyby muxes (`xflyby/x<k>/sel_f`) are GPIO in the lane
+  with the registered inputs [obs; what they select is inf].
+
+`a5pnr readback` now models them (`src/ioreg.rs`): per pin the three
+registers as the block's flops on its register clock, their data, enables,
+clears, preset and synchronous clear at the block pins above, a signal
+through an inverted RPI arriving inverted, the OE register's 0 driving the
+pad. **Quartus' iq image runs like `iq.v` for 3,000 cycles from power-up
+under six holds of EN, ACLR, ACLRN, SCLR (the other inputs random every
+cycle, `SIMCHECK_RUN_RANDOM=1`, new in simcheck), 0 mismatches each; ct
+(which stopped the phase-9 readback) likewise, 0 mismatches** [obs]. The
+check has teeth: without the RPI inversions 27,094 mismatches, without the
+preset 4,979, without the synchronous clear 740 (`A5_RB_MUTATE`), the OE
+enable the other way round 6,000. Two oracle-side fixes: `tools/alm/ffmap.py`
+leaves I/O register atoms out (the pins observe them), `oracle.sh` takes a
+pin's use from a fourth column of the pins file.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

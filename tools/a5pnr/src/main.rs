@@ -20,6 +20,7 @@ mod det;
 mod emit;
 mod export;
 mod graph;
+mod ioreg;
 mod netlist;
 mod pack;
 mod place;
