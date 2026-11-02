@@ -18,9 +18,11 @@ Section letters refer to the README's findings. File formats are in
 | routing graph | `tools/rgdump` → `specimens/rg/full` (not committed: it is Quartus' graph, regenerate it from your install in 13 min) | 7.6 M nodes, 26.3 M edges, each edge's mux setting |
 | router edge classes | `a5db usable` → `specimens/rg/full/usable.bin` (5 min) | which edges a router may take: fabric and clock muxes with bits, pass-throughs; edges at their mux's idle setting are class 4, not taken (README (w), (y)) |
 | pin ↔ graph nodes | `db/sm4revb/io/pin_nodes.tsv` (`a5db pinmap`) | where each ball's input leaves for fabric routing (`in0`, `in1`, `clock`) and where its output is entered (`out`) (README (t)) |
+| I/O routing-tile inverters | `db/sm4revb/io/rpi.tsv` (`a5db rpimap`) | every HIOL and VIO tile's programmable inverter (`<path>/rpi_sel`) with its RPI node (README (z10)) |
+| DSP multiplier modes | `db/sm4revb/dsp/modes.tsv` | the settings of a registered 18x18 or 27x27 multiply, signed or not, with each mode's baseline input-inverter masks (README (z11)) |
 | delays | `db/sm4revb/timing/delays.tsv` (`tools/timing`) | mean delay per routing node type and per cell arc, from quartus_sta paths (README (u)) |
 | IOPLL | `db/sm4revb/io/iopll.tsv`, `tools/pll/iopll.py` | an IOPLL's lines for any reference and output frequencies (README (v)) |
-| open flow | `tools/a5pnr` (yosys + Rust placer and router) | Verilog → design file → `.sof` → `.rbf` (README (w)) |
+| open flow | `tools/a5pnr` (yosys + Rust placer and router) | Verilog → design file → `.sof` → `.rbf` (README (w)); `tools/a5synth` (chipsmith's synthesis, `A5_SYNTH=chipsmith`) as an alternative front end (README (z12)) |
 | writer | `tools/a5db` (Rust) | design file → `.sof` image → `.rbf` byte-identical to `quartus_pfg`'s |
 
 ## The interface: a design file
@@ -71,11 +73,13 @@ Verification kinds, strongest first:
 | MLAB RAM | RAM is the MLAB's idle mode (a logic MLAB sets `lutram_mode_vcchg_power_saving` and `ram_mode` LUT_MODE); one bit per half-ALM in its 32 mask bits, word a at stored bit 32h + a; read address {E, D1, C1, B, A}, data out through LUTOUT_5LUT; write address LAB_RE 156, 157, 160, 161, 155 (bits 0–4), write enable 80 (CLKEN0), data C0 (half 0) and D0 (half 1); an unrouted address pin reads 1 (a 16-word RAM sits at 32h + 16 + a) | rebuilt (32 x 16, 16 x 8), held out; **Quartus' ml and mi images (mi: initial contents) simulated against their RTL** (z5), (z6); a5pnr writes it (z9) |
 | M20K | CUSTOM settings for modes, widths, ports and registers (42 in mm) plus contents: `m20k_eram_add<k>` = `eram_array_r<k/2>[40(k mod 2) + 39 .. ]` in the sector's RAM part | rebuilt (512 x 32 SDP, 1024 x 16 ROM, 2048 x 10 TDP with init), held out |
 | DSP | `dsp_mode` (`rmode[4:0]`, a 5-bit code), register and clock selects, signs, `dsp_proginv_{l,h}` | rebuilt (18x18, 27x27 MAC, 9x9 + 18x19), held out |
+| DSP multipliers | `MP_MAC_RE` pins: clock 0; 18x18 A 335 + i, B 353 + j, a signed A's sign also on 280; 27x27 A 353 + i (i < 9) / 362 + i, B 335 + i (i < 9) / 380 + i; product bit k on 134 + k (k < 38) / 60 + k from the output register. `dsp_proginv_l[k]` inverts pin 263 + k (k < 18) / 317 + k, `_h[k]` pin 371 + k (k < 36), relative to the mode's baseline; an unrouted operand pin reads 1 | **Quartus' dq2 and held-out dq3 simulated against their RTL** (four modes, every product bit observed); a5pnr's mul self-test through all four checks (README (z11)) |
 | general routing | graph edges → mux settings (`MUXINk_` per `muxin[k]`), plus `flop_mode = FAST_WIRE` on every used mux with a hyper-register except LEIMs into LAB control inputs (I80+) | rebuilt (every design), routes of rt0 and fz0 (k), held out |
 | clock network | graph edges; edges without an edge API (spine tap 5:1, row clock 32:1, predrive, delay chain, DCM P2C 4:1) through `graph::clock_rule` | rebuilt (ck1, ck2, mm, pl), 22 P2C muxes held out (r) |
 | HVIO pins | per-pin bits only; standard in `iio_config_[1:0]` (3.3 V 00, 1.8 V 10) | 159 pins, both directions, held out (ph1, ph2) |
 | HVIO clock pins | 2 per bank half: pins k0/k1 through the 2:1 ioclk mux, k2/k3 through the 4:1 ss clock mux | all 32 clock pins, held out (ck2) |
 | HVIO IO registers | uses `in_reg`, `out_reg` | 3 pins (ck1), rebuilt |
+| I/O registers (input, output, OE) | settings per register (`xio_gpio_{i,o,e}reg`, the 4:1 muxes at SEL1, `IN_INV` on the input clock); controls are active-low block pins next to the pin's data: HVIO, from the `oe` pin O, O − 4 input sync clear, O − 3 shared async clear (`*_NPRE_SEL`: preset), O − 2 output/OE enable, O − 1 input enable; IO96, from the `out` pin U, U + 2 clear, U + 4 input enable, U + 5 output/OE enable; active-high signals through the I/O tile's RPI inverter; the OE register holds the inverse; a registered input leaves on `in1` (IO96: use `in_reg`, header bit 45,136 + 229 L + p cleared); clock from the block's register clock entry | **Quartus' iq (22 pins, both HVIO blocks, IO96 lanes 4 and 5) and ct simulated against their RTL** under eight holds with random inputs; a5pnr's io design through all four checks (README (z10)) |
 | IO96 pins | pin, lane and bank rows; lane vref values depend on whether the lane has an input; IOSSM pin map | 22 pins, both directions, held out (ph1, ph2), CLOCK0_50 as a clock |
 | IOPLL | a common template plus N, M and C counters, output enables, reference select and charge-pump trims (`tools/pll/iopll.py`) | counters from frequencies: 10 held-out IP configurations; bits: pa (four PLLs) exact, pb held out (README (v)) |
 | carry chains | tennm_lcell_comb's p/g masks, stored as written; chain order N0 → N57, then the LAB below | 87 arithmetic halves of ar; a5pnr designs read back and simulated (README (w)) |
@@ -139,12 +143,12 @@ Verification kinds, strongest first:
 
 ## Not covered
 
-- Bidirectional pins and output enables from the fabric, pull-ups, bus
+- Output enables other than an OE register's, bidirectional pins, pull-ups, bus
   hold, slew rate, current strength, open drain, Schmitt trigger: asm2 has
   those attributes as `<VIRTUAL>` and no design here used them.
 - Differential I/O, the D-PHY standard, IO96 lanes 0–3 and 6–7, the second
   IO96 bank (`pio_1_0`), the left-side DCMs: no DE25-Nano pin reaches them.
-- The pin map's `direct` (IO96) and `out2` roles, and output enables.
+- The pin map's `direct` (IO96) and `out2` roles.
 - IOPLL: PFD frequencies other than 10, 25 and 50 MHz (charge-pump trims),
   bank-half 0 reference pads, the IP's output-frequency ceiling, PLL
   cascading, dynamic phase shift; LVDS/DPA, EMIF/hard memory controllers,
@@ -155,12 +159,14 @@ Verification kinds, strongest first:
   uses the model (README (z)). quartus_sta times an a5pnr placement on
   Quartus' routes (`a5pnr --quartus`, README (z4)); Quartus Pro takes no
   routing constraints, so a5pnr's own routes are timed by the model only.
-- I/O registers from a5pnr and in the readback (their clock enters through
-  the HIOL's `GLOBAL_LOCAL_SEL` I5 and RPI I29 to `REDMUX` I372; each
-  register's active-low clock enable comes from a LUT constant through an
-  HIOL RPI set to INV: ct, two pins, README (z6)), logic beside MLAB RAM, the
-  second asynchronous clear line, PLL outputs other than V16's output 0
-  (README (y), (z5)).
+- I/O registers: IO96 synchronous clear, IO96 lanes other than 4 and 5
+  and HVIO blocks other than hvio_3_1 and hvio_0_1 (no clock entry seen),
+  an output register's own synchronous clear, DDIO; logic beside MLAB RAM,
+  the second asynchronous clear line, PLL outputs other than V16's output 0
+  (README (y), (z5), (z10)).
+- DSP: input and pipeline registers, sums, MAC, 9x9 and floating-point
+  modes, enables and clears, cascades; DSP timing (a5pnr times a block as
+  an M20K) (README (z11)).
 - Hyper-registers used as registers (`flop_mode` FLOP), clock gating in the
   clock network, LAB `lut_mode`/`latch_mode` (no bits in asm2).
 - Any check on silicon: the DE25-Nano was off for all of phase 5; see the
