@@ -2790,6 +2790,38 @@ enable the other way round 6,000. Two oracle-side fixes: `tools/alm/ffmap.py`
 leaves I/O register atoms out (the pins observe them), `oracle.sh` takes a
 pin's use from a fourth column of the pins file.
 
+**a5pnr writes them** (`src/ioreg.rs`, `pack.rs`, `main.rs`): a fourth
+column `reg` in pins.txt puts the port's flop into the pin's I/O cell: an
+input's one flop on the pin, an output's flop driving it, and for a
+tristate output (yosys `$_TBUF_`, kept by `tribuf` in synth.sh when the
+RTL has a `'bz`) its OE flop as well. The flops leave the ALMs; their data
+and controls are routed to the RPIs that feed the block pins above
+(`End::Io`), the clock to the block's register clock entry (hvio_3_1:
+HIOL row 49 `GLOBAL_LOCAL_SEL` I5, hvio_0_1: row 9; IO96 lane 4: VIO X106
+I3, lane 5: X107 I3; other blocks and lanes are refused, [unk]). Every
+active-high control, and the OE register's data, gets its RPI's
+inverter; a flop without an enable gets a constant-1 LUT on it, as Quartus
+does. The block settings are `attr` lines, as `a5db extract` decodes them
+with the pins' plain uses (an IO96 registered input is `in_reg`); an IO96
+lane with a registered input sets its twelve flyby muxes. Not supported:
+a preset (a5pnr's flops have none), an output register's synchronous clear
+(it belongs in the data), an IO96 synchronous clear, the Quartus export.
+
+`designs/p10/io` (the board's KEY0, KEY1 and SW[3:0] in input registers,
+LED[7:0] from output registers with enables and both clear polarities,
+three GPIO pins with an input synchronous clear, an input asynchronous
+clear, an output register and an OE register): 24 ALMs in 8 LABs, 18 I/O
+registers. **All four checks pass**: extract = design (19 pins, 559 edges,
+369 attributes), the rebuilt netlist against `io.v` 2,000 cycles from random
+states and 2,000 free-running with 36 registers compared (the 18 I/O
+registers mapped), and 3,000 cycles from power-up with random inputs, 0
+mismatches; asm2 0 of 106,145 attributes differ; pfg's `.rbf` identical,
+integrity OK [obs, `specimens/p10/io/r1`].
+
+The audit (`tools/alm/oracles_p10.sh`): iq under six holds and ct under
+two, every other input random each cycle, 3,000 cycles each, **0
+mismatches in all eight** [obs].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

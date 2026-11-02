@@ -284,7 +284,7 @@ pub fn place(
     let alm_of = |e: &End| -> Option<usize> {
         match e {
             End::Out { alm, .. } | End::In { alm, .. } | End::Ctl { alm, .. } => Some(*alm),
-            End::Port(_) | End::M20k { .. } | End::Pll(_) => None,
+            End::Port(_) | End::M20k { .. } | End::Pll(_) | End::Io { .. } => None,
         }
     };
     let mut alm_nets: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -302,7 +302,7 @@ pub fn place(
     let weight: Vec<f64> = nets.iter().map(|(_, s)| crossing(s.len() + 1)).collect();
     let fixed_xy = |e: &End| -> Option<(i64, i64)> {
         match e {
-            End::Port(p) => port_xy.get(p).map(|&(x, y)| (x as i64, y as i64)),
+            End::Port(p) | End::Io { port: p, .. } => port_xy.get(p).map(|&(x, y)| (x as i64, y as i64)),
             End::M20k { m, .. } => Some((m20k_at[*m].0 as i64, m20k_at[*m].1 as i64)),
             _ => None,
         }

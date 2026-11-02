@@ -30,6 +30,10 @@ pub enum Role {
     InCe,
     Oe,
     Out,
+    /// The block's register clock.
+    Clk,
+    /// The input register's output, on the pin's `in1` node (a driver).
+    Q,
 }
 
 /// One HVIO or IO96 pin's register block.
@@ -65,7 +69,7 @@ impl IoPin {
                 Role::Out => o,
                 Role::Oe => self.oe as i64,
                 // Not seen on IO96 [unk].
-                Role::InSclr => return None,
+                Role::InSclr | Role::Clk | Role::Q => return None,
             }
         } else {
             match r {
@@ -75,6 +79,7 @@ impl IoPin {
                 Role::InCe => o - 1,
                 Role::Oe => o,
                 Role::Out => o + 1,
+                Role::Clk | Role::Q => return None,
             }
         };
         Some(format!("{}{i}", self.prefix))
@@ -161,4 +166,160 @@ pub fn rpis(g: &Graph, db: &str) -> Result<HashMap<(String, String), u32>> {
         }
     }
     Ok(m)
+}
+
+/// What a5pnr puts in one pin's I/O cell (pins.txt fourth column `reg`):
+/// the flops by netlist index and the controls they share.
+#[derive(Clone, Debug)]
+pub struct IoRegs {
+    pub port: usize,
+    pub input: Option<usize>,
+    pub output: Option<usize>,
+    pub oe: Option<usize>,
+    /// The `$_TBUF_` an OE register drives.
+    pub tbuf: Option<usize>,
+    pub clk: u32,
+    /// The input register's enable and the output and OE registers' one
+    /// (a constant-1 LUT where the flop has none: Quartus drives every
+    /// enable, iq).
+    pub in_ce: Option<u32>,
+    pub out_ce: Option<u32>,
+    pub aclr: Option<crate::netlist::Aclr>,
+    pub sclr: Option<u32>,
+}
+
+impl IoRegs {
+    pub fn flops(&self) -> impl Iterator<Item = usize> + '_ {
+        [self.input, self.output, self.oe].into_iter().flatten()
+    }
+}
+
+/// Moves each `reg` port's flops into its I/O cell: an input's one flop
+/// on the pin, an output's flop driving it (and through a `$_TBUF_`, its
+/// OE flop). Each must have nothing else on its pin side; the output and
+/// OE flops share the enable and the clear, as the block does, and only
+/// the input register has a synchronous clear (README (z10)).
+pub fn choose(nl: &mut crate::netlist::Netlist, ports: &[usize]) -> Result<Vec<IoRegs>> {
+    use crate::netlist::{Cell, Sig};
+    let mut loads: HashMap<u32, usize> = HashMap::default();
+    let mut drv: HashMap<u32, usize> = HashMap::default();
+    for (i, c) in nl.cells.iter().enumerate() {
+        let ins: Vec<Sig> = match c {
+            Cell::Lut { ins, out, .. } => {
+                drv.insert(*out, i);
+                ins.iter().map(|&n| Sig::Net(n)).collect()
+            }
+            Cell::Ff(f) => {
+                drv.insert(f.q, i);
+                [f.d, Sig::Net(f.clk)].into_iter().chain([f.ce, f.sclr, f.aclr.map(|a| a.net)].into_iter().flatten().map(Sig::Net)).collect()
+            }
+            Cell::Tbuf { a, e, y } => {
+                drv.insert(*y, i);
+                vec![*a, *e]
+            }
+            Cell::Arith { c, d, ci, .. } => [*ci].into_iter().chain([c, d].into_iter().flatten().map(|&n| Sig::Net(n))).collect(),
+            Cell::M20k(m) => m.waddr.iter().chain(&m.wdata).chain(&m.raddr).chain(&m.be).chain([&m.we, &m.re]).copied().chain([Sig::Net(m.clk)]).collect(),
+            Cell::Mlab(m) => m.waddr.iter().chain(&m.raddr).chain([&m.wdata, &m.we]).copied().chain([Sig::Net(m.clk)]).collect(),
+            Cell::Pll { refclk, out, .. } => {
+                drv.insert(*out, i);
+                vec![Sig::Net(*refclk)]
+            }
+        };
+        for s in ins {
+            if let Sig::Net(n) = s {
+                *loads.entry(n).or_default() += 1;
+            }
+        }
+    }
+    for p in nl.ports.iter().filter(|p| !p.input) {
+        if let Sig::Net(n) = p.net {
+            *loads.entry(n).or_default() += 1;
+        }
+    }
+    let ff = |i: usize| -> Option<crate::netlist::Ff> { if let Cell::Ff(f) = &nl.cells[i] { Some(f.clone()) } else { None } };
+    let mut out = Vec::new();
+    let mut need_const = false;
+    for &pi in ports {
+        let p = &nl.ports[pi];
+        let Sig::Net(n) = p.net else { bail!("{}: a constant port has no I/O register", p.name) };
+        let mut r = IoRegs { port: pi, input: None, output: None, oe: None, tbuf: None, clk: 0, in_ce: None, out_ce: None, aclr: None, sclr: None };
+        if p.input {
+            let on: Vec<usize> = nl.cells.iter().enumerate().filter(|(_, c)| matches!(c, Cell::Ff(f) if f.d == Sig::Net(n))).map(|(i, _)| i).collect();
+            let [i] = on.as_slice() else { bail!("{}: an input register needs exactly one flop on the pin, not {}", p.name, on.len()) };
+            if loads[&n] != 1 {
+                bail!("{}: the pin feeds more than its register", p.name);
+            }
+            let f = ff(*i).unwrap();
+            r.input = Some(*i);
+            r.clk = f.clk;
+            r.in_ce = f.ce;
+            r.aclr = f.aclr;
+            r.sclr = f.sclr;
+            need_const |= f.ce.is_none();
+        } else {
+            let lone = |q: Sig| -> Option<usize> {
+                let Sig::Net(q) = q else { return None };
+                drv.get(&q).copied().filter(|&d| matches!(nl.cells[d], Cell::Ff(_)) && loads.get(&q) == Some(&1))
+            };
+            let (data, oe) = match drv.get(&n).map(|&d| &nl.cells[d]) {
+                Some(Cell::Tbuf { a, e, .. }) => {
+                    r.tbuf = drv.get(&n).copied();
+                    (lone(*a), Some(lone(*e).with_context(|| format!("{}: the OE isn't a flop of its own", p.name))?))
+                }
+                _ => (lone(Sig::Net(n)), None),
+            };
+            let data = data.with_context(|| format!("{}: the output isn't driven by a flop of its own", p.name))?;
+            let (fd, fe) = (ff(data).unwrap(), oe.and_then(ff));
+            if let Some(fe) = &fe {
+                if fe.clk != fd.clk || fe.ce != fd.ce || fe.aclr != fd.aclr {
+                    bail!("{}: the output and OE registers share the clock, enable and clear", p.name);
+                }
+            }
+            if fd.sclr.is_some() || fe.as_ref().is_some_and(|f| f.sclr.is_some()) {
+                bail!("{}: an output register has no synchronous clear (fold it into the data)", p.name);
+            }
+            r.output = Some(data);
+            r.oe = oe;
+            r.clk = fd.clk;
+            r.out_ce = fd.ce;
+            r.aclr = fd.aclr;
+            need_const |= fd.ce.is_none();
+        }
+        out.push(r);
+    }
+    if need_const {
+        let n = nl.nets.len() as u32;
+        nl.nets.push("io_const1".into());
+        nl.cells.push(Cell::Lut { ins: vec![], mask: 1, out: n });
+        for r in out.iter_mut() {
+            if r.input.is_some() {
+                r.in_ce.get_or_insert(n);
+            } else {
+                r.out_ce.get_or_insert(n);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The RPI each I/O control's block pin is fed from: where routing ends
+/// (the hops after it have no bits).
+pub fn rpi_of_block(g: &Graph, rpis: &HashMap<(String, String), u32>) -> HashMap<u32, u32> {
+    let single = g.single_fanin();
+    rpis.values().filter_map(|&r| forward_block(g, &single, r).map(|b| (b, r))).collect()
+}
+
+/// Where a pin's I/O registers take their clock: the routing node the
+/// block's register clock pin is entered from [obs: Quartus' iq uses
+/// hvio_3_1's at HIOL row 49, hvio_0_1's at row 9, IO96 lane 4's at VIO
+/// X106 and lane 5's at X107; inf: each HVIO block's top row serves it all,
+/// other IO96 lanes unknown].
+pub fn clock_node(p: &IoPin) -> Result<String> {
+    Ok(match (p.uid.as_str(), p.io96) {
+        ("hvio_3_1", _) => "RPI:X121Y49Z0I29".into(),
+        ("hvio_0_1", _) => "RPI:X121Y9Z0I29".into(),
+        ("pio_0_0", true) if p.path.starts_with("x0/xiophyadaptwr_4/") => "GLOBAL_LOCAL_SEL:X106Y5Z0I3".into(),
+        ("pio_0_0", true) if p.path.starts_with("x0/xiophyadaptwr_5/") => "GLOBAL_LOCAL_SEL:X107Y5Z0I3".into(),
+        _ => bail!("{}: I/O registers in {} {} aren't modelled (no clock entry seen)", p.ball, p.uid, p.path),
+    })
 }

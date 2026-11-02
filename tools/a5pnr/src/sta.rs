@@ -109,7 +109,9 @@ impl Sta {
                     Some(Slot::Wire { src: Src::Sum }) => edges.push((id((3, alm, slot as u32 / 2)), src, Arc::Fixed(0.0))),
                     _ => {}
                 },
-                End::Port(_) | End::Pll(_) => starts.push((src, 0.0, u32::MAX)),
+                // An I/O register is timed as the pin it sits in (the model
+                // has no I/O register arcs).
+                End::Port(_) | End::Pll(_) | End::Io { .. } => starts.push((src, 0.0, u32::MAX)),
                 End::M20k { m, .. } => {
                     let Cell::M20k(c) = &nl.cells[p.m20ks[m]] else { unreachable!() };
                     starts.push((src, M20K_TCO, c.clk));
@@ -136,7 +138,7 @@ impl Sta {
                         ends.push((x, M20K_TSU, Some(c.clk), format!("M20K {m}")));
                         x
                     }
-                    End::Port(pi) => {
+                    End::Port(pi) | End::Io { port: pi, .. } => {
                         let x = id((5, conns.len(), 0));
                         ends.push((x, 0.0, None, format!("output {}", nl.ports[pi].name)));
                         x

@@ -199,6 +199,9 @@ pub enum End {
     M20k { m: usize, pin: u16 },
     /// IOPLL k's output.
     Pll(usize),
+    /// Port k's I/O cell (README (z10)): a register control or data input
+    /// (a sink), or the input register's output (a driver).
+    Io { port: usize, role: crate::ioreg::Role },
 }
 
 /// The M20K's pins in its 512 x 32 simple dual-port use (README (w), (y)):
@@ -504,7 +507,7 @@ pub enum PackMode {
     Single,
 }
 
-pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
+pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result<Packed> {
     let mut driver: HashMap<u32, usize> = HashMap::default();
     let mut loads: HashMap<u32, Vec<(usize, &'static str)>> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
@@ -543,6 +546,14 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
             Cell::Pll { out, .. } => {
                 driver.insert(*out, i);
             }
+            Cell::Tbuf { a, e, y } => {
+                if !io.iter().any(|r| r.tbuf == Some(i)) {
+                    bail!("a tristate output needs an OE register in its pin (pins.txt `reg`, README (z10))");
+                }
+                add(*a, "tbuf");
+                add(*e, "tbuf");
+                driver.insert(*y, i);
+            }
             Cell::Mlab(m) => {
                 for s in m.waddr.iter().chain(&m.raddr).chain([&m.wdata, &m.we]) {
                     add(*s, "mlab");
@@ -568,6 +579,12 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
             loads.entry(n).or_default().push((usize::MAX, "port"));
         }
     }
+    // An I/O register's constant enable (ioreg::choose's LUT) is read there.
+    for r in io {
+        for n in [r.in_ce, r.out_ce].into_iter().flatten() {
+            loads.entry(n).or_default().push((usize::MAX, "io"));
+        }
+    }
     let mut clocks: Vec<u32> = nl
         .cells
         .iter()
@@ -584,7 +601,8 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
     let comb_used = |net: u32, ff: Option<usize>| -> bool {
         loads.get(&net).is_some_and(|l| l.iter().any(|&(c, port)| !(Some(c) == ff && port == "d")))
     };
-    let mut placed: HashSet<usize> = Default::default();
+    // Flops in I/O cells aren't packed into ALMs.
+    let mut placed: HashSet<usize> = io.iter().flat_map(|r| r.flops()).collect();
     let mut alms: Vec<Alm> = Vec::new();
     let mut ffs_on: HashMap<u32, Vec<usize>> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
@@ -1011,7 +1029,36 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
         let Cell::Pll { out, .. } = nl.cells[ci] else { unreachable!() };
         nets.entry(out).or_insert((none, vec![])).0 = End::Pll(k);
     }
+    // I/O registers (README (z10)): their data, controls and outputs.
+    use crate::ioreg::Role;
+    for r in io {
+        let mut ends: Vec<(u32, Role)> = vec![(r.clk, Role::Clk)];
+        if let Some(i) = r.input {
+            nets.entry(ff_of(i).q).or_insert((none, vec![])).0 = End::Io { port: r.port, role: Role::Q };
+            ends.push((r.in_ce.expect("an enable"), Role::InCe));
+            ends.extend(r.sclr.map(|n| (n, Role::InSclr)));
+        }
+        for (f, role) in [(r.output, Role::Out), (r.oe, Role::Oe)] {
+            let Some(f) = f else { continue };
+            match ff_of(f).d {
+                Sig::Net(n) => ends.push((n, role)),
+                Sig::Const(_) => bail!("an I/O register with a constant D"),
+            }
+        }
+        if r.output.is_some() {
+            ends.push((r.out_ce.expect("an enable"), Role::OutCe));
+        }
+        ends.extend(r.aclr.map(|a| (a.net, Role::Aclr)));
+        for (n, role) in ends {
+            nets.entry(n).or_insert((none, vec![])).1.push(End::Io { port: r.port, role });
+        }
+    }
+    let io_out: HashSet<usize> = io.iter().filter(|r| r.output.is_some()).map(|r| r.port).collect();
+    let io_in: HashSet<usize> = io.iter().filter(|r| r.input.is_some()).map(|r| r.port).collect();
     for (pi, p) in nl.ports.iter().enumerate() {
+        if io_out.contains(&pi) || io_in.contains(&pi) {
+            continue;
+        }
         match (p.input, p.net) {
             (true, Sig::Net(n)) => nets.entry(n).or_insert((End::Port(pi), vec![])).0 = End::Port(pi),
             (false, Sig::Net(n)) => nets.entry(n).or_insert((none, vec![])).1.push(End::Port(pi)),

@@ -25,6 +25,9 @@ pub enum Cell {
     Mlab(Mlab),
     /// An IOPLL: output 0 of the reference pin's PLL (yosys/cells.v).
     Pll { refclk: u32, out: u32, ref_khz: u64, out_khz: u64 },
+    /// A tristate driver (yosys `$_TBUF_`): y = e ? a : z. Only an output
+    /// pin with an OE register takes one (README (z10)).
+    Tbuf { a: Sig, e: Sig, y: u32 },
 }
 
 /// An M20K as a 512 x 32 simple dual-port RAM (yosys/cells_sim.v).
@@ -332,6 +335,9 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
                     rdata,
                     init,
                 }));
+            }
+            "$_TBUF_" => {
+                cells.push(Cell::Tbuf { a: one("A")?, e: one("E")?, y: net(one("Y")?)? });
             }
             "A5_IOPLL" => {
                 let khz = |k: &str| -> Result<u64> { Ok(param(p, k)?.iter().enumerate().fold(0u64, |a, (i, &b)| a | (b as u64) << i)) };

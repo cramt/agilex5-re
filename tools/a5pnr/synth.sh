@@ -9,6 +9,8 @@
 # A5_MLAB=0 keeps them in flops). An MLAB reads with no clock, so a
 # synchronous read stays the RTL's own register (-nordff): merged into the
 # read port, yosys would rebuild it under a name of its own (README (z9)).
+# A design with a tristate output (`1'bz`) keeps it as a $_TBUF_ (tribuf):
+# an output pin with an OE register takes it (README (z10)).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 top=$1; out=$2; shift 2
@@ -24,6 +26,7 @@ base=${out%.json}
 nix shell nixpkgs#yosys -c yosys -q -l "$base.yosys.log" -p "
 read_verilog -lib $here/yosys/cells.v
 read_verilog$inc $*
+$( grep -q "'bz" "$@" && echo "hierarchy -top $top; proc; flatten; tribuf" )
 synth -top $top -flatten -run :fine $( [[ ${A5_MLAB:-1} == 1 ]] && echo "-nordff" )
 $( [[ ${A5_MLAB:-1} == 1 ]] && echo "memory_libmap -lib $here/yosys/mlab.txt" )
 memory_map
