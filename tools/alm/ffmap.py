@@ -39,5 +39,7 @@ for line in open(sys.argv[1]):
     if r == 0:
         sys.exit(f'{name} at {loc}: not a register position')
     k, h = divmod(i, 2)
-    reg = re.sub(r'~DUPLICATE(_\d+)?$', '', name).replace('|', '.')
+    # Quartus' copies: `~DUPLICATE`, and `~_Duplicate<n>` (dq2's operand
+    # registers, copied per DSP block), both maybe with a DUPLICATE on top.
+    reg = re.sub(r'~_?Duplicate\w*$', '', re.sub(r'~DUPLICATE(_\d+)?$', '', name), flags=re.I).replace('|', '.')
     print(f'{"!" if reg in ones else ""}{reg}\tl{x}_{y}_o{89 + 4 * k + 2 * h + r - 1}')

@@ -18,6 +18,15 @@ pub struct Counts {
     pub inverted: usize,
 }
 
+/// A control's level when it is a constant: (active-high value).
+fn constant(c: &Ctrl) -> Option<bool> {
+    match c.sig {
+        SigBit::Const(State::One) => Some(c.polarity == Polarity::Pos),
+        SigBit::Const(State::Zero) => Some(c.polarity == Polarity::Neg),
+        _ => None,
+    }
+}
+
 fn high(g: &mut Gates, c: Ctrl) -> Ctrl {
     match c.polarity {
         Polarity::Pos => c,
@@ -45,6 +54,39 @@ pub fn map(m: &mut Module) -> Result<Counts> {
         };
         if clk.polarity == Polarity::Neg {
             bail!("register {name}: a falling-edge clock isn't mapped (the LAB has no clock inverter in a5pnr)");
+        }
+        // Constant controls first: an enable always on is none, one always
+        // off holds Q; a reset never active is none.
+        let mut d = d;
+        let control = match control {
+            DffControl::Plain { en: Some(e) } | DffControl::Async { en: Some(e), .. } | DffControl::Sync { en: SyncEnable::EnableOverReset(e) | SyncEnable::ResetOverEnable(e), .. } if constant(&e).is_some() => {
+                let on = constant(&e).unwrap();
+                if !on {
+                    d = ff.q;
+                }
+                match control {
+                    DffControl::Plain { .. } => DffControl::Plain { en: None },
+                    DffControl::Async { arst, value, .. } => DffControl::Async { arst, value, en: None },
+                    DffControl::Sync { srst, value, en } if on => DffControl::Sync { srst, value, en: if matches!(en, SyncEnable::ResetOverEnable(_)) || on { SyncEnable::Always } else { en } },
+                    // Enable off and a reset the enable gates: the register holds.
+                    DffControl::Sync { srst, value, en: SyncEnable::ResetOverEnable(_) } => DffControl::Sync { srst, value, en: SyncEnable::Always },
+                    _ => DffControl::Plain { en: None },
+                }
+            }
+            c => c,
+        };
+        let control = match control {
+            DffControl::Async { arst, en, .. } if constant(&arst) == Some(false) => DffControl::Plain { en },
+            DffControl::Sync { srst, en, .. } if constant(&srst) == Some(false) => match en {
+                SyncEnable::Always => DffControl::Plain { en: None },
+                SyncEnable::EnableOverReset(e) | SyncEnable::ResetOverEnable(e) => DffControl::Plain { en: Some(e) },
+            },
+            c => c,
+        };
+        if let DffControl::Async { arst, .. } | DffControl::Sync { srst: arst, .. } = &control {
+            if constant(arst) == Some(true) {
+                bail!("register {name}: held in reset by a constant");
+            }
         }
         let en = |g: &mut Gates, e: Option<Ctrl>| e.map(|e| high(g, e));
         let power_up = match init.get(&q) {
@@ -101,4 +143,51 @@ pub fn map(m: &mut Module) -> Result<Counts> {
     // Every flop powers up at 0 now (inverted where the RTL said 1).
     set_inits(m, &Default::default());
     Ok(n)
+}
+
+/// Legalized flops whose enable or reset became a constant after LUT
+/// mapping (a LUT folded to a constant): an enable always on goes, one
+/// always off makes the flop hold, a reset never active goes.
+pub fn fold_constants(m: &mut Module) -> Result<()> {
+    for c in m.cells.iter_mut() {
+        let CellKind::FfGate(ff) = &mut c.kind else { continue };
+        let q = ff.q;
+        let FfKind::Dff { d, control, .. } = &mut ff.kind else { continue };
+        let en = match control {
+            DffControl::Plain { en } | DffControl::Async { en, .. } => en,
+            DffControl::Sync { en: SyncEnable::EnableOverReset(e), srst, .. } => {
+                if let Some(on) = constant(e) {
+                    if !on {
+                        *d = q;
+                    }
+                    let srst = *srst;
+                    *control = if on { DffControl::Sync { srst, value: false, en: SyncEnable::Always } } else { DffControl::Plain { en: None } };
+                }
+                continue;
+            }
+            _ => continue,
+        };
+        if let Some(on) = en.as_ref().and_then(constant) {
+            if !on {
+                *d = q;
+            }
+            *en = None;
+        }
+        if let DffControl::Sync { srst, en, .. } = control {
+            if constant(srst) == Some(false) {
+                *control = DffControl::Plain { en: match en { SyncEnable::EnableOverReset(e) => Some(*e), _ => None } };
+            }
+        }
+        if let DffControl::Async { arst, en, .. } = control {
+            if constant(arst) == Some(false) {
+                *control = DffControl::Plain { en: *en };
+            }
+        }
+        if let DffControl::Sync { srst: r, .. } | DffControl::Async { arst: r, .. } = control {
+            if constant(r) == Some(true) {
+                bail!("register {}: held in reset by a constant", c.name);
+            }
+        }
+    }
+    Ok(())
 }

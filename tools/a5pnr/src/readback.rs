@@ -25,6 +25,8 @@ enum Src {
     M20k(u32, u32, u32),
     /// The input register of input port k (README (z10)).
     IoIn(usize),
+    /// DSP block (x, y) output pin (README (z11)).
+    Dsp(u32, u32, u32),
 }
 
 /// The M20K settings a5pnr's 512 x 32 use writes (emit::M20K_SDP); any
@@ -149,6 +151,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     // the same LAB_RE pins, `xcw_ml_le_*` for `xcw_la_le_*` [obs].
     let mut labs: BTreeMap<(u32, u32), &str> = BTreeMap::new();
     let mut m20ks: BTreeMap<(u32, u32), ()> = BTreeMap::new();
+    let mut dsps: BTreeMap<(u32, u32), ()> = BTreeMap::new();
     for (u, _) in attr.keys() {
         if let Some(rest) = u.strip_prefix("cw_mm_m20k_r") {
             let (y, x) = rest.split_once("_c").context("uid")?;
@@ -159,6 +162,9 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         } else if let Some(rest) = u.strip_prefix("cw_ml_mlab_r") {
             let (y, x) = rest.split_once("_c").context("uid")?;
             labs.insert((x.parse()?, y.parse()?), "ml");
+        } else if let Some(rest) = u.strip_prefix("cw_dssm_r") {
+            let (y, x) = rest.split_once("_c").context("uid")?;
+            dsps.insert((x.parse()?, y.parse()?), ());
         } else if !(u.starts_with("cw_rt_lab_base") || u.starts_with("cw_rt_hiol") || u.starts_with("cw_rt_vio") || u.starts_with("hvio") || u.starts_with("pio")) {
             bail!("{u}: block type outside the model");
         }
@@ -194,6 +200,14 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         for pin in 83..123u32 {
             if let Some(n) = g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{pin}")) {
                 sources.push((Src::M20k(x, y, pin), n));
+            }
+        }
+    }
+    for &(x, y) in dsps.keys() {
+        for k in 0..54 {
+            let pin = crate::dsp::p_pin(k) as u32;
+            if let Some(n) = g.node(&format!("MP_MAC_RE:X{x}Y{y}Z0I{pin}")) {
+                sources.push((Src::Dsp(x, y, pin), n));
             }
         }
     }
@@ -255,6 +269,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             Src::Port(k) => inputs[*k].0.replace(['[', ']'], "_"),
             Src::M20k(x, y, p) => format!("m{x}_{y}_q{p}"),
             Src::IoIn(k) => format!("io_{}_i", inputs[*k].0.replace(['[', ']'], "_")),
+            Src::Dsp(x, y, p) => format!("d{x}_{y}_q{p}"),
         })
     };
     let lab_node = |x: u32, y: u32, pin: u32| g.node(&format!("LAB_RE:X{x}Y{y}Z0I{pin}"));
@@ -576,6 +591,58 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             bus(&|i| 52 - i, 9, "1'bx")
         )?;
     }
+    // DSP blocks (README (z11)): a block's settings must be exactly one
+    // multiplier mode's; its product, registered on the block's clock.
+    let dsp_modes = crate::dsp::modes(db)?;
+    for &(x, y) in dsps.keys() {
+        let uid = format!("cw_dssm_r{y}_c{x}");
+        // The proginv masks are per-pin inverters (dsp::proginv_pin), read
+        // below, not part of the mode.
+        let mut have: Vec<(String, String)> = attr.iter().filter(|((u, a), _)| *u == uid && !crate::dsp::is_proginv(a)).map(|((_, a), v)| (a.clone(), v.clone())).collect();
+        have.sort();
+        let mode = dsp_modes.iter().find(|(_, rows)| {
+            let mut want: Vec<(String, String)> = rows.iter().filter(|(_, a, _)| !crate::dsp::is_proginv(a)).map(|(_, a, v)| (a.clone(), v.clone())).collect();
+            want.sort();
+            want == have
+        });
+        let Some((&m, rows)) = mode else { bail!("{uid}: DSP settings outside the model (no mode of dsp/modes.tsv matches)") };
+        // Inverted pins: the bits of the block's proginv masks that differ
+        // from the mode's (dsp::proginv_pin).
+        let mut inv: HashMap<u16, bool> = HashMap::default();
+        for (h, name) in [(false, "xcw_dssm_core/dsp_proginv_l"), (true, "xcw_dssm_core/dsp_proginv_h")] {
+            let bits = |s: Option<&String>| -> Vec<bool> { s.map_or(vec![false; 54], |s| s.bytes().rev().map(|c| c == b'1').collect()) };
+            let (got, base) = (bits(attr.get(&(uid.clone(), name.to_owned()))), bits(rows.iter().find(|(_, a, _)| a == name).map(|(_, _, v)| v)));
+            for k in 0..54 {
+                if got[k] == base[k] {
+                    continue;
+                }
+                match crate::dsp::proginv_pin(h, k) {
+                    Some(p) => {
+                        inv.insert(p, true);
+                    }
+                    None => bail!("{uid} {name} bit {k}: an inverter on an unknown pin differs from the mode's"),
+                }
+            }
+        }
+        // An operand pin through its inverter; unrouted, it reads 1 [inf].
+        let mac = |p: u16| {
+            let s = sig(g.node(&format!("MP_MAC_RE:X{x}Y{y}Z0I{p}"))).unwrap_or_else(|| "1'b1".into());
+            if p != crate::dsp::CLK && inv.get(&p) == Some(&true) { format!("~{s}") } else { s }
+        };
+        let w = m.width();
+        let mut a: Vec<String> = (0..w).rev().map(|i| mac(crate::dsp::a_pin(m, i))).collect();
+        let b: Vec<String> = (0..w).rev().map(|i| mac(crate::dsp::b_pin(m, i))).collect();
+        if m.signed && !m.wide {
+            a.insert(0, mac(crate::dsp::A_SIGN));
+        }
+        let n = format!("d{x}_{y}");
+        let (sa, sb) = if m.signed { ("$signed", "$signed") } else { ("", "") };
+        writeln!(d, "  wire [{}:0] {n}_a = {{{}}}; wire [{}:0] {n}_b = {{{}}}; reg [53:0] {n}_p = 54'b0;", a.len() - 1, a.join(", "), w - 1, b.join(", "))?;
+        writeln!(v, "  always @(posedge {}) {n}_p <= {sa}({n}_a) * {sb}({n}_b);", mac(crate::dsp::CLK))?;
+        for k in 0..54 {
+            writeln!(d, "  wire {n}_q{} = {n}_p[{k}];", crate::dsp::p_pin(k))?;
+        }
+    }
     // I/O registers (README (z10)), each a flop of the pin's block: its
     // controls are active-low block pins, a signal through an inverted RPI
     // arriving inverted; an unused control is off.
@@ -687,7 +754,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         bail!("{} used pins are reached from more than one source, e.g. {}", uu.len(), uu[0]);
     }
     std::fs::write(out, head + &d + &v)?;
-    eprintln!("readback: {} M20Ks, {} LABs, {} ALMs, {} flops, {} active edges, {} inputs, {} outputs", m20ks.len(), labs.len(), nalms, nffs, active.len(), inputs.len(), outputs.len());
+    eprintln!("readback: {} DSPs, {} M20Ks, {} LABs, {} ALMs, {} flops, {} active edges, {} inputs, {} outputs", dsps.len(), m20ks.len(), labs.len(), nalms, nffs, active.len(), inputs.len(), outputs.len());
     Ok(())
 }
 

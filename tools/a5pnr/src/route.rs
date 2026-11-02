@@ -254,6 +254,7 @@ impl DelayTable {
                 }
                 End::Port(k) | End::Io { port: k, .. } => port_xy.get(&k).map(|&(x, y)| (x as i64, y as i64)),
                 End::M20k { m, .. } => Some((pl.m20k_at[m].0 as i64, pl.m20k_at[m].1 as i64)),
+                End::Dsp { d, .. } => Some((pl.dsp_at[d].0 as i64, pl.dsp_at[d].1 as i64)),
                 End::Pll(_) => None,
             }
         };

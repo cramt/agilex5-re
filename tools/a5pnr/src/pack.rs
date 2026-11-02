@@ -199,6 +199,8 @@ pub enum End {
     M20k { m: usize, pin: u16 },
     /// IOPLL k's output.
     Pll(usize),
+    /// Pin of DSP block d (`MP_MAC_RE` index, README (z11)).
+    Dsp { d: usize, pin: u16 },
     /// Port k's I/O cell (README (z10)): a register control or data input
     /// (a sink), or the input register's output (a driver).
     Io { port: usize, role: crate::ioreg::Role },
@@ -233,6 +235,17 @@ pub struct Packed {
     pub plls: Vec<usize>,
     /// MLAB RAMs: the ALMs that share one MLAB's write side, in order.
     pub mlabs: Vec<Vec<usize>>,
+    /// DSP blocks: a multiplier and the flops that are its output register.
+    pub dsps: Vec<Dsp>,
+}
+
+/// A multiplier cell in a DSP block with its output register: the flop
+/// that registers each product bit (README (z11)).
+#[derive(Clone, Debug)]
+pub struct Dsp {
+    pub cell: usize,
+    pub clk: u32,
+    pub regs: Vec<Option<usize>>,
 }
 
 /// A 6-LUT's mask over A..F (bit i: index i = {F, E, D, C, B, A}) with
@@ -546,6 +559,14 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
             Cell::Pll { out, .. } => {
                 driver.insert(*out, i);
             }
+            Cell::Mul { a, b, p, .. } => {
+                for s in a.iter().chain(b) {
+                    add(*s, "mul");
+                }
+                for n in p.iter().flatten() {
+                    driver.insert(*n, i);
+                }
+            }
             Cell::Tbuf { a, e, y } => {
                 if !io.iter().any(|r| r.tbuf == Some(i)) {
                     bail!("a tristate output needs an OE register in its pin (pins.txt `reg`, README (z10))");
@@ -603,6 +624,30 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
     };
     // Flops in I/O cells aren't packed into ALMs.
     let mut placed: HashSet<usize> = io.iter().flat_map(|r| r.flops()).collect();
+    // Multipliers (README (z11)): each product bit read goes straight into a
+    // plain flop on one clock, which becomes the DSP block's output register.
+    let mut dsps: Vec<Dsp> = Vec::new();
+    for (i, c) in nl.cells.iter().enumerate() {
+        let Cell::Mul { p, .. } = c else { continue };
+        let mut regs = vec![None; p.len()];
+        let mut clk = None;
+        for (k, n) in p.iter().enumerate() {
+            let Some(l) = n.and_then(|n| loads.get(&n)) else { continue };
+            let &[(f, "d")] = l.as_slice() else { bail!("a multiplier's product bit must go straight into one flop, the DSP block's output register (README (z11))") };
+            let Cell::Ff(ff) = &nl.cells[f] else { unreachable!() };
+            if ff.ce.is_some() || ff.sclr.is_some() || ff.aclr.is_some() {
+                bail!("a multiplier's output register has no enable or clear in a5pnr");
+            }
+            if clk.is_some_and(|c| c != ff.clk) {
+                bail!("a multiplier's output register has one clock");
+            }
+            clk = Some(ff.clk);
+            regs[k] = Some(f);
+        }
+        let Some(clk) = clk else { bail!("a multiplier whose product nothing reads") };
+        placed.extend(regs.iter().flatten());
+        dsps.push(Dsp { cell: i, clk, regs });
+    }
     let mut alms: Vec<Alm> = Vec::new();
     let mut ffs_on: HashMap<u32, Vec<usize>> = HashMap::default();
     for (i, c) in nl.cells.iter().enumerate() {
@@ -1024,6 +1069,32 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
             }
         }
     }
+    for (d, u) in dsps.iter().enumerate() {
+        let Cell::Mul { mode, a, b, .. } = &nl.cells[u.cell] else { unreachable!() };
+        let mut ends: Vec<(u32, u16)> = vec![(u.clk, crate::dsp::CLK)];
+        for (i, s) in a.iter().enumerate() {
+            if let Sig::Net(n) = s {
+                ends.push((*n, crate::dsp::a_pin(*mode, i)));
+            }
+        }
+        for (i, s) in b.iter().enumerate() {
+            if let Sig::Net(n) = s {
+                ends.push((*n, crate::dsp::b_pin(*mode, i)));
+            }
+        }
+        // A signed 18x18 product reads A's sign bit on pin 280 too.
+        if let (true, false, Some(Sig::Net(n))) = (mode.signed, mode.wide, a.get(17)) {
+            ends.push((*n, crate::dsp::A_SIGN));
+        }
+        for (n, pin) in ends {
+            nets.entry(n).or_insert((none, vec![])).1.push(End::Dsp { d, pin });
+        }
+        for (k, f) in u.regs.iter().enumerate() {
+            if let Some(f) = f {
+                nets.entry(ff_of(*f).q).or_insert((none, vec![])).0 = End::Dsp { d, pin: crate::dsp::p_pin(k) };
+            }
+        }
+    }
     let plls: Vec<usize> = nl.cells.iter().enumerate().filter(|(_, c)| matches!(c, Cell::Pll { .. })).map(|(i, _)| i).collect();
     for (k, &ci) in plls.iter().enumerate() {
         let Cell::Pll { out, .. } = nl.cells[ci] else { unreachable!() };
@@ -1072,5 +1143,5 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
         }
     }
     nets.retain(|_, (_, s)| !s.is_empty());
-    Ok(Packed { alms, chains, m20ks, nets, clocks, plls, mlabs })
+    Ok(Packed { alms, chains, m20ks, nets, clocks, plls, mlabs, dsps })
 }

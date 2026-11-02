@@ -22,8 +22,15 @@ genvar i;
 generate for (i = 0; i < Y_WIDTH; i = i + 1) begin : slice
     // p over {D, C, B, A} = A ^ B ^ C; g = A & (B ^ C).
     A5_ARITH #(.P(16'h9696), .G(16'h2828)) cell (.A(AA[i]), .B(BB[i]), .C(BI), .D(1'b0), .CI(C[i]), .SO(Y[i]), .CO(C[i+1]));
-    wire bb = BB[i] ^ BI;
-    assign CO[i] = (AA[i] & bb) | ((AA[i] ^ bb) & C[i]);
+    // A carry out read as data (a comparison): the next bit's sum against
+    // its propagate, and the top one the sum of one more half (p = g = 0);
+    // a chain's carries only feed carries (README (z11)). opt_clean drops
+    // the extra half where nothing reads it.
+    if (i + 1 < Y_WIDTH) begin
+        assign CO[i] = Y[i+1] ^ AA[i+1] ^ BB[i+1] ^ BI;
+    end else begin
+        A5_ARITH #(.P(16'h0000), .G(16'h0000)) top (.A(1'b0), .B(1'b0), .C(1'b0), .D(1'b0), .CI(C[i+1]), .SO(CO[i]));
+    end
 end endgenerate
 assign X = AA ^ (BB ^ {Y_WIDTH{BI}});
 endmodule

@@ -10,7 +10,9 @@
 # synchronous read stays the RTL's own register (-nordff): merged into the
 # read port, yosys would rebuild it under a name of its own (README (z9)).
 # A design with a tristate output (`1'bz`) keeps it as a $_TBUF_ (tribuf):
-# an output pin with an OE register takes it (README (z10)).
+# an output pin with an OE register takes it (README (z10)). A design with
+# a multiplication gets its products of up to 27 x 27 bits in DSP blocks
+# before synth (yosys/mul_map.v, README (z11); A5_DSP=0 leaves them to LUTs).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 top=$1; out=$2; shift 2
@@ -27,6 +29,7 @@ nix shell nixpkgs#yosys -c yosys -q -l "$base.yosys.log" -p "
 read_verilog -lib $here/yosys/cells.v
 read_verilog$inc $*
 $( grep -q "'bz" "$@" && echo "hierarchy -top $top; proc; flatten; tribuf" )
+$( [[ ${A5_DSP:-1} == 1 ]] && sed 's,//.*,,; s,(\*[^*]*\*),,g' "$@" | grep -q '\*' && echo "hierarchy -top $top; proc; flatten; opt_expr; wreduce t:\$mul; techmap -map $here/yosys/mul_map.v t:\$mul" )
 synth -top $top -flatten -run :fine $( [[ ${A5_MLAB:-1} == 1 ]] && echo "-nordff" )
 $( [[ ${A5_MLAB:-1} == 1 ]] && echo "memory_libmap -lib $here/yosys/mlab.txt" )
 memory_map

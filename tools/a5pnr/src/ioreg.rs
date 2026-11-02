@@ -224,6 +224,12 @@ pub fn choose(nl: &mut crate::netlist::Netlist, ports: &[usize]) -> Result<Vec<I
                 drv.insert(*out, i);
                 vec![Sig::Net(*refclk)]
             }
+            Cell::Mul { a, b, p, .. } => {
+                for n in p.iter().flatten() {
+                    drv.insert(*n, i);
+                }
+                a.iter().chain(b).copied().collect()
+            }
         };
         for s in ins {
             if let Sig::Net(n) = s {

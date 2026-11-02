@@ -116,6 +116,9 @@ impl Sta {
                     let Cell::M20k(c) = &nl.cells[p.m20ks[m]] else { unreachable!() };
                     starts.push((src, M20K_TCO, c.clk));
                 }
+                // A DSP block's output register, timed as an M20K's (the
+                // model has no DSP arcs yet) [inf].
+                End::Dsp { d, .. } => starts.push((src, M20K_TCO, p.dsps[d].clk)),
                 _ => {}
             }
             for e in sinks {
@@ -136,6 +139,11 @@ impl Sta {
                         let x = id((5, conns.len(), 0));
                         let Cell::M20k(c) = &nl.cells[p.m20ks[m]] else { unreachable!() };
                         ends.push((x, M20K_TSU, Some(c.clk), format!("M20K {m}")));
+                        x
+                    }
+                    End::Dsp { d, .. } => {
+                        let x = id((5, conns.len(), 0));
+                        ends.push((x, M20K_TSU, Some(p.dsps[d].clk), format!("DSP {d}")));
                         x
                     }
                     End::Port(pi) | End::Io { port: pi, .. } => {

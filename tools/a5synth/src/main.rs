@@ -117,6 +117,7 @@ fn run(m: &mut Module, mlab: bool) -> Result<Stats> {
     let ffs = ff::map(m)?;
     let lutmap = lutmap::map_module_k(m, LutSize::SIX)?;
     let luts = merge_luts(m);
+    ff::fold_constants(m)?;
     clean(m);
     clean::purge_wires(m);
     Ok(Stats { lutmap, luts, ffs, arith, mlab_bits })

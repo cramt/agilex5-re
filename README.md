@@ -2822,6 +2822,87 @@ The audit (`tools/alm/oracles_p10.sh`): iq under six holds and ct under
 two, every other input random each cycle, 3,000 cycles each, **0
 mismatches in all eight** [obs].
 
+### (z11) Phase 10: DSP blocks
+
+Phase 5 rebuilt the DSP modes' bits (18x18, 27x27 MAC, 9x9 + 18x19), but
+which `MP_MAC_RE` pin carries which operand or product bit, and what the
+settings do, wasn't known. Two Quartus oracles: `designs/p10/dq` (18x18
+signed with registered operands, 18x18 unsigned, 27x27, a 27x27
+multiply-accumulate with enable and clear, a sum of two products; XOR-reduced,
+so only the low product bits are identifiable) and `designs/p10/dq2`: 18x18
+and 27x27, each signed and unsigned, and a sum of two 18x18 products, every
+operand bit straight from its own LFSR flop and every product bit into a
+fabric flop through a LUT of its own (`q[k] = p[k] ^ s[k]`). Runs
+`specimens/runs/dq0`, `dq20`; atoms `specimens/p10/alm/dq20`.
+
+- **The pins** [obs, `a5pnr drivers` on dq2's decode and the atoms' flop
+  locations, all operand and product bits of five blocks]: pin 0 is the
+  clock. An 18x18 product (`dsp_mode` TWO_18X19, the idle value) takes A on
+  pins 335 + i and B on 353 + j; a signed one routes A's sign bit to pin 280
+  as well (A is the 19-bit operand). A 27x27 product (ONE_27X27) takes A on
+  353 + i (i < 9) or 362 + i, B on 335 + i (i < 9) or 380 + i. Product bit k
+  leaves on pin 134 + k (k < 38) or 60 + k.
+- **The settings of a registered multiply** [obs, dq2 r47–r50]: Quartus puts
+  `p <= a * b` with operands straight from flops in the output register
+  alone (`dsp_oreg_ctrl = REGISTERED_OREG`, every other register's clock
+  `NO_CLK_OPTION_*`), plus `dsp_sign_{a,b}{x,y}` for signed products, the
+  four `dsp_pgm_invert_for_*` set, `dsp_clr_ctrl = NCLR_SELECTION`, power
+  gating off: 28 to 31 attributes per mode, kept as they are in
+  `db/sm4revb/dsp/modes.tsv`.
+- **`dsp_proginv_l` and `_h` are per-pin input inverters** [obs]: Quartus
+  keeps the LFSR's bit 0 as an inverted flop (it starts at 1), and in each of
+  the four blocks reading it the masks differ from the other blocks of the
+  same mode in exactly one bit, the bit of the pin that reads it: l[36] for
+  pin 353, l[18] for 335, h[27] for 398. So l[k] is pin 263 + k (k < 18) or
+  317 + k, h[k] pin 371 + k (k < 36). The masks set the bits of the pins a
+  mode leaves unrouted, and in 27x27 mode h[0..17] too, pins 371–388, which
+  carry A's bits 9–26 [inf: inverted on their way in, and an unrouted pin
+  reads 1]. A mode's baseline is Quartus' mask with that one bit cleared
+  (the signed and unsigned 27x27 baselines are equal); the pins of
+  h[36..53] are [unk].
+- Not modelled: input and pipeline registers (dq's blocks and dq2's sum of
+  two products use them), the sum, MAC, 9x9 and floating-point modes,
+  enables and clears, the dynamic controls, cascades.
+
+`a5pnr readback` models a block whose settings are exactly one of the four
+modes': its product, `$signed` or not, on the block's clock into a 54-bit
+output register, each operand pin through its inverter (a bit differing
+from the mode's baseline). **Quartus' dq2 image, its sum-of-two block left
+out, runs like `dq2.v` for 3,000 cycles from power-up: q1–q4 (235
+registers), 0 mismatches** [obs]; before the inverters were understood the
+two signed blocks (whose pins read the inverted flop) mismatched from cycle
+19. `designs/p10/dq3` (dq2 without the sum of two) is the audit's clean
+copy.
+
+**a5pnr maps multipliers** (`tools/a5pnr/yosys/mul_map.v`, `src/dsp.rs`):
+before synth, yosys narrows each `$mul` (`wreduce`) and maps a product of
+two operands of up to 27 bits, both signed or both unsigned, to `A5_MUL`
+(18x18 when both fit), the operands extended to the multiplier's width so
+that every operand pin carries a signal (`A5_DSP=0` leaves products to
+LUTs). a5pnr takes the flops that register the product (each product bit
+must go straight into one flop with no enable or clear, one clock) as the
+block's output register, places blocks on the DSP sites nearest the ports'
+centre (as M20Ks), routes the operands and the clock to the pins above,
+and writes the mode's settings with its baseline masks. The STA times a
+block as an M20K [inf]; the Quartus export refuses DSPs. On the way:
+yosys' carry out of a comparison (`step <= 64`) read the chain's internal
+carry, which no ALM pin exports; `arith_map.v` now takes the top carry from
+the sum of one more half and the others from the next sum, which leaves
+every earlier design's cells unchanged (CPU 587 LUTs, 182 carry halves,
+453 ALMs).
+
+`designs/p10/mul` (a self-test after chipsmith's mult-selftest: eight
+products, 9x9 to 27x27, signed and unsigned, each checked against a
+shift-and-add reference in the fabric): 407 ALMs, 8 DSP blocks, model 222
+MHz. **All four checks pass** (`specimens/p10/mul/r1`, the first build):
+extract = design (11,975 edges, 4,896 attributes, 449 DIRECT values),
+2,000 cycles from random states and 2,000 free-running with 627 registers
+(including the 336 DSP output-register bits), 0 mismatches, asm2 0 of
+418,234 attributes differ, pfg identical, integrity OK. From power-up
+(`r2`, the RTL's slot multiplexer as continuous assignments: iverilog
+never ran its `always @*` at time 0) 20,000 cycles, its error count 0 on
+both sides, 0 mismatches.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

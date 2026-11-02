@@ -5,6 +5,7 @@
 //!     --effort X     annealing moves per temperature, x N^(4/3) (1)
 //!     --no-timing    wire length only, no timing-driven placement or routing
 //!     --quartus DIR  also write the placement as a Quartus project (export.rs)
+//!     --pack-only    stop after packing (the ALM count, for comparing synthesis)
 //!     --pack M       pairs (default): two LUTs of up to five inputs per ALM;
 //!                    related: only LUTs that share inputs or connect;
 //!                    single: one LUT per ALM in 6-LUT mode (phase 7)
@@ -17,6 +18,7 @@
 //! delays.tsv: tools/timing/fit.py's model (node costs, timing).
 
 mod det;
+mod dsp;
 mod emit;
 mod export;
 mod graph;
@@ -138,12 +140,14 @@ fn main() -> Result<()> {
     };
     let (mut seed, mut effort, mut timing_driven, mut pack_mode) = (1u64, 1.0f64, true, pack::PackMode::Pairs);
     let mut swap_pins = true;
+    let mut pack_only = false;
     let mut quartus: Option<String> = None;
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--seed" => seed = it.next().context("--seed N")?.parse()?,
             "--no-swap" => swap_pins = false,
+            "--pack-only" => pack_only = true,
             "--effort" => effort = it.next().context("--effort X")?.parse()?,
             "--no-timing" => timing_driven = false,
             "--quartus" => quartus = Some(it.next().context("--quartus DIR")?.clone()),
@@ -189,6 +193,9 @@ fn main() -> Result<()> {
         packed.m20ks.len(),
         packed.clocks.len()
     );
+    if pack_only {
+        return Ok(());
+    }
 
     // The balls' boundary nodes (README (t)).
     let mut nodes_of: HashMap<(String, String), String> = HashMap::default();
@@ -355,6 +362,7 @@ fn main() -> Result<()> {
     let port_xy: HashMap<usize, (u32, u32)> = port_node.iter().map(|(&p, &n)| (p, (g.x[n as usize] as u32, g.y[n as usize] as u32))).collect();
     let labs = place::labs(db)?;
     let sites = place::m20k_sites(db)?;
+    let dsites = place::dsp_sites(db)?;
     let mut delay: HashMap<String, f32> = HashMap::default();
     for l in std::fs::read_to_string(delays).context("reading delays")?.lines().skip(1) {
         let f: Vec<&str> = l.split('\t').collect();
@@ -373,7 +381,7 @@ fn main() -> Result<()> {
     let mut attempts = 0;
     let (pl, place_s, lines, rnets, _sink_conns, routed, route_s) = loop {
         let t1 = std::time::Instant::now();
-        let mut pl = place::place(&packed, &nl, &labs, &sites, &port_xy, seed, None, effort)?;
+        let mut pl = place::place(&packed, &nl, &labs, &sites, &dsites, &port_xy, seed, None, effort)?;
         let mut dtab = None;
         if timing_driven {
             let t = route::delay_table(&g, &base, &labs)?;
@@ -383,15 +391,15 @@ fn main() -> Result<()> {
             let conns: Vec<(End, End, f64)> = sta.conns.iter().enumerate().map(|(i, (n, e))| (packed.nets[n].0, *e, (r0.crit[i] as f64).powi(8))).collect();
             let delay_fn = |dx: i64, dy: i64| t.lab(dx, dy) as f64;
             let tc = place::TimingCost { conns, delay: &delay_fn, lambda: 0.5 };
-            pl = place::place(&packed, &nl, &labs, &sites, &port_xy, seed, Some(&tc), effort)?;
+            pl = place::place(&packed, &nl, &labs, &sites, &dsites, &port_xy, seed, Some(&tc), effort)?;
             let r1 = sta.analyse(&est(&pl));
             eprintln!("timing: timing-driven placement, {:.3} ns estimated ({})", r1.worst, r1.at);
             dtab = Some(t);
         }
         let place_s = t1.elapsed().as_secs_f64();
         if let Some(dir) = &quartus {
-            if !io.is_empty() {
-                bail!("--quartus: I/O registers aren't exported yet");
+            if !io.is_empty() || !packed.dsps.is_empty() {
+                bail!("--quartus: I/O registers and DSP blocks aren't exported yet");
             }
             export::write(dir, top, &nl, &packed, &labs, &pl, &pin_of)?;
             eprintln!("quartus: project in {dir}");
@@ -417,6 +425,11 @@ fn main() -> Result<()> {
                 }
                 End::Pll(k) => Ok(pll_node[k]),
                 End::Io { port, role } => io_node.get(&(port, role)).copied().with_context(|| format!("{}: no I/O node for {role:?}", nl.ports[port].name)),
+                End::Dsp { d, pin } => {
+                    let (x, y) = pl.dsp_at[d];
+                    let name = format!("MP_MAC_RE:X{x}Y{y}Z0I{pin}");
+                    g.node(&name).with_context(|| format!("no node {name}"))
+                }
             }
         };
         // Nets as source and sink nodes; per sink the connections it serves
@@ -549,6 +562,10 @@ fn main() -> Result<()> {
                 g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{pin}"))
             }
             End::Io { port, role } => io_node.get(&(port, role)).copied(),
+            End::Dsp { d, pin } => {
+                let (x, y) = pl.dsp_at[d];
+                g.node(&format!("MP_MAC_RE:X{x}Y{y}Z0I{pin}"))
+            }
             End::Out { .. } | End::Pll(_) => None,
         }
     };
@@ -614,7 +631,26 @@ fn main() -> Result<()> {
     for (a, b) in &edges {
         writeln!(text, "edge\t{a}\t{b}")?;
     }
-    let (attrs, directs) = emit::blocks(&nl, &packed, &labs, &pl, &lines);
+    let (attrs, mut directs) = emit::blocks(&nl, &packed, &labs, &pl, &lines);
+    // DSP blocks (README (z11)): their mode's settings as Quartus writes
+    // them (db/sm4revb/dsp/modes.tsv), and the output register in the ffmap.
+    let mut attrs = attrs;
+    let dsp_modes = dsp::modes(db)?;
+    let mut dsp_ffmap = String::new();
+    for (d, u) in packed.dsps.iter().enumerate() {
+        let netlist::Cell::Mul { mode, .. } = &nl.cells[u.cell] else { unreachable!() };
+        let (x, y) = pl.dsp_at[d];
+        let uid = format!("cw_dssm_r{y}_c{x}");
+        for (kind, a, v) in dsp_modes.get(mode).with_context(|| format!("dsp/modes.tsv has no {}", mode.name()))? {
+            let row = (uid.clone(), a.clone(), v.clone());
+            if kind == "direct" { directs.push(row) } else { attrs.push(row) }
+        }
+        for (k, f) in u.regs.iter().enumerate() {
+            if let Some(f) = f {
+                writeln!(dsp_ffmap, "{}\td{x}_{y}_p[{k}]", ff_names(&nl, *f, false))?;
+            }
+        }
+    }
     for (u, a, v) in attrs.iter().chain(&io_attrs) {
         writeln!(text, "attr\t{u}\t{a}\t{v}")?;
     }
@@ -623,13 +659,14 @@ fn main() -> Result<()> {
     }
     text.push_str(&pll_text);
     std::fs::write(out, text)?;
-    std::fs::write(format!("{out}.ffmap"), emit::ffmap(&nl, &packed, &labs, &pl)? + &io_ffmap)?;
+    std::fs::write(format!("{out}.ffmap"), emit::ffmap(&nl, &packed, &labs, &pl)? + &io_ffmap + &dsp_ffmap)?;
     let labs_used: std::collections::BTreeSet<usize> = pl.at.iter().map(|a| a.0).collect();
     eprintln!(
-        "a5pnr: {} ALMs in {} LABs, {} M20Ks, {} nets, {} edges, {} routing iterations, model Fmax {:.0} MHz; place {place_s:.1} s, route {route_s:.1} s, {:.1} s total",
+        "a5pnr: {} ALMs in {} LABs, {} M20Ks, {} DSPs, {} nets, {} edges, {} routing iterations, model Fmax {:.0} MHz; place {place_s:.1} s, route {route_s:.1} s, {:.1} s total",
         packed.alms.len(),
         labs_used.len(),
         packed.m20ks.len(),
+        packed.dsps.len(),
         rnets.len(),
         edges.len(),
         routed.iterations,
