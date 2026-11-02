@@ -13,6 +13,7 @@
 
 mod arith;
 mod ff;
+mod mult;
 mod ram;
 
 use std::path::Path;
@@ -26,7 +27,7 @@ use chipsmith_synth::{alumacc, clean, divmod, fsm, memory, opt, restructure, rom
 /// a5pnr's cells as Verilog blackboxes, for the front end.
 const LIBRARY: &str = include_str!("../../a5pnr/yosys/cells.v");
 /// Cells that are pure functions of their inputs: unused ones go.
-const REMOVABLE: &[&str] = &[arith::ARITH, ram::MLAB];
+const REMOVABLE: &[&str] = &[arith::ARITH, ram::MLAB, mult::MUL];
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -55,7 +56,7 @@ fn main() -> Result<()> {
     let file = std::fs::File::create(out).with_context(|| format!("creating {out}"))?;
     chipsmith_netlist::write_json(&Design { modules: vec![m] }, file)?;
     eprintln!(
-        "a5synth: {} gates to {} LUTs (depth {}), {} flops ({} inverted), {} carry halves in {} chains, {} MLAB RAM bits; {:.1} s",
+        "a5synth: {} gates to {} LUTs (depth {}), {} flops ({} inverted), {} carry halves in {} chains, {} MLAB RAM bits, {} multipliers; {:.1} s",
         s.lutmap.gates,
         s.luts,
         s.lutmap.depth,
@@ -64,6 +65,7 @@ fn main() -> Result<()> {
         s.arith.halves,
         s.arith.chains,
         s.mlab_bits,
+        s.dsps,
         t0.elapsed().as_secs_f64()
     );
     Ok(())
@@ -75,6 +77,7 @@ struct Stats {
     ffs: ff::Counts,
     arith: arith::Counts,
     mlab_bits: usize,
+    dsps: usize,
 }
 
 fn run(m: &mut Module, mlab: bool) -> Result<Stats> {
@@ -103,6 +106,8 @@ fn run(m: &mut Module, mlab: bool) -> Result<Stats> {
     while wreduce::wreduce(m) {
         opt::opt(m, REMOVABLE);
     }
+    // Before alumacc, which would fold products into adder trees.
+    let dsps = if std::env::var("A5_DSP").map_or(true, |v| v != "0") { mult::map(m) } else { 0 };
     alumacc::alumacc(m);
     opt::opt(m, REMOVABLE);
     let mlab_bits = if mlab { ram::map(m) } else { 0 };
@@ -120,7 +125,7 @@ fn run(m: &mut Module, mlab: bool) -> Result<Stats> {
     ff::fold_constants(m)?;
     clean(m);
     clean::purge_wires(m);
-    Ok(Stats { lutmap, luts, ffs, arith, mlab_bits })
+    Ok(Stats { lutmap, luts, ffs, arith, mlab_bits, dsps })
 }
 
 /// Constant and repeated LUT inputs folded out, constant LUTs replaced by

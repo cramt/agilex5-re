@@ -2875,9 +2875,13 @@ two signed blocks (whose pins read the inverted flop) mismatched from cycle
 written; its blocks sit at other rows and other pins read the inverted
 flop) **runs like its RTL for 3,000 cycles, 196 registers, 0 mismatches**
 [obs, held out], once the readback also knew that Quartus drives its
-constant-0 output by leaving the pin's data unrouted and inverting its RPI:
-**an unrouted I/O data pin reads 1** [obs], as an unrouted MLAB address or
-DSP operand pin does.
+constant-0 output by leaving the pin's data unrouted and inverting its RPI
+[obs]: so an unrouted I/O data pin reads 1 [inf], as an unrouted MLAB
+address pin does (and, inferred, a DSP operand pin). The readback models
+only that case; an output nothing it models reaches stays unknown (phase
+9's pl and its PLL `locked`). The phase-9 audit (`oracles_p9.sh`, 18 holds
+of six designs) still passes with every phase-10 readback change, 0
+mismatches [obs].
 
 **a5pnr maps multipliers** (`tools/a5pnr/yosys/mul_map.v`, `src/dsp.rs`):
 before synth, yosys narrows each `$mul` (`wreduce`) and maps a product of

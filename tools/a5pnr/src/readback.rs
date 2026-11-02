@@ -740,12 +740,14 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         }
     }
     for (name, n) in &outputs {
-        // An unrouted output reads 1, through the RPI's inverter if set:
-        // Quartus' constant-0 output in dq3 is exactly that [obs].
+        // An unrouted output pin reads 1, so through its RPI's inverter 0:
+        // Quartus' constant-0 output in dq3 is exactly that [obs]. Without the
+        // inverter an output nothing modelled reaches stays unknown (pl's PLL
+        // `locked` is routed from a source the readback doesn't model).
         let plain = match (sig(Some(*n)), inverted_rpi.contains(n)) {
             (Some(s), false) => s,
             (Some(s), true) => format!("~{s}"),
-            (None, false) => "1'b1".into(),
+            (None, false) => "1'bx".into(),
             (None, true) => "1'b0".into(),
         };
         let (data, en) = io_out.get(name).cloned().unwrap_or_default();
