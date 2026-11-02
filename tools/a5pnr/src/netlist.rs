@@ -21,6 +21,8 @@ pub enum Cell {
     Arith { p: u16, g: u16, c: Option<u32>, d: Option<u32>, ci: Sig, so: Option<u32>, co: Option<u32> },
     Ff(Ff),
     M20k(M20k),
+    /// One bit of an MLAB RAM (yosys/mlab.txt).
+    Mlab(Mlab),
     /// An IOPLL: output 0 of the reference pin's PLL (yosys/cells.v).
     Pll { refclk: u32, out: u32, ref_khz: u64, out_khz: u64 },
 }
@@ -39,6 +41,21 @@ pub struct M20k {
     pub outreg: bool,
     /// 512 words.
     pub init: Vec<u32>,
+}
+
+/// One bit of a 32-word MLAB RAM (yosys/mlab.txt, README (z9)): written
+/// on clk's rising edge when we, at waddr; read at raddr with no clock;
+/// init bit a is word a. `name` is yosys' `<memory>.<read port>.<bit>`.
+#[derive(Clone, Debug)]
+pub struct Mlab {
+    pub name: String,
+    pub clk: u32,
+    pub we: Sig,
+    pub waddr: Vec<Sig>,
+    pub wdata: Sig,
+    pub raddr: Vec<Sig>,
+    pub rdata: Option<u32>,
+    pub init: u32,
 }
 
 /// A flop: positive-edge clock, optional clock enable, synchronous clear
@@ -285,6 +302,23 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
                     raddr: bits(&conn["RADDR"])?,
                     rdata,
                     outreg,
+                    init,
+                }));
+            }
+            "$__A5_MLAB_" => {
+                let init = param(p, "INIT")?.iter().enumerate().fold(0u32, |w, (a, &b)| w | (b as u32) << a);
+                let rdata = match one("PORT_R_RD_DATA")? {
+                    Sig::Net(n) => Some(n),
+                    Sig::Const(_) => None,
+                };
+                cells.push(Cell::Mlab(Mlab {
+                    name: name.clone(),
+                    clk: net(one("PORT_W_CLK")?)?,
+                    we: one("PORT_W_WR_EN")?,
+                    waddr: bits(&conn["PORT_W_ADDR"])?,
+                    wdata: one("PORT_W_WR_DATA")?,
+                    raddr: bits(&conn["PORT_R_ADDR"])?,
+                    rdata,
                     init,
                 }));
             }

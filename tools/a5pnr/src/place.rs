@@ -15,11 +15,12 @@ use anyhow::{bail, Context, Result};
 use crate::netlist::Netlist;
 use crate::pack::{Ctl, End, Packed};
 
-/// A LAB site.
+/// A LAB site, or an MLAB's (for RAM only: a5pnr puts no logic there).
 #[derive(Clone, Copy, Debug)]
 pub struct Lab {
     pub x: u32,
     pub y: u32,
+    pub mlab: bool,
 }
 
 pub fn labs(db: &str) -> Result<Vec<Lab>> {
@@ -27,8 +28,8 @@ pub fn labs(db: &str) -> Result<Vec<Lab>> {
     let mut out = Vec::new();
     for l in text.lines().skip(1) {
         let f: Vec<&str> = l.split('\t').collect();
-        if f[1] == "cw_la_lab" && !f[0].contains("rsp") {
-            out.push(Lab { x: f[3].parse()?, y: f[4].parse()? });
+        if (f[1] == "cw_la_lab" || f[1] == "cw_ml_mlab") && !f[0].contains("rsp") {
+            out.push(Lab { x: f[3].parse()?, y: f[4].parse()?, mlab: f[1] == "cw_ml_mlab" });
         }
     }
     out.sort_by_key(|l| (l.x, l.y));
@@ -118,7 +119,7 @@ impl LabUse {
                 Ctl::Ce(_) => ce += 1,
                 Ctl::Sclr(_) => sclr += 1,
                 Ctl::Aclr(Some(_)) => aclr += 1,
-                Ctl::Aclr(None) => {}
+                Ctl::Aclr(None) | Ctl::Wa(..) => {}
             }
         }
         clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.1.len() <= LAB_INPUTS
@@ -200,6 +201,22 @@ pub fn place(
     let m20k_at: Vec<(u32, u32)> = sites[..p.m20ks.len()].to_vec();
     let mut by_dist: Vec<usize> = (0..labs.len()).collect();
     by_dist.sort_by_key(|&i| (labs[i].x as i64 - cx as i64).abs() + (labs[i].y as i64 - cy as i64).abs());
+    // MLAB RAMs (README (z9)) go to the MLABs nearest the ports' centre and
+    // stay there, as the M20Ks do; logic stays out of MLABs.
+    let mut in_ram = vec![false; n];
+    {
+        let mut free = by_dist.iter().copied().filter(|&l| labs[l].mlab);
+        for g in &p.mlabs {
+            let l = free.next().context("more MLAB RAMs than MLABs")?;
+            for (k, &a) in g.iter().enumerate() {
+                occ.insert((l, k as u8), a);
+                at[a] = (l, k as u8);
+                uses[l].add(&ctls[a], &ins[a], 1);
+                in_ram[a] = true;
+            }
+        }
+    }
+    by_dist.retain(|&l| !labs[l].mlab);
     let mut chain_of = vec![usize::MAX; n];
     for (ci, c) in p.chains.iter().enumerate() {
         for &a in c {
@@ -214,6 +231,9 @@ pub fn place(
         let mut trial: HashMap<usize, LabUse> = HashMap::default();
         for (j, &a) in c.iter().enumerate() {
             let l = *lab_at.get(&(x, y.checked_sub(((k0 + j) / 10) as u32)?))?;
+            if labs[l].mlab {
+                return None;
+            }
             let s = (l, ((k0 + j) % 10) as u8);
             if occ.get(&s).is_some_and(|&o| !c.contains(&o)) {
                 return None;
@@ -238,7 +258,7 @@ pub fn place(
     {
         let mut li = 0;
         for a in 0..n {
-            if chain_of[a] != usize::MAX {
+            if chain_of[a] != usize::MAX || in_ram[a] {
                 continue;
             }
             'find: loop {
@@ -335,7 +355,7 @@ pub fn place(
             _ => 0.0,
         }
     };
-    let movable: Vec<usize> = (0..n).filter(|&a| chain_of[a] == usize::MAX).collect();
+    let movable: Vec<usize> = (0..n).filter(|&a| chain_of[a] == usize::MAX && !in_ram[a]).collect();
     if n == 0 || nets.is_empty() {
         return Ok(Placement { at, m20k_at });
     }
@@ -382,6 +402,9 @@ pub fn place(
         let tx = labs[l0].x as i64 + rng.below(2 * r as usize + 1) as i64 - r;
         let ty = labs[l0].y as i64 + rng.below(2 * r as usize + 1) as i64 - r;
         let &tl = lab_at.get(&(tx.clamp(0, 255) as u32, ty.clamp(0, 255) as u32))?;
+        if labs[tl].mlab {
+            return None;
+        }
         // The ALMs that move, old and new slots.
         let mut moved: Vec<(usize, (usize, u8), (usize, u8))> = Vec::new();
         if chain_of[a] != usize::MAX {
@@ -389,6 +412,9 @@ pub fn place(
             let k0 = 0;
             for (j, &m) in c.iter().enumerate() {
                 let l = *lab_at.get(&(labs[tl].x, labs[tl].y.checked_sub(((k0 + j) / 10) as u32)?))?;
+                if labs[l].mlab {
+                    return None;
+                }
                 let s = (l, ((k0 + j) % 10) as u8);
                 if occ.get(&s).is_some_and(|o| !c.contains(o)) {
                     return None;

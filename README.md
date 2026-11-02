@@ -2650,6 +2650,47 @@ STA's own chain error.
   141 → 175 MHz, about a third is the model reading high (4.4 %) and the
   rest a5pnr's routes [inf]. Runs: `specimens/p9/route`, `specimens/p9/sta`.
 
+### (z9) Phase 9: MLAB RAM in a5pnr
+
+- **Synthesis** (`tools/a5pnr/synth.sh`, `yosys/mlab.txt`): yosys'
+  `memory_libmap` maps every RTL memory that fits to `$__A5_MLAB_` cells,
+  one bit of a 32-word RAM each, with a synchronous write and an
+  asynchronous read; a register on the read stays the RTL's own flop
+  (`synth -nordff`: merged into the read port, yosys rebuilt it under a
+  name of its own and the CPU's `rs1` lost its name). `A5_MLAB=0` keeps
+  memories in flops, as before.
+- **Packing** (`Logic::Ram`): two bits with the same read address share an
+  ALM; up to ten ALMs with the same clock, write enable and write address
+  share an MLAB, which holds nothing else. The read address goes on A, B,
+  C1, D1 and E0/E1, the write data on C0 (half 0) and D0 (half 1), the
+  write address on LAB lines 156, 157, 160, 161, 155 (`Ctl::Wa`), the write
+  enable on CLKEN0, the read data out through `LUTOUT_5LUT` in WIRE_MODE,
+  as in Quartus' ml and mi (z5), (z6). A constant address bit stays
+  unrouted and reads 1, so its words are stored where that bit is 1
+  (`emit::ram_stored`).
+- **Placement**: MLAB RAMs go to the MLABs nearest the ports' centre and
+  stay there, like the M20Ks; logic never goes into an MLAB.
+- **Checks** [obs]: `designs/p9/rf` (a 32 x 8 RAM with initial contents and
+  a 16 x 4, whose constant address bit exercises the unrouted pin): 6 RAM
+  ALMs in 2 MLABs, the image decodes to the design, 352 registers
+  including all 320 mapped RAM bits from power-up and random states, 0
+  mismatches. **The CPU with its register file in MLAB** (two read ports,
+  so two copies, 64 bits in 32 ALMs and 4 MLABs): **453 ALMs** instead of
+  1,393 (Quartus: 1,082 with the register file in flops, 334 + 2 M20Ks
+  by its own choice), extract = design, 20,000 cycles from power-up and
+  300 from random states with 2,245 registers compared, 0 mismatches,
+  asm2 0 of 333,910 attributes differing, pfg identical, integrity OK. The
+  model puts it at 119 MHz (the flop version 141): the critical path now
+  ends at an MLAB's write data.
+- simcheck now maps RTL memory words onto MLAB contents (`mem[word][bit]`
+  lines in the ffmap) and follows `wire X = reg;` aliases back to the
+  register: femtorv32's `rs1` only ever appeared as `aluIn1`, so its RTL
+  copy was never given its random state (a gap phase 8's runs didn't hit).
+- Not done [unk]: logic in an MLAB beside RAM, RAMs deeper than 32 words
+  (memory_libmap would build them from several with a read mux; not tried),
+  the read register inside the MLAB (Quartus uses LAB clock 1 for it, (z5)),
+  MLAB RAM in the Quartus export.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

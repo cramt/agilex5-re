@@ -76,6 +76,9 @@ pub enum Logic {
     /// flop-only ALM.
     Five { halves: [Option<Half>; 2] },
     Arith { halves: [Option<usize>; 2] },
+    /// MLAB RAM: one bit per half (netlist::Mlab cells), both read at the
+    /// same address (README (z9)).
+    Ram { halves: [Option<usize>; 2] },
 }
 
 #[derive(Clone, Debug)]
@@ -92,6 +95,9 @@ pub enum Ctl {
     Sclr(u32),
     /// An asynchronous clear; None is a line left inactive.
     Aclr(Option<(u32, bool)>),
+    /// Bit k of an MLAB RAM's write address (LAB_RE 156, 157, 160, 161,
+    /// 155, README (z5)).
+    Wa(u8, u32),
 }
 
 pub const PIN_A: u8 = 3;
@@ -103,6 +109,11 @@ pub const SIX_HI_PIN: [u8; 6] = [3, 4, 5, 6, 0, 7];
 pub const HALF_PINS: [[u8; 3]; 2] = [[2, 1, 0], [5, 6, 7]];
 /// An arithmetic half's C and D inputs (README (w)).
 pub const ARITH_IN: [[u8; 2]; 2] = [[2, 1], [5, 6]];
+/// A RAM ALM's read address pins, bits 0..4 (bit 4 on E0 and E1), and
+/// each half's write data pin.
+pub const RAM_RADDR: [&[u8]; 5] = [&[PIN_A], &[PIN_B], &[5], &[6], &[0, 7]];
+pub const RAM_WDATA: [u8; 2] = [2, 1];
+
 /// The pin a half's LEIM slots read: A, B.
 pub const LEIM_PIN: [u8; 2] = [PIN_A, PIN_B];
 
@@ -157,7 +168,7 @@ pub fn apply_swaps(alm: &mut Alm, moves: &[(u8, u8)]) {
                 }
             }
         }
-        Logic::Arith { .. } => {}
+        Logic::Arith { .. } | Logic::Ram { .. } => {}
     }
 }
 
@@ -217,6 +228,8 @@ pub struct Packed {
     pub clocks: Vec<u32>,
     /// IOPLL cells, by netlist index.
     pub plls: Vec<usize>,
+    /// MLAB RAMs: the ALMs that share one MLAB's write side, in order.
+    pub mlabs: Vec<Vec<usize>>,
 }
 
 /// A 6-LUT's mask over A..F (bit i: index i = {F, E, D, C, B, A}) with
@@ -311,6 +324,21 @@ impl Alm {
     /// The control lines this ALM's flops need.
     pub fn ctls(&self, nl: &Netlist) -> Vec<Ctl> {
         let mut out = Vec::new();
+        // A RAM ALM's write side: LAB clock 0, CLKEN0 as the write enable,
+        // the write address lines (README (z5)).
+        if let Logic::Ram { halves } = &self.logic {
+            let Cell::Mlab(m) = &nl.cells[halves.iter().flatten().next().copied().expect("a RAM ALM has a bit")] else { unreachable!() };
+            out.push(Ctl::Clock(m.clk));
+            if let Sig::Net(n) = m.we {
+                out.push(Ctl::Ce(n));
+            }
+            for (k, a) in m.waddr.iter().enumerate() {
+                if let Sig::Net(n) = a {
+                    out.push(Ctl::Wa(k as u8, *n));
+                }
+            }
+            return out;
+        }
         for h in 0..2 {
             let ffs: Vec<Ff> = (2 * h..2 * h + 2).filter_map(|s| self.ff(nl, s)).collect();
             if let Some(f) = ffs.first() {
@@ -329,7 +357,7 @@ impl Alm {
 
     /// Could flop f go into slot s (pin rules aside)?
     fn fits(&self, nl: &Netlist, s: usize, f: &Ff) -> bool {
-        if self.slots[s].is_some() {
+        if self.slots[s].is_some() || matches!(self.logic, Logic::Ram { .. }) {
             return false;
         }
         // xreg0's ce_sel and sclr_sel serve both registers of the half
@@ -372,6 +400,26 @@ impl Alm {
                             }
                             HalfLut::Pass(n) => n,
                         });
+                    }
+                }
+            }
+            // A RAM ALM: read address on A, B, C1, D1 and E (both E pins, as
+            // Quartus routes it), half 0's write data on C0, half 1's on D0
+            // [obs, ml: README (z5)]. A constant address bit stays unrouted,
+            // which reads 1 (README (z6)).
+            Logic::Ram { halves } => {
+                for (h, half) in halves.iter().enumerate() {
+                    let Some(c) = half else { continue };
+                    let Cell::Mlab(m) = &nl.cells[*c] else { unreachable!() };
+                    for (k, a) in m.raddr.iter().enumerate() {
+                        if let Sig::Net(n) = a {
+                            for &q in RAM_RADDR[k] {
+                                out[q as usize] = Some(*n);
+                            }
+                        }
+                    }
+                    if let Sig::Net(n) = m.wdata {
+                        out[RAM_WDATA[h] as usize] = Some(n);
                     }
                 }
             }
@@ -495,6 +543,15 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
             Cell::Pll { out, .. } => {
                 driver.insert(*out, i);
             }
+            Cell::Mlab(m) => {
+                for s in m.waddr.iter().chain(&m.raddr).chain([&m.wdata, &m.we]) {
+                    add(*s, "mlab");
+                }
+                add(Sig::Net(m.clk), "clk");
+                if let Some(n) = m.rdata {
+                    driver.insert(n, i);
+                }
+            }
             Cell::M20k(m) => {
                 for s in m.waddr.iter().chain(&m.wdata).chain(&m.raddr).chain(&m.be).chain([&m.we, &m.re]) {
                     add(*s, "m20k");
@@ -517,6 +574,7 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
         .filter_map(|c| match c {
             Cell::Ff(f) => Some(f.clk),
             Cell::M20k(m) => Some(m.clk),
+            Cell::Mlab(m) => Some(m.clk),
             _ => None,
         })
         .collect();
@@ -538,6 +596,50 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
         let Cell::Ff(f) = &nl.cells[i] else { unreachable!() };
         f
     };
+    // MLAB RAM (README (z9)): bits with the same clock, write enable and
+    // write address share an MLAB's write side, ten ALMs to an MLAB; two
+    // bits with the same read address share an ALM.
+    let mut mlabs: Vec<Vec<usize>> = Vec::new();
+    {
+        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (i, c) in nl.cells.iter().enumerate() {
+            if let Cell::Mlab(m) = c {
+                if matches!(m.we, Sig::Const(_)) || matches!(m.wdata, Sig::Const(_)) {
+                    bail!("{}: MLAB RAM with a constant write enable or data", m.name);
+                }
+                // A constant address bit is left unrouted, which reads 1: it
+                // has to be the same constant on both ports (README (z6)).
+                for (w, r) in m.waddr.iter().zip(&m.raddr) {
+                    if matches!(w, Sig::Const(_)) != matches!(r, Sig::Const(_)) || (matches!(w, Sig::Const(_)) && w != r) {
+                        bail!("{}: an address bit constant on one port only", m.name);
+                    }
+                }
+                groups.entry(format!("{:?}", (m.clk, m.we, &m.waddr))).or_default().push(i);
+            }
+        }
+        for cells in groups.values() {
+            let mut by_raddr: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+            for &i in cells {
+                let Cell::Mlab(m) = &nl.cells[i] else { unreachable!() };
+                by_raddr.entry(format!("{:?}", m.raddr)).or_default().push(i);
+            }
+            let mut group_alms = Vec::new();
+            for bits in by_raddr.values() {
+                for pair in bits.chunks(2) {
+                    let mut alm = Alm { logic: Logic::Ram { halves: [pair.first().copied(), pair.get(1).copied()] }, slots: [None; 4] };
+                    for (h, &c) in pair.iter().enumerate() {
+                        let Cell::Mlab(m) = &nl.cells[c] else { unreachable!() };
+                        if m.rdata.is_some_and(|n| loads.contains_key(&n)) {
+                            alm.slots[2 * h] = Some(Slot::Wire { src: Src::Lut });
+                        }
+                    }
+                    group_alms.push(alms.len());
+                    alms.push(alm);
+                }
+            }
+            mlabs.extend(group_alms.chunks(10).map(<[usize]>::to_vec));
+        }
+    }
     // Carry chains, from their heads.
     let mut next: HashMap<usize, usize> = HashMap::default();
     let mut has_prev = HashSet::default();
@@ -743,7 +845,7 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
                     }
                 }
             }
-            Logic::Arith { halves } => {
+            Logic::Arith { halves } | Logic::Ram { halves } => {
                 for c in halves.iter().flatten() {
                     alm_of_cell.insert(*c, a);
                 }
@@ -844,7 +946,7 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
         }
         for ctl in alm.ctls(nl) {
             let n = match ctl {
-                Ctl::Clock(n) | Ctl::Ce(n) | Ctl::Sclr(n) => n,
+                Ctl::Clock(n) | Ctl::Ce(n) | Ctl::Sclr(n) | Ctl::Wa(_, n) => n,
                 Ctl::Aclr(Some((n, _))) => n,
                 Ctl::Aclr(None) => continue,
             };
@@ -860,6 +962,10 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
                         Some(HalfLut::Cell(c)) => out_of(c),
                         _ => unreachable!("a wire slot on a half with no LUT cell"),
                     },
+                    Logic::Ram { halves } => {
+                        let Cell::Mlab(m) = &nl.cells[halves[s / 2].expect("a RAM half")] else { unreachable!() };
+                        m.rdata.expect("a used read")
+                    }
                     Logic::Arith { .. } => unreachable!(),
                 },
                 Some(Slot::Wire { src: Src::Sum }) => {
@@ -919,5 +1025,5 @@ pub fn pack(nl: &Netlist, mode: PackMode) -> Result<Packed> {
         }
     }
     nets.retain(|_, (_, s)| !s.is_empty());
-    Ok(Packed { alms, chains, m20ks, nets, clocks, plls })
+    Ok(Packed { alms, chains, m20ks, nets, clocks, plls, mlabs })
 }

@@ -152,14 +152,15 @@ fn main() -> Result<()> {
     let t0 = std::time::Instant::now();
     let nl = netlist::read(json, top)?;
     let mut packed = pack::pack(&nl, pack_mode)?;
-    let [n6, n55, n5, n_arith, n_ff] = sta::alm_kinds(&packed);
+    let [n6, n55, n5, n_arith, n_ff, n_ram] = sta::alm_kinds(&packed);
     let n_ffs = nl.cells.iter().filter(|c| matches!(c, netlist::Cell::Ff(_))).count();
     let ff_alms = packed.alms.iter().filter(|a| a.slots.iter().any(|s| matches!(s, Some(pack::Slot::Ff { .. })))).count();
     eprintln!(
-        "pack: {} cells into {} ALMs ({n6} 6-LUT, {n55} two 5-LUTs, {n5} one 5-LUT, {n_arith} arithmetic in {} chains, {n_ff} flops only; {ff_alms} with flops), {n_ffs} flops, {} M20Ks, {} clocks",
+        "pack: {} cells into {} ALMs ({n6} 6-LUT, {n55} two 5-LUTs, {n5} one 5-LUT, {n_arith} arithmetic in {} chains, {n_ff} flops only, {n_ram} MLAB RAM in {} MLABs; {ff_alms} with flops), {n_ffs} flops, {} M20Ks, {} clocks",
         nl.cells.len(),
         packed.alms.len(),
         packed.chains.len(),
+        packed.mlabs.len(),
         packed.m20ks.len(),
         packed.clocks.len()
     );

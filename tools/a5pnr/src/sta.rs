@@ -125,7 +125,7 @@ impl Sta {
                     End::Ctl { alm, ctl } => {
                         let x = id((5, conns.len(), 0));
                         let clk = p.alms[alm].ctls(nl).iter().find_map(|c| if let crate::pack::Ctl::Clock(k) = c { Some(*k) } else { None });
-                        if matches!(ctl, crate::pack::Ctl::Ce(_) | crate::pack::Ctl::Sclr(_)) {
+                        if matches!(ctl, crate::pack::Ctl::Ce(_) | crate::pack::Ctl::Sclr(_) | crate::pack::Ctl::Wa(..)) {
                             ends.push((x, get("tsu"), clk, format!("{} at ALM {alm}", nl.nets[net as usize])));
                         }
                         x
@@ -163,6 +163,21 @@ impl Sta {
                         for &pin in &half.pins {
                             edges.push((id((1, a, pin as u32)), id((2, a, h as u32)), Arc::Fixed(get(&format!("lut:data{}", pin_letter(pin))))));
                         }
+                    }
+                }
+                // MLAB RAM (README (z9)): the read is a LUT read at its
+                // address pins; the write data, like the write address and
+                // enable, is captured at the clock.
+                Logic::Ram { halves } => {
+                    for (h, c) in halves.iter().enumerate() {
+                        let Some(c) = c else { continue };
+                        let Cell::Mlab(m) = &nl.cells[*c] else { unreachable!() };
+                        for pins in crate::pack::RAM_RADDR {
+                            for &pin in pins {
+                                edges.push((id((1, a, pin as u32)), id((2, a, h as u32)), Arc::Fixed(get(&format!("lut:data{}", pin_letter(pin))))));
+                            }
+                        }
+                        ends.push((id((1, a, crate::pack::RAM_WDATA[h] as u32)), get("tsu"), Some(m.clk), format!("MLAB RAM data at ALM {a}")));
                     }
                 }
                 // The carry arcs as quartus_sta strings them (README (z7)):
@@ -363,9 +378,9 @@ fn lut_key(alm: &Alm, s: usize) -> u32 {
 }
 
 /// ALM counts by kind, for reports: 6-LUT, two 5-LUTs, one 5-LUT (with
-/// or without a pass-through half), arithmetic, flops only.
-pub fn alm_kinds(p: &Packed) -> [usize; 5] {
-    let mut n = [0; 5];
+/// or without a pass-through half), arithmetic, flops only, MLAB RAM.
+pub fn alm_kinds(p: &Packed) -> [usize; 6] {
+    let mut n = [0; 6];
     for a in &p.alms {
         let k = match &a.logic {
             Logic::Six { .. } => 0,
@@ -375,6 +390,7 @@ pub fn alm_kinds(p: &Packed) -> [usize; 5] {
                 _ => 4,
             },
             Logic::Arith { .. } => 3,
+            Logic::Ram { .. } => 5,
         };
         n[k] += 1;
     }

@@ -19,6 +19,8 @@ pub const LAB_CLK: u32 = 83;
 pub const LAB_CE: [u32; 2] = [80, 81];
 pub const LAB_SCLR: u32 = 82;
 pub const LAB_ACLR: u32 = 86;
+/// An MLAB RAM's write address lines, bits 0..4 [obs, ml: README (z5)].
+pub const RAM_WA: [u32; 5] = [156, 157, 160, 161, 155];
 /// The routing-tile hop into LAB_ACLR whose inverter makes a clear active-low.
 pub const ACLR_RPI: u32 = 5;
 
@@ -76,6 +78,8 @@ pub struct LabLines {
     pub ce: Vec<u32>,
     pub sclr: Option<u32>,
     pub aclr: Option<(u32, bool)>,
+    /// An MLAB RAM's write enable, which has to be CLKEN0.
+    pub ram_we: Option<u32>,
 }
 
 pub fn lab_lines(p: &Packed, nl: &Netlist, pl: &Placement) -> BTreeMap<usize, LabLines> {
@@ -92,12 +96,24 @@ pub fn lab_lines(p: &Packed, nl: &Netlist, pl: &Placement) -> BTreeMap<usize, La
                 }
                 Ctl::Sclr(n) => l.sclr = Some(n),
                 Ctl::Aclr(Some(x)) => l.aclr = Some(x),
-                Ctl::Aclr(None) => {}
+                Ctl::Aclr(None) | Ctl::Wa(..) => {}
+            }
+        }
+        // An MLAB RAM's write enable is CLKEN0 (README (z5)).
+        if let Logic::Ram { halves } = &alm.logic {
+            if let Cell::Mlab(m) = &nl.cells[halves.iter().flatten().next().copied().unwrap()] {
+                if let Sig::Net(n) = m.we {
+                    l.ram_we = Some(n);
+                }
             }
         }
     }
     for l in out.values_mut() {
         l.ce.sort();
+        if let Some(we) = l.ram_we {
+            l.ce.retain(|&n| n != we);
+            l.ce.insert(0, we);
+        }
     }
     out
 }
@@ -109,11 +125,27 @@ pub fn ctl_pin(lines: &LabLines, c: Ctl) -> u32 {
         Ctl::Ce(n) => LAB_CE[lines.ce.iter().position(|&m| m == n).expect("enable on its LAB")],
         Ctl::Sclr(_) => LAB_SCLR,
         Ctl::Aclr(_) => LAB_ACLR,
+        Ctl::Wa(k, _) => RAM_WA[k as usize],
     }
 }
 
 pub fn lab_uid(labs: &[Lab], l: usize) -> String {
-    format!("cw_la_lab_r{}_c{}", labs[l].y, labs[l].x)
+    let kind = if labs[l].mlab { "cw_ml_mlab" } else { "cw_la_lab" };
+    format!("{kind}_r{}_c{}", labs[l].y, labs[l].x)
+}
+
+/// An MLAB RAM bit's 32 stored mask bits (word a at bit a [obs, mi: README
+/// (z6)]): an address bit left constant is unrouted and reads 1, so word a
+/// sits where that bit is 1.
+pub fn ram_stored(m: &crate::netlist::Mlab) -> u32 {
+    let (mut cmask, mut cval) = (0usize, 0usize);
+    for (k, s) in m.raddr.iter().enumerate() {
+        if let Sig::Const(v) = s {
+            cmask |= 1 << k;
+            cval |= (*v as usize) << k;
+        }
+    }
+    (0..32usize).filter(|a| a & cmask == cval).fold(0u32, |w, a| w | (m.init >> a & 1) << (a | cmask))
 }
 
 /// Attribute and DIRECT lines for the logic: ALMs, LABs, M20Ks.
@@ -153,6 +185,19 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
                 let stored = five_stored(w);
                 if stored.contains('0') {
                     directs.push((uid.clone(), format!("{pa}/xcw_la_le_lut/lut_mask"), stored));
+                }
+            }
+            Logic::Ram { halves } => {
+                let mut w = 0u64;
+                for (h, c) in halves.iter().enumerate() {
+                    if let Some(c) = c {
+                        let Cell::Mlab(m) = &nl.cells[*c] else { unreachable!() };
+                        w |= (ram_stored(m) as u64) << (32 * h);
+                    }
+                }
+                let stored = five_stored(w);
+                if stored.contains('1') {
+                    directs.push((uid.clone(), format!("{pa}/xcw_ml_le_lut/lut_mask"), stored));
                 }
             }
             Logic::Arith { halves } => {
@@ -210,16 +255,18 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
                 ff_labs.insert(l);
             }
             // A half whose flops use the LAB's clear stays on CLR1 (idle);
-            // everything else is on CLR2, left inactive (Quartus, ct).
-            if half_ff.as_ref().is_none_or(|f| f.aclr.is_none()) {
+            // everything else is on CLR2, left inactive (Quartus, ct); a RAM
+            // ALM leaves it idle (mi).
+            if half_ff.as_ref().is_none_or(|f| f.aclr.is_none()) && !matches!(alm.logic, Logic::Ram { .. }) {
                 set(format!("{r0}/xreg_aclr/regclr"), "CLR2");
             }
         }
+        let rc = if labs[l].mlab { "xcw_ml_le_regctrl" } else { "xcw_la_le_regctrl" };
         if ce_line == 1 {
-            set(format!("{pa}/xcw_la_le_regctrl/xce_la_le_regctrl_mux/regclk_ens"), "CLKEN1");
+            set(format!("{pa}/{rc}/xce_la_le_regctrl_mux/regclk_ens"), "CLKEN1");
         }
-        set(format!("{pa}/xcw_la_le_regctrl/xcw_la_le_regctrl_reg/ce_sel"), "CE");
-        set(format!("{pa}/xcw_la_le_regctrl/xcw_la_le_regctrl_reg/clr_sel"), "CLR");
+        set(format!("{pa}/{rc}/xcw_la_le_regctrl_reg/ce_sel"), "CE");
+        set(format!("{pa}/{rc}/xcw_la_le_regctrl_reg/clr_sel"), "CLR");
     }
     for &l in &ff_labs {
         attrs.push((lab_uid(labs, l), "xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off".into(), "DISABLE_TIEOFF".into()));
@@ -297,6 +344,29 @@ pub fn ffmap(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement) -> Result<S
                     },
                 };
                 writeln!(map, "{names}\tl{}_{}_o{}", l.x, l.y, 89 + 4 * k + s)?;
+            }
+        }
+    }
+    // MLAB RAM contents (README (z9)): yosys names a bit `<memory>.<read
+    // port>.<bit>`; word a of it is the readback's `_m[32h + a']`.
+    for (a, alm) in p.alms.iter().enumerate() {
+        let Logic::Ram { halves } = &alm.logic else { continue };
+        let l = labs[pl.at[a].0];
+        let k = pl.at[a].1 as u32;
+        for (h, c) in halves.iter().enumerate() {
+            let Some(c) = c else { continue };
+            let Cell::Mlab(m) = &nl.cells[*c] else { unreachable!() };
+            let mut parts = m.name.rsplitn(3, '.');
+            let (Some(bit), Some(_), Some(mem)) = (parts.next(), parts.next(), parts.next()) else { continue };
+            let (mut cmask, mut cval) = (0usize, 0usize);
+            for (j, s) in m.raddr.iter().enumerate() {
+                if let Sig::Const(v) = s {
+                    cmask |= 1 << j;
+                    cval |= (*v as usize) << j;
+                }
+            }
+            for w in (0..32usize).filter(|w| w & cmask == cval) {
+                writeln!(map, "{mem}[{w}][{bit}]\tl{}_{}_a{k}_m[{}]", l.x, l.y, 32 * h + (w | cmask))?;
             }
         }
     }

@@ -1,0 +1,17 @@
+# MLAB RAM for yosys memory_libmap (README (z9)): each half-ALM of an MLAB
+# holds one bit of a 32-word RAM in its 32 mask bits, written on the LAB's
+# clock 0 when its CLKEN0 line is high, at the address on the LAB's lines,
+# and read at the ALM's own pins with no clock (README (z5), (z6)). A
+# synchronous read becomes this read and a flop. a5pnr reads the
+# `$__A5_MLAB_` cells as they are (src/netlist.rs).
+ram distributed $__A5_MLAB_ {
+    abits 5;
+    width 1;
+    cost 4;
+    init any;
+    port sw "W" {
+        clock posedge;
+    }
+    port ar "R" {
+    }
+}

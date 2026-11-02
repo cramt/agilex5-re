@@ -42,6 +42,15 @@ for f in rtl:
             name = re.match(r'\s*([A-Za-z_]\w*)', part)
             if name:
                 declared.add(name.group(1))
+# A wire that is just another name for a register (`wire [31:0] aluIn1 =
+# rs1;`): yosys may keep only the wire's name, and the register then never
+# got its random state (README (z9): the CPU's rs1).
+alias = {}
+for f in rtl:
+    src = re.sub(r'//.*', '', open(f).read())
+    for m in re.finditer(r'\bwire\b\s*(?:\[[^\]]*\]\s*)?(\w+)\s*=\s*(\w+)\s*;', src):
+        if m.group(2) in declared:
+            alias[m.group(1)] = m.group(2)
 memories = set()
 for f in rtl:
     src = re.sub(r'//.*', '', open(f).read())
@@ -58,9 +67,18 @@ for l in open(ffmap):
         base, _, idx = net.rpartition('[')
         idx = idx.rstrip(']')
         leaf = base.rsplit('.', 1)[-1].split('[')[0]
-        if base.startswith('$') or base not in widths or base in mod['ports'] or leaf not in declared:
+        net_base = base
+        if leaf not in declared and leaf in alias and base.endswith(leaf):
+            base = base[:len(base) - len(leaf)] + alias[leaf]
+            leaf = alias[leaf]
+        # A word bit of an RTL memory held in MLAB RAM (README (z9)):
+        # `mem[word][bit]`, the memory being no net of the netlist.
+        if leaf in memories and re.fullmatch(r'.*\[\d+\]', base):
+            regs.append((f'dut.{base}[{idx}]', f'~rb.{flop}' if inv else f'rb.{flop}'))
+            break
+        if base.startswith('$') or net_base not in widths or base in mod['ports'] or leaf not in declared:
             continue
-        ref = f'dut.{base}' if widths[base] == 1 else f'dut.{base}[{idx}]'
+        ref = f'dut.{base}' if widths[net_base] == 1 else f'dut.{base}[{idx}]'
         regs.append((ref, f'~rb.{flop}' if inv else f'rb.{flop}'))
         break
 
