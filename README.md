@@ -2529,6 +2529,56 @@ The oracle designs' RTL got the device's power-up 0s where it had none
 (mq's second RAM, ar's registers), which the simulation needs and Quartus
 already assumed.
 
+### (z7) Phase 9: the STA's carry arcs
+
+quartus_sta's carry-chain arcs, from every reported path of phases 6–8
+(`tools/timing/paths.py` now keeps each cell's location, so an arc's
+ALMs are known) [obs]:
+
+| arc | n | mean (ns) |
+|---|---|---|
+| `cin → cout` within one ALM (both halves) | 17,577 | 0.050 |
+| the same at a half-LAB's last ALM (4 or 9) | 1,585 | 0.118 |
+| `cin → sumout` (either half) | 6,537 | 0.178 |
+| data → its own ALM's `cout` | 2,175 | 0.226 (A 0.29 … D 0.21) |
+| data → `cout` of the half-LAB's last ALM, d ALMs on (look-ahead) | 3,559 | 0.41 (d = 0–1), 0.43, 0.48, 0.50 (d = 4) |
+| data → `cout` of ALM 9 from the top half-LAB (d = 5–9) | 803 | 0.46–0.53 |
+| data → `sumout` | 335 | 0.27 |
+| ALM 9's `cout` into the next LAB (`LAB_RE` I88) | 744 | 0.105 |
+
+So a carry ripples per ALM, not per half, and a data input reaches a
+half-LAB's end in one step, nowhere near a ripple's cost; no reported path
+ripples through ALM 9 into the next LAB. a5pnr's STA charged `cin → cout`
+(0.059, a mean over both kinds) per half and one 0.29–0.38 ns data → cout
+at the entry half before rippling.
+
+- **The fit** (`tools/timing/fit.py`): carry arcs are classed by where they
+  run (`arith:<in>>cout`, `:e` at ALM 4 or 9, `arith:data>cout:la<d>`,
+  `arith:cin>cout:skip`, `:x` for half 0's data into half 1's sum,
+  `carry:lab`). Trained on rt and ar as before; `carry:lab` (0.105 ns)
+  from cql0, the only Quartus fit with a reported LAB crossing.
+- **a5pnr's STA** (`src/sta.rs`) now strings them that way: per ALM a carry
+  out, `cin → cout` once per ALM, each data input to its own ALM's carry
+  out and by look-ahead to the half-LAB's and the LAB's last ALM,
+  `carry:lab` into the next LAB.
+- **The error, re-measured** [obs]: `fit.py eval --sta old|new --worst`
+  prices every carry section of a quartus_sta path (data input to the sum
+  it ends in) the way each STA strings it, routing hops at their class
+  means, on each endpoint's worst path; held out except where noted:
+
+  | set (worst path per endpoint) | old STA: mean, median, 95th, max | new STA |
+  |---|---|---|
+  | ctl2 (a5pnr's ctl placement, Quartus' routes; 66) | +33.6 %, 37.1 %, 67.8 %, 71.8 % | **+6.7 %, 6.1 %, 21.9 %, 22.3 %** |
+  | cpu3 (a5pnr's CPU placement; 2,000) | +11.0 %, 10.1 %, 21.6 %, 29.2 % | **+3.1 %, 2.5 %, 10.1 %, 14.2 %** |
+  | hx (473) | +0.2 %, 2.8 %, 14.3 %, 44.5 % | −1.3 %, 2.3 %, 7.2 %, 10.1 % |
+  | ct (126) | +3.9 %, 2.6 %, 29.7 %, 36.0 % | +0.5 %, 2.1 %, 7.3 %, 30.9 % |
+  | mm, mq (1,092, 1,337) | 4.6 %, 2.7 % median; max 34.8 %, 43.5 % | 4.4 %, 2.7 %; max 13.5 %, 10.2 % |
+
+  Hop by hop (each quartus_sta arc at its class mean, all paths), the new
+  classes take ctl2 from 12.5 % to 5.4 % median, hx 5.2 → 1.5 %, ct 8.2 →
+  2.7 %, cpu3 3.0 → 2.1 %. What is left on ctl2 (+5–7 %) is routing hops,
+  not carry [inf].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

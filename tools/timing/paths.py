@@ -7,7 +7,9 @@
 # uTco, uTsu, IC), incr (ns), rise/fall, the DYGR node name (fitter names
 # converted as a5db's route.rs does) or the cell's port, the element type;
 # and one `P` row per path: id, data delay, data required minus clock
-# (the setup requirement seen from the data path).
+# (the setup requirement seen from the data path). A last column has the
+# hop's fitter location (`LABCELL_X69_Y27_N57`), which places a carry
+# chain's cells (README (z7)).
 import re
 import sys
 
@@ -52,9 +54,9 @@ def rows(path):
             continue
         total, incr, rf, kind, fanout, loc, etype, elem = f
         if section == 'arrival' and kind in ('RE', 'CELL', 'uTco', 'IC'):
-            yield ('H', pid, kind, incr, rf, dygr(loc) if kind == 'RE' else elem, etype, fanout)
+            yield ('H', pid, kind, incr, rf, dygr(loc) if kind == 'RE' else elem, etype, fanout, loc)
         if section == 'required' and kind == 'uTsu':
-            yield ('H', pid, kind, incr, rf, elem, etype, fanout)
+            yield ('H', pid, kind, incr, rf, elem, etype, fanout, loc)
 
 
 for p in sys.argv[1:]:

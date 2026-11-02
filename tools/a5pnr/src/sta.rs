@@ -67,6 +67,8 @@ fn ff_clock(nl: &Netlist, ff: usize) -> u32 {
 impl Sta {
     pub fn new(nl: &Netlist, p: &Packed, d: &HashMap<String, f32>) -> Sta {
         let get = |k: &str| d.get(k).copied().unwrap_or(0.0);
+        // A class with a fallback (a delay table from before README (z7)).
+        let get2 = |k: &str, alt: &str| d.get(k).or_else(|| d.get(alt)).copied().unwrap_or(0.0);
         let mut ids: HashMap<(u8, usize, u32), u32> = HashMap::default();
         let mut n = 0u32;
         let mut id = |k: (u8, usize, u32)| -> u32 {
@@ -84,21 +86,13 @@ impl Sta {
         let mut ends = Vec::new();
         let mut clock_of_start = HashMap::default();
         let clocks: crate::det::HashSet<u32> = p.clocks.iter().copied().collect();
-        // Chain predecessor of each arithmetic half.
-        let mut prev_half: HashMap<(usize, u8), (usize, u8)> = HashMap::default();
-        for c in &p.chains {
-            let mut last: Option<(usize, u8)> = None;
-            for &a in c {
-                if let Logic::Arith { halves } = &p.alms[a].logic {
-                    for h in 0..2u8 {
-                        if halves[h as usize].is_some() {
-                            if let Some(l) = last {
-                                prev_half.insert((a, h), l);
-                            }
-                            last = Some((a, h));
-                        }
-                    }
-                }
+        // Each arithmetic ALM's place in its chain: chains start at ALM 0
+        // of a LAB and run on into the LAB below (place.rs), so the j-th ALM
+        // sits at position j % 10.
+        let mut chain_pos: HashMap<usize, (usize, usize)> = HashMap::default();
+        for (ci, c) in p.chains.iter().enumerate() {
+            for (j, &a) in c.iter().enumerate() {
+                chain_pos.insert(a, (ci, j));
             }
         }
         for (&net, (drv, sinks)) in &p.nets {
@@ -171,23 +165,47 @@ impl Sta {
                         }
                     }
                 }
+                // The carry arcs as quartus_sta strings them (README (z7)):
+                // one cin > cout per ALM (slower at a half-LAB's last ALM, 4
+                // or 9), a data input to its own ALM's cout and, by
+                // look-ahead, to the half-LAB's and the LAB's last couts;
+                // carry:lab between LABs. Node (4, a, 0) is ALM a's carry out.
                 Logic::Arith { halves } => {
+                    let Some(&(ci, j)) = chain_pos.get(&a) else { continue };
+                    let chain = &p.chains[ci];
+                    let k = j % 10;
+                    let end = |k: usize| if k % 5 == 4 { ":e" } else { "" };
+                    let cout = id((4, a, 0));
+                    // The carry in: the previous ALM's carry out.
+                    let cin = (j > 0).then(|| (id((4, chain[j - 1], 0)), if k == 0 { get("carry:lab") } else { 0.0 }));
+                    if let Some((c, link)) = cin {
+                        edges.push((c, cout, Arc::Fixed(link + get2(&format!("arith:cin>cout{}", end(k)), "arith:cin>cout"))));
+                    }
                     for h in 0..2usize {
                         if halves[h].is_none() {
                             continue;
                         }
-                        let Cell::Arith { c, d, .. } = &nl.cells[halves[h].unwrap()] else { unreachable!() };
-                        for (k, (letter, net)) in [("c", c), ("d", d)].into_iter().enumerate() {
-                            if net.is_some() {
-                                let pin = id((1, a, ARITH_IN[h][k] as u32));
-                                edges.push((pin, id((3, a, h as u32)), Arc::Fixed(get(&format!("arith:data{letter}>sumout")))));
-                                edges.push((pin, id((4, a, h as u32)), Arc::Fixed(get(&format!("arith:data{letter}>cout")))));
-                            }
+                        if let Some((c, link)) = cin {
+                            edges.push((c, id((3, a, h as u32)), Arc::Fixed(link + get("arith:cin>sumout"))));
                         }
-                        if let Some(&(pa, ph)) = prev_half.get(&(a, h as u8)) {
-                            let cin = id((4, pa, ph as u32));
-                            edges.push((cin, id((3, a, h as u32)), Arc::Fixed(get("arith:cin>sumout"))));
-                            edges.push((cin, id((4, a, h as u32)), Arc::Fixed(get("arith:cin>cout"))));
+                        let Cell::Arith { c, d, .. } = &nl.cells[halves[h].unwrap()] else { unreachable!() };
+                        for (kk, (letter, net)) in [("c", c), ("d", d)].into_iter().enumerate() {
+                            if net.is_none() {
+                                continue;
+                            }
+                            let pin = id((1, a, ARITH_IN[h][kk] as u32));
+                            let sum = format!("arith:data{letter}>sumout");
+                            edges.push((pin, id((3, a, h as u32)), Arc::Fixed(get(&sum))));
+                            // Half 0's data reaches half 1's sum by the carry inside the ALM.
+                            if h == 0 && halves[1].is_some() {
+                                edges.push((pin, id((3, a, 1)), Arc::Fixed(get2(&format!("{sum}:x"), &sum))));
+                            }
+                            edges.push((pin, cout, Arc::Fixed(get2(&format!("arith:data{letter}>cout{}", end(k)), &format!("arith:data{letter}>cout")))));
+                            for e in [4usize, 9] {
+                                if e > k && j + e - k < chain.len() {
+                                    edges.push((pin, id((4, chain[j + e - k], 0)), Arc::Fixed(get(&format!("arith:data>cout:la{}", e - k)))));
+                                }
+                            }
                         }
                     }
                 }

@@ -1,14 +1,33 @@
 class	n	mean_ns	min_ns	max_ns
-arith:cin>cout	7541	0.0586	0.036	0.120
+arith:cin>cout	6328	0.0483	0.036	0.084
+arith:cin>cout:e	1135	0.1165	0.112	0.120
+arith:cin>cout:skip	78	0.0499	0.049	0.051
 arith:cin>sumout	5470	0.1694	0.122	0.228
-arith:dataa>cout	241	0.3848	0.286	0.576
-arith:dataa>sumout	24	0.3287	0.323	0.340
-arith:datab>cout	826	0.3659	0.260	0.590
-arith:datab>sumout	186	0.2974	0.287	0.316
-arith:datac>cout	2128	0.3187	0.195	0.578
-arith:datac>sumout	436	0.2932	0.247	0.382
-arith:datad>cout	2275	0.2839	0.169	0.543
-arith:datad>sumout	648	0.2753	0.225	0.346
+arith:data>cout:la1	418	0.4212	0.375	0.509
+arith:data>cout:la2	366	0.4610	0.400	0.536
+arith:data>cout:la3	322	0.4717	0.416	0.578
+arith:data>cout:la4	252	0.5017	0.454	0.590
+arith:data>cout:la5	47	0.4710	0.428	0.513
+arith:data>cout:la6	46	0.4704	0.447	0.502
+arith:data>cout:la7	48	0.4898	0.467	0.514
+arith:data>cout:la8	48	0.5172	0.500	0.535
+arith:data>cout:la9	48	0.5441	0.517	0.568
+arith:dataa>cout	139	0.2946	0.286	0.305
+arith:dataa>cout:e	13	0.5095	0.451	0.516
+arith:dataa>sumout	16	0.3230	0.323	0.323
+arith:dataa>sumout:x	8	0.3400	0.340	0.340
+arith:datab>cout	456	0.2767	0.260	0.286
+arith:datab>cout:e	153	0.4551	0.426	0.480
+arith:datab>sumout	173	0.2961	0.287	0.298
+arith:datab>sumout:x	13	0.3153	0.307	0.316
+arith:datac>cout	1286	0.2274	0.195	0.259
+arith:datac>cout:e	200	0.4156	0.379	0.426
+arith:datac>sumout	298	0.2839	0.247	0.364
+arith:datac>sumout:x	138	0.3134	0.304	0.382
+arith:datad>cout	1523	0.2091	0.169	0.237
+arith:datad>cout:e	105	0.3861	0.355	0.433
+arith:datad>sumout	368	0.2666	0.225	0.339
+arith:datad>sumout:x	280	0.2868	0.266	0.346
 carry	12536	0.0000	0.000	0.000
 cell:ALM Register	5429	0.0000	0.000	0.000
 cell:Combinational cell	834	0.0769	0.030	0.123
@@ -35,3 +54,4 @@ re:V8	315	0.1243	0.104	0.135
 reg_d	5372	0.0053	0.000	0.042
 tco	5443	0.3196	0.306	0.333
 tsu	5443	0.0841	-0.117	0.121
+carry:lab	13	0.1050	0.105	0.105
