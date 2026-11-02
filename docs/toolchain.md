@@ -68,7 +68,7 @@ Verification kinds, strongest first:
 | registers | 4 per ALM (`xcw_la_le_reg{0,1}/xreg{0,1}`); `reg_input` LUTOUT_6LUT/5LUT, ARITH_SUMOUT or LEIM (packed with unrelated logic); `register_comb` DFF_LATCH, REGIN, WIRE_MODE (bypass); `xreg0`'s `ce_sel` and `sclr_sel` gate both registers of the half | rebuilt, held out, readback; Quartus' fr and cql (z3) |
 | register controls | two LAB clocks (`regclk`; clock 1 is LAB_RE 84, which Quartus uses for MLAB RAM output registers), two clears (`regclr`), enables (`ce_sel`), synchronous clear (`sclr_sel`), inverted clears through the routing tile's `iss/xclrb_rpi` | rebuilt (ar: async + sync clear, enable, load; hx: up/down, enable, async preset value, sync clear), held out |
 | carry chains, shared arithmetic | `adder_mode` ENABLE_ADDER, `adder_or_packed_mode`, `reg_input` ARITH_SUMOUT | rebuilt (32-bit accumulator, ternary and 4-input adders), held out |
-| MLAB RAM | RAM is the MLAB's idle mode (a logic MLAB sets `lutram_mode_vcchg_power_saving` and `ram_mode` LUT_MODE); one bit per half-ALM in its 32 mask bits; read address {E, D1, C1, B, A}, data out through LUTOUT_5LUT; write address LAB_RE 156, 157, 160, 161, 155 (bits 0–4), write enable 80 (CLKEN0), data C0 (half 0) and D0 (half 1) | rebuilt (32 x 16, 16 x 8), held out; **Quartus' ml image simulated against its RTL** (z5) |
+| MLAB RAM | RAM is the MLAB's idle mode (a logic MLAB sets `lutram_mode_vcchg_power_saving` and `ram_mode` LUT_MODE); one bit per half-ALM in its 32 mask bits, word a at stored bit 32h + a; read address {E, D1, C1, B, A}, data out through LUTOUT_5LUT; write address LAB_RE 156, 157, 160, 161, 155 (bits 0–4), write enable 80 (CLKEN0), data C0 (half 0) and D0 (half 1); an unrouted address pin reads 1 (a 16-word RAM sits at 32h + 16 + a) | rebuilt (32 x 16, 16 x 8), held out; **Quartus' ml and mi images (mi: initial contents) simulated against their RTL** (z5), (z6); a5pnr writes it (z9) |
 | M20K | CUSTOM settings for modes, widths, ports and registers (42 in mm) plus contents: `m20k_eram_add<k>` = `eram_array_r<k/2>[40(k mod 2) + 39 .. ]` in the sector's RAM part | rebuilt (512 x 32 SDP, 1024 x 16 ROM, 2048 x 10 TDP with init), held out |
 | DSP | `dsp_mode` (`rmode[4:0]`, a 5-bit code), register and clock selects, signs, `dsp_proginv_{l,h}` | rebuilt (18x18, 27x27 MAC, 9x9 + 18x19), held out |
 | general routing | graph edges → mux settings (`MUXINk_` per `muxin[k]`), plus `flop_mode = FAST_WIRE` on every used mux with a hyper-register except LEIMs into LAB control inputs (I80+) | rebuilt (every design), routes of rt0 and fz0 (k), held out |
@@ -80,11 +80,13 @@ Verification kinds, strongest first:
 | IOPLL | a common template plus N, M and C counters, output enables, reference select and charge-pump trims (`tools/pll/iopll.py`) | counters from frequencies: 10 held-out IP configurations; bits: pa (four PLLs) exact, pb held out (README (v)) |
 | carry chains | tennm_lcell_comb's p/g masks, stored as written; chain order N0 → N57, then the LAB below | 87 arithmetic halves of ar; a5pnr designs read back and simulated (README (w)) |
 | M20K, 512 x 32 simple dual port | 20 settings and the port ↔ `MEDIUM_EAB_RE` pin map from mm's paths, write enable tied | a5pnr's `ram` design (README (w)) |
-| M20K enables, output register, contents | WE 37, RE 39, byte enables 55, 56, 22, 21; data in 10-bit byte lanes; output register = both `outreg_byp` idle; WE held low = `xwe0/m20k_invsel` INV_LEIM_SEL; contents `m20k_eram_add<a>` = word a in the lane layout | from mq's quartus_sta paths and contents (512 of 512 words); a5pnr's rom, ramx and CPU designs read back and simulated (README (y)) |
+| M20K enables, output register, contents | WE 37, RE 39 (RE low holds the read data, not just the address: mq, README (z6)), byte enables 55, 56, 22, 21, clock enable 41 when `xsecmux/xclk0/m20k_clkensel` selects it (Quartus' CPU ROM); data bit j in at 57 + j / 40 − j and out at 83 + j, any 32 of the 40 (a5pnr: 8 of each 10-bit byte lane, Quartus without byte enables bits 0–31); output register = both `outreg_byp` idle; WE held low = `xwe0/m20k_invsel` INV_LEIM_SEL; contents `m20k_eram_add<a>` = word a in the lane layout | from mq's quartus_sta paths and contents (512 of 512 words); a5pnr's rom, ramx and CPU designs read back and simulated (README (y)) |
 | M20K contents in the `.rbf` | per stored row group and M20K column a 2,568-byte record in each sector's CORE stream | byte-identical to pfg on mq, rom, CPU and held-out mm, hx (README (y)) |
 | LAB control lines | CLKEN0/1 = LAB_RE 80/81 (`regclk_ens` per ALM), synchronous clear 82, clock 0 83, CLR1 86 (`regclr` idle, through `iss/xclrb`, inverted by `iss/xclrb_rpi` INV); per-flop `ce_sel`/`sclr_sel` on `xreg0` only; enable gates the clear | ct (README (y)); a5pnr's ctl design read back and simulated |
 | LEIM flops | `reg_input` LEIM reads ALM pin A (half 0) or B (half 1) | hx and mm quartus_sta paths (README (y)) |
-| carry-chain start | DISABLE_BTO where a chain runs ALM 4 → 5, COMB_PATH where it leaves ALM 9 for the LAB below; the hardware carry-in at a chain start is 0 | 13 LABs of ar, hx, ct, mq; hardware carry-in [inf] (README (y)) |
+| carry-chain start | DISABLE_BTO where a chain runs ALM 4 → 5, COMB_PATH where it leaves ALM 9 for the LAB below; the hardware carry-in at a chain start is 0 | 13 LABs of ar, hx, ct, mq; **Quartus' ar and oc (a 64-bit chain over four LABs) simulated against their RTL** (README (z6)) |
+| carry timing | `cin → cout` per ALM (0.050 ns, 0.118 at ALM 4 or 9), data → own `cout` 0.21–0.29, data → the half-LAB's or LAB's last `cout` by look-ahead 0.41–0.54, `carry:lab` 0.105 | quartus_sta's reported arcs of phases 6–8 (README (z7)) |
+| clock network idle muxes | a clock-network mux nothing configures passes the input its idle setting selects (Quartus takes CLOCK2_50 through `Vertical_seam_tap_mux` I161 → I125 that way) | Quartus' oc simulated against its RTL (README (z6)); in the fabric [unk] |
 | IOPLL in the flow | output 0 of V16's PLL enters the DCM at `HVIOWR_RE:X121Y30Z500I16` | pl; a5pnr's pll design (README (y)) |
 | idle state | majority over five Quartus images, three per-instance exceptions | every image here differs from it only in its own blocks (n) |
 | `.rbf` | a5db's writer | byte-identical to pfg on 78 pairs (o) |
@@ -121,6 +123,13 @@ Verification kinds, strongest first:
   (`usable` class 4), and don't enter a non-LAB node with several
   pass-through fanins over one of them: neither shows in an image, and
   what such a node passes is unknown (README (y)).
+- **LAB inputs**: at most 50 distinct nets on a LAB's data pins (a5pnr's
+  budget): Quartus' legalizer rejected LABs with 55, 59 and 61 ("too many
+  LAB line inputs"), its own CPU uses at most 52; the rule is [unk]
+  (README (z8)).
+- **LUT inputs** may be swapped by the router: a 6-LUT's A, B, E, F; a
+  5-LUT half's own C, D, E; then rebuild the mask from the pins (README
+  (z8)).
 - **LABs**: one clock, two enables (one per ALM), one synchronous clear, one
   routed asynchronous clear; a chain starts at ALM 0 (Quartus' fitter
   rejects one from ALM 5 that runs on, README (z4)). A half's two flops
@@ -146,9 +155,10 @@ Verification kinds, strongest first:
   uses the model (README (z)). quartus_sta times an a5pnr placement on
   Quartus' routes (`a5pnr --quartus`, README (z4)); Quartus Pro takes no
   routing constraints, so a5pnr's own routes are timed by the model only.
-- I/O registers from a5pnr (their clock enters through the HIOL's
-  `GLOBAL_LOCAL_SEL` I5 and RPI I29; Quartus inverts their data RPIs, why
-  is [unk]), MLAB RAM from yosys and a5pnr (the readback models it), the
+- I/O registers from a5pnr and in the readback (their clock enters through
+  the HIOL's `GLOBAL_LOCAL_SEL` I5 and RPI I29 to `REDMUX` I372; each
+  register's active-low clock enable comes from a LUT constant through an
+  HIOL RPI set to INV: ct, two pins, README (z6)), logic beside MLAB RAM, the
   second asynchronous clear line, PLL outputs other than V16's output 0
   (README (y), (z5)).
 - Hyper-registers used as registers (`flop_mode` FLOP), clock gating in the
