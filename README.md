@@ -2935,14 +2935,27 @@ are. `A5_SYNTH=chipsmith tools/a5pnr/flow.sh …` uses it; a5pnr reads it
 unchanged (it now gives nets no netname covers a slot, and reads
 `$tribuf`).
 
-**Checks** [obs]: every phase 6–10 design through the flow with chipsmith's
-synthesis and the simulation check (`specimens/p10/synth/suite`: blinky,
-leds, acc, ram, ctl, arith, rom, ramx, pll, fr, rf, io; the CPU with its
-register file in MLAB, `specimens/p10/synth/cs1`: 20,000 cycles from
-power-up and 300 from random states, 2,048 registers; picorv32: 300 cycles
-from random states with 1,536 registers and 5,000 from power-up with the
-CPU running, outputs compared): **extract = design and 0 mismatches
-everywhere**.
+**Checks** [obs, `specimens/p10/synth/v2`]: every phase 6–10 design through
+the flow with chipsmith's synthesis and the simulation check: blinky, leds,
+acc, ram, ctl, arith, rom, ramx, pll, fr, rf, io and mul from random states
+(2,000 cycles and 2,000 free-running, fr 240 registers, mul 631) and 3,000
+from power-up with random inputs; sha256 300 cycles from random states with
+1,907 registers and 5,000 from power-up hashing; the CPU (register file in
+MLAB) 20,000 cycles from power-up running its program and asm2 0 of
+291,825 attributes differing, pfg identical: **extract = design and 0
+mismatches everywhere**, with two harness findings. The first checks
+compared outputs and MLAB words only: chipsmith's `purge_wires` drops every
+internal name (`opt_clean -purge`), so no flop lined up with an RTL
+register; a5synth keeps them now. And from random states the CPU showed 48
+mismatches, all register 14 written with x at cycle 0: chipsmith proves
+`core.PC[0]` constant 0 and removes it, so the check left the RTL's PC[0]
+at x (it has no initial value); with the RTL's PC starting at 0, 300 + 300
+cycles and 2,252 registers, 0 mismatches. picorv32 matches its RTL on every
+output for 5,000 cycles from power-up with the CPU running (331 LED
+changes); its register-level comparison is [unk]: x's in the RTL simulation
+that a power-up-0 copy of picorv32.v doesn't remove (simcheck now tries a
+register's shallowest name first, since a top-level register is also its
+submodule's port wire).
 
 **LUTs and ALMs** (`tools/a5synth/compare.sh`; ALMs are a5pnr's packing,
 `--pack-only`; Quartus Pro's from its own fit of the same RTL):

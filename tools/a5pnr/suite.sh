@@ -22,7 +22,7 @@ g = lambda pat, s, d='?': (re.search(pat, s) or [None, d])[1]
 times = dict(re.findall(r'^(\w+) (\d+) s$', open(f'{out}/times.txt').read(), re.M)) if __import__('os').path.exists(f'{out}/times.txt') else {}
 ext = 'yes' if c and all(m == ('0', '0') for m in re.findall(r'only in design (\d+), only in image (\d+)', c)) and 'extract' in c else 'NO'
 row = [name,
-       g(r'a5pnr: (\d+) ALMs', f), g(r'ALMs in (\d+) LABs', f), g(r'(\d+) M20Ks, \d+ nets', f),
+       g(r'a5pnr: (\d+) ALMs', f), g(r'ALMs in (\d+) LABs', f), g(r'(\d+) M20Ks, ', f), g(r'(\d+) DSPs, ', f, '0'),
        g(r'(\d+) routing iterations', f), g(r'model Fmax (\d+) MHz', f),
        times.get('pnr', '?'), times.get('build', '?'), times.get('rbf', '?'),
        ext, g(r'(\d+) mismatches', c), g(r'(\d+) differ\n', c),
@@ -31,7 +31,7 @@ open(f'{root}/summary.tsv', 'a').write('\t'.join(row) + '\n')
 print('\t'.join(row))
 PY
 }
-[[ -f $root/summary.tsv ]] || printf 'design\tALMs\tLABs\tM20K\titer\tFmax\tpnr_s\tbuild_s\trbf_s\textract=design\tsim_mismatch\tasm2_differ\tpfg_identical\tintegrity\n' > "$root/summary.tsv"
+[[ -f $root/summary.tsv ]] || printf 'design\tALMs\tLABs\tM20K\tDSP\titer\tFmax\tpnr_s\tbuild_s\trbf_s\textract=design\tsim_mismatch\tasm2_differ\tpfg_identical\tintegrity\n' > "$root/summary.tsv"
 while (( $# )); do
     one "$1" &
     if (( $# > 1 )); then one "$2" & shift; fi

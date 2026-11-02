@@ -60,7 +60,9 @@ regs = []
 for l in open(ffmap):
     names, flop = l.split('\t')
     flop = flop.rstrip('\n')  # an escaped identifier keeps its closing space
-    for net in names.split('|'):
+    # The shallowest name first: a top-level register is also its
+    # submodule's port wire (picorv32's cpu.mem_ready), which isn't one.
+    for net in sorted(names.split('|'), key=lambda n: n.count('.')):
         # `!name`: the flop holds the register's inverse.
         inv = net.startswith('!')
         net = net.lstrip('!')
