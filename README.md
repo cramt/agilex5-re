@@ -2535,7 +2535,7 @@ change). Runs in `specimens/p9/alm`, readbacks in `specimens/p9/oracle`.
 The oracle designs' RTL got the device's power-up 0s where it had none
 (mq's second RAM, ar's registers, cqr's CPU in `specimens/p9/oracle/cqr/rtl`
 only), which the simulation needs and Quartus already assumed.
-`tools/alm/oracles_p9.sh` reruns all 18 holds of the seven oracle designs.
+`tools/alm/oracles_p9.sh` reruns all 18 holds of the six oracle designs.
 
 **What failed, and what a5pnr wrote**: of the rules a5pnr's writer shares
 with the readback, none was wrong in a5pnr's images. The M20K read enable
@@ -2680,8 +2680,8 @@ STA's own chain error.
   by its own choice), extract = design, 20,000 cycles from power-up and
   300 from random states with 2,245 registers compared, 0 mismatches,
   asm2 0 of 333,910 attributes differing, pfg identical, integrity OK. The
-  model puts it at 119 MHz (the flop version 141): the critical path now
-  ends at an MLAB's write data.
+  model puts it at 113 MHz register to register (the flop version 141):
+  the critical path now ends at an MLAB's write data.
 - simcheck now maps RTL memory words onto MLAB contents (`mem[word][bit]`
   lines in the ffmap) and follows `wire X = reg;` aliases back to the
   register: femtorv32's `rs1` only ever appeared as `aluIn1`, so its RTL
@@ -2880,6 +2880,51 @@ SHA-256 (phase 8, each a5db `.rbf` equal to its `_pfg.rbf`): `scratch_p8.rbf`
 `rom.rbf` 6870707f…, `ramx.rbf` c44717e9…, `pll.rbf` f4e2caf7…, `cpu.rbf`
 3e3dd91c….
 
+**Phase 9** (z6)–(z9), in `specimens/board/p9/` (git-ignored). **These are
+the current files**; with them, phase 8's A/B pairs (steps 18 and 19) still
+come first. The oracle audit (z6) found no rule a5pnr writes wrong, so
+**phase 8's files stay valid** (same RTL, behaviour as written); phase 9's
+differ in placement and routing (the LAB-input budget, swapped LUT inputs),
+except `blinky.rbf`, which is byte-identical to phase 8's. Phase 4–7 files
+with LUTs stay wrong (z3). Each `<d>.rbf` is a5db's and equals
+`quartus_pfg`'s `<d>_pfg.rbf`; every one passed all four checks
+(`specimens/p9/s1/summary.tsv`, `specimens/p9/cpu/*.check.log`).
+
+23. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `ctl.rbf`, `arith.rbf`,
+    `rom.rbf`, `ramx.rbf`, `pll.rbf`: as steps 11–16 and 12. ramx with
+    KEY1 held: frozen, as before (the M20K's read enable holds its data
+    (z6), and the write address has moved on anyway).
+24. **`rf.rbf` (MLAB RAM)**: LED[3:0] show the low four bits of word a of a
+    32 x 8 RAM, a stepping every 0.17 s: (7a + 1) mod 16, i.e. 1, 8, F,
+    6, D, 4, B, 2, 9, 0, 7, E, 5, C, 3, A, then again. LED[7:4] show word
+    a mod 16 of a 16 x 4 RAM, 15 − a: counting down F → 0 every 2.7 s.
+    SW0 up writes the counter's top byte at the address being read: LED[3:0]
+    then count up in binary, one step every 0.34 s, and keep doing so after
+    SW0 goes down (the words were overwritten); reconfiguring brings the
+    first pattern back. Holding KEY1 writes the counter's top four bits
+    into the 16 x 4 RAM: LED[7:4] then show one value that changes every
+    5.4 s. Diagnosis: LED[3:0] dark or stuck, contents not loaded or the
+    read broken; the pattern but SW0 does nothing, the write side (CLKEN0,
+    the write address lines); LED[7:4] dark, the unrouted address bit of a
+    16-word RAM doesn't read 1 (z6).
+25. **`cpu.rbf`** (FemtoRV32 with its register file in MLAB RAM, 453 ALMs):
+    as step 17. **`cpu_ff.rbf`**: the same CPU with its register file in
+    flops (phase 9's code, `A5_MLAB=0`), as step 17. If `cpu_ff.rbf` works
+    and `cpu.rbf` doesn't, suspect the MLAB RAM (step 24 first); if
+    neither does but phase 8's `cpu.rbf` (step 21) works, suspect phase 9's
+    routing (swapped LUT inputs).
+26. `fr.rbf`: random logic between registers (designs/fr), LEDs flicker
+    too fast to read; only "configures, no SDM error" is checkable.
+
+Rebuild: `tools/a5pnr/suite.sh specimens/p9/s1 designs/p6/<d> designs/p7/<d>
+designs/fr/fr designs/p9/rf`, `OUT=specimens/p9/cpu designs/p7/cpu/go.sh r1`
+and, with `A5_MLAB=0`, `… go.sh ff1`. SHA-256 (phase 9, each a5db `.rbf`
+equal to its `_pfg.rbf`): `blinky.rbf` 18e90707… (= phase 8's), `leds.rbf`
+06ae3d5b…, `acc.rbf` ddd12ace…, `ram.rbf` fe6b2b2c…, `ctl.rbf` aa26db1b…,
+`arith.rbf` 40ba5b24…, `rom.rbf` cd577dcf…, `ramx.rbf` c8d6cd36…, `pll.rbf`
+c67946ab…, `rf.rbf` 9125aab9…, `fr.rbf` 8fcf2750…, `cpu.rbf` 910c213b…,
+`cpu_ff.rbf` 031446c8….
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
@@ -2907,6 +2952,58 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 9 status** (branch `phase9`): every rule a5pnr writes checked
+against Quartus' own images; the router, the STA's carry arcs and MLAB RAM.
+
+- Step 1 (oracle audit): **done** (z6). Six Quartus designs (ar, mq, pl,
+  mi, oc, cqr) decoded, rebuilt and simulated against their RTL under 18
+  holds of their controls (`tools/alm/oracles_p9.sh`; ct stops at its I/O
+  registers, step 5): every rule a5pnr
+  writes passes (carry chains over four LABs, chain starts, `DISABLE_BTO`;
+  enable, synchronous clear, both clear polarities, preset, power-up; M20K
+  contents, word order, enables, output register; MLAB RAM with contents;
+  routing, the clock network, both clock pins, the PLL; pins). The shared
+  *model* was wrong once: the M20K's read enable holds the read data
+  (`A5_M20K` registered only the address); a5pnr's bits are unchanged.
+  The readback learnt Quartus' other uses (40-bit M20K words, the M20K
+  clock enable, arithmetic-mode `LUTOUT_5LUT`, LAB clock delays, idle clock
+  muxes, unrouted MLAB address pins reading 1) and now stops on any ALM
+  setting it doesn't know. No phase-8 board file becomes wrong.
+- Step 2 (routing): **done** (z8). A LAB-input budget (Quartus now takes
+  every LAB of a5pnr's CPU), LUT input swapping and criticality squared:
+  the CPU per flop endpoint against Quartus' routes of the same placement
+  +16.3 % → +12.0 % (median), model 129 → 141 MHz; local feedback 244 → 358
+  of 1,146 connections inside a LAB.
+- Step 3 (STA carry arcs): **done** (z7). Per-ALM carry with look-ahead:
+  the STA's error on Quartus' routes of a5pnr's placements, median, ctl2
+  37.1 % → 6.1 %, cpu3 10.1 % → 2.5 %.
+- Step 4 (MLAB RAM in a5pnr): **done** (z9). The CPU with its register file
+  in MLAB: 453 ALMs (was 1,393), every check passes.
+- Step 5 (I/O registers): **not done**; ct shows their clock and clock
+  enable paths (z6).
+- Board: steps 23–26 of "Board test", files in `specimens/board/p9/`.
+
+Open after phase 9 [unk]:
+
+- Everything on silicon, still (the board is off); the phase 7 → 8 LUT fix
+  and now MLAB RAM (steps 24, 25) are the first things to confirm.
+- Quartus' LAB-input rule (a5pnr keeps 50 nets; rejected 55, taken 51).
+- What an idle *fabric* mux passes (the clock network's do pass their idle
+  input, z6).
+- I/O registers: the clock and clock-enable nodes of pins other than ct's
+  two; the input register's `IN_INV`.
+- The rest of a5pnr's routing gap (+12 %, of which the model reads about 4
+  points high); local feedback when the driver's two local lines can't
+  reach the sink's LEIMs (pin choice at packing, or slot choice).
+- MLAB: logic beside RAM, deeper RAMs, the read register in the MLAB, MLAB
+  RAM in the Quartus export.
+- Hyper-registers (Quartus uses them with retiming on; a5pnr doesn't).
+
+Next: the board test (phase 9 files, steps 23–26, after phase 8's A/B
+pairs); I/O registers in the readback and a5pnr, with ct as the oracle and
+a second design with registers on other pins; local feedback through pin
+choice at packing.
 
 **Phase 8 status** (branch `phase8`): the ALM checked against Quartus' own
 images, two LUTs per ALM, and quartus_sta on a5pnr's placement.
