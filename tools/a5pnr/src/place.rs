@@ -74,19 +74,36 @@ pub struct Placement {
     pub m20k_at: Vec<(u32, u32)>,
 }
 
+/// Distinct nets a LAB's data pins may take. Each enters on one of the
+/// LAB's 80 local lines (LL, then a LEIM to the pin), and Quartus'
+/// legalizer rejects a LAB with too many ("too many LAB line inputs") by a
+/// rule that is [unk]: it rejected a5pnr LABs with 55, 59 and 61 nets (53,
+/// 58, 60 from outside the LAB) and took ones with 51; its own CPU fit
+/// takes at most 52 (48 from outside). 50 is under all of it [inf,
+/// README (z8)].
+pub const LAB_INPUTS: usize = 50;
+
 /// How many of each control line a LAB's ALMs ask for, and whether that
 /// fits: two clocks, two enables, one synchronous clear, two asynchronous
-/// clears (an ALM without one still takes a line, left inactive).
+/// clears (an ALM without one still takes a line, left inactive); and the
+/// nets on its ALMs' data pins.
 #[derive(Default, Clone)]
-struct LabUse(HashMap<Ctl, u32>);
+struct LabUse(HashMap<Ctl, u32>, HashMap<u32, u32>);
 
 impl LabUse {
-    fn add(&mut self, ctls: &[Ctl], d: i32) {
+    fn add(&mut self, ctls: &[Ctl], ins: &[u32], d: i32) {
         for c in ctls {
             let e = self.0.entry(*c).or_default();
             *e = (*e as i32 + d) as u32;
             if *e == 0 {
                 self.0.remove(c);
+            }
+        }
+        for n in ins {
+            let e = self.1.entry(*n).or_default();
+            *e = (*e as i32 + d) as u32;
+            if *e == 0 {
+                self.1.remove(n);
             }
         }
     }
@@ -104,7 +121,7 @@ impl LabUse {
                 Ctl::Aclr(None) => {}
             }
         }
-        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1
+        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.1.len() <= LAB_INPUTS
     }
 }
 
@@ -148,6 +165,22 @@ pub fn place(
     let lab_at: HashMap<(u32, u32), usize> = labs.iter().enumerate().map(|(i, l)| ((l.x, l.y), i)).collect();
     let n = p.alms.len();
     let ctls: Vec<Vec<Ctl>> = p.alms.iter().map(|a| a.ctls(nl)).collect();
+    // Per ALM, the nets on its data pins (clocks ride the clock network).
+    let mut ins: Vec<Vec<u32>> = vec![Vec::new(); n];
+    for (&net, (_, sinks)) in &p.nets {
+        if p.clocks.contains(&net) {
+            continue;
+        }
+        for e in sinks {
+            if let End::In { alm, .. } = e {
+                ins[*alm].push(net);
+            }
+        }
+    }
+    for v in &mut ins {
+        v.sort();
+        v.dedup();
+    }
     let mut occ: HashMap<(usize, u8), usize> = HashMap::default();
     let mut uses: Vec<LabUse> = vec![LabUse::default(); labs.len()];
     let mut at = vec![(usize::MAX, 0u8); n];
@@ -185,7 +218,7 @@ pub fn place(
             if occ.get(&s).is_some_and(|&o| !c.contains(&o)) {
                 return None;
             }
-            trial.entry(l).or_insert_with(|| uses[l].clone()).add(&ctls[a], 1);
+            trial.entry(l).or_insert_with(|| uses[l].clone()).add(&ctls[a], &ins[a], 1);
             slots.push(s);
         }
         trial.values().all(LabUse::ok).then_some(slots)
@@ -199,7 +232,7 @@ pub fn place(
         for (j, s) in slots.into_iter().enumerate() {
             occ.insert(s, c[j]);
             at[c[j]] = s;
-            uses[s.0].add(&ctls[c[j]], 1);
+            uses[s.0].add(&ctls[c[j]], &ins[c[j]], 1);
         }
     }
     {
@@ -213,7 +246,7 @@ pub fn place(
                 for k in 0..10u8 {
                     if !occ.contains_key(&(l, k)) {
                         let mut u = uses[l].clone();
-                        u.add(&ctls[a], 1);
+                        u.add(&ctls[a], &ins[a], 1);
                         if u.ok() {
                             occ.insert((l, k), a);
                             at[a] = (l, k);
@@ -378,8 +411,8 @@ pub fn place(
         // LAB control lines.
         let mut trial: HashMap<usize, LabUse> = HashMap::default();
         for &(m, from, to) in &moved {
-            trial.entry(from.0).or_insert_with(|| uses[from.0].clone()).add(&ctls[m], -1);
-            trial.entry(to.0).or_insert_with(|| uses[to.0].clone()).add(&ctls[m], 1);
+            trial.entry(from.0).or_insert_with(|| uses[from.0].clone()).add(&ctls[m], &ins[m], -1);
+            trial.entry(to.0).or_insert_with(|| uses[to.0].clone()).add(&ctls[m], &ins[m], 1);
         }
         if !trial.values().all(LabUse::ok) {
             return None;

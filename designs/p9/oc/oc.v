@@ -17,7 +17,12 @@ module oc (
     reg [63:0] acc = 0;
     always @(posedge clk) if (CEA) acc <= acc + {lfsr, lfsr ^ {lfsr[15:0], lfsr[31:16]}};
 
-    reg [7:0] r1 = 0, r3 = 0, r4 = 0, r5 = 0, r7 = 0, r8 = 0, pr = 0;
+    reg [7:0] r1 = 0, r3 = 0, r4 = 0, r5 = 0, r7 = 0, r8 = 0;
+    // A preset register powers up at its preset value: the device's flops
+    // power up 0, so it is an inverted flop on the clear (Quartus: "Register
+    // pr[0] will power up to High"; the compiled run, specimens/runs/oc0,
+    // had 0 here and ignored it).
+    reg [7:0] pr = 8'hff;
     always @(posedge clk) if (CEB) r1 <= lfsr[7:0];
     always @(posedge clk) if (SCLR) r3 <= 0; else r3 <= lfsr[23:16];
     always @(posedge clk or posedge ACLR) if (ACLR) r4 <= 0; else r4 <= lfsr[7:0] ^ lfsr[15:8];

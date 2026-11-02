@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 
 use anyhow::{bail, Context, Result};
 
-use crate::graph::{Graph, NO, PASS};
+use crate::graph::{Graph, IDLE, NO, PASS};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 enum Src {
@@ -167,7 +167,15 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         }
     }
     let single = g.single_fanin();
-    let follow = |e: usize, m: u32, d: u32| g.class[e] == PASS || (g.class[e] == NO && single[d as usize]) || active.contains(&(m, d));
+    // A clock-network mux no decoded edge enters is at its idle setting and
+    // passes the input that setting selects: Quartus' oc takes CLOCK2_50
+    // through Vertical_seam_tap_mux I161 → I125 that way [obs, README (z6)].
+    // In the fabric (an unrouted LAB pin) that is [unk], so not there.
+    let driven: HashSet<u32> = active.iter().map(|&(_, d)| d).collect();
+    let clock_net = |d: u32| matches!(g.type_name(d), "Switchbox_clock_mux" | "Vertical_seam_tap_mux" | "SPINE_TAP_RE" | "SCLKMUX_RE" | "DCM_mux" | "HSSI_P2C_RE" | "ROWCLK_TAPOFF" | "GLOBAL_LOCAL_SEL") || g.type_name(d).starts_with("CE_CC_") || g.type_name(d).starts_with("CW_CC_");
+    let follow = |e: usize, m: u32, d: u32| {
+        g.class[e] == PASS || (g.class[e] == NO && single[d as usize]) || active.contains(&(m, d)) || (g.class[e] == IDLE && clock_net(d) && !driven.contains(&d))
+    };
     let mut reach: HashMap<u32, Src> = HashMap::default();
     let mut conflict: Vec<u32> = Vec::new();
     for &(s, n0) in &sources {
@@ -299,14 +307,25 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             {
                 bail!("{uid} {a} = {val}: LAB setting outside the model");
             }
-            // Settings Quartus writes in MLABs used as logic, with no
-            // function in a LAB (whose ALMs work with them idle) [inf, fr].
-            if *u == uid && kd == "ml" && a.contains('/') {
+            // Every ALM setting the model reads or knows to be inert;
+            // anything else stops the readback (README (z6): it once passed
+            // over unknown LAB settings and only checked MLABs). Settings
+            // Quartus writes in MLABs used as logic have no function in a
+            // LAB, whose ALMs work with them idle [inf, fr].
+            if *u == uid && a.contains('/') && !a.starts_with("xsecmux") {
                 let leaf = a.rsplit('/').next().unwrap();
-                let ok = matches!((leaf, val.as_str()), ("ram_mode", "LUT_MODE") | ("lut5_powerdown", "LUT5_OUT") | ("lut6_powerdown", "LUT6_OUT") | ("lutram_mode_vcchg_power_saving", "ENABLE_POWER_SAVING"));
-                let known = ok || a.contains("/xcw_la_le_reg") || a.ends_with("lut_mask") || a.contains("_le_regctrl/") || a.ends_with("adder_mode") || a.ends_with("adder_or_packed_mode") || a.starts_with("xsecmux");
-                if !known {
-                    bail!("{uid} {a} = {val}: MLAB setting outside the model");
+                let ok = match (leaf, val.as_str()) {
+                    ("lut_mask" | "register_comb" | "reg_input" | "regclk" | "regclk_ens" | "regclr", _) => true,
+                    ("adder_mode", "ENABLE_ADDER") | ("adder_or_packed_mode", "ENABLE_ADDER_OR_PACKED") => true,
+                    ("leout", "LEOUT") | ("sclr_sel", "SCLR") | ("lut5_powerdown", "LUT5_OUT") | ("lut6_powerdown", "LUT6_OUT") => true,
+                    // xreg0's enable, or the ALM's register-control enables
+                    // that go with any enabled or cleared flop.
+                    ("ce_sel", "CE") | ("clr_sel", "CLR") => true,
+                    ("ram_mode", "LUT_MODE") | ("lutram_mode_vcchg_power_saving", "ENABLE_POWER_SAVING") => kd == "ml",
+                    _ => false,
+                };
+                if !ok {
+                    bail!("{uid} {a} = {val}: ALM setting outside the model");
                 }
             }
         }

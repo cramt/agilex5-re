@@ -116,6 +116,51 @@ pub fn half_bit(h: usize, pin: u8) -> usize {
     }
 }
 
+/// The pins a LUT input on `pin` of ALM `alm` may move to when the router
+/// swaps inputs (README (z8)), `pin` first; just `pin` when it can't move.
+/// A 6-LUT's inputs on A, B, E and F trade places (C and D are on both
+/// halves' pins); a 5-LUT half's on its own C, D and E (A and B are the
+/// other half's too); arithmetic inputs and the pins a LEIM flop reads stay.
+pub fn swap_group(alm: &Alm, pin: u8) -> Vec<u8> {
+    let leim: Vec<u8> = (0..4).filter(|&s| matches!(alm.slots[s], Some(Slot::Ff { src: Src::Leim, .. }))).map(|s| LEIM_PIN[s / 2]).collect();
+    let group: Vec<u8> = match &alm.logic {
+        Logic::Six { .. } if [PIN_A, PIN_B, 0, 7].contains(&pin) => vec![PIN_A, PIN_B, 0, 7],
+        Logic::Five { halves } => match (0..2).find(|&h| HALF_PINS[h].contains(&pin)) {
+            Some(h) if halves[h].is_some() => HALF_PINS[h].to_vec(),
+            _ => vec![],
+        },
+        _ => vec![],
+    };
+    if leim.contains(&pin) {
+        return vec![pin];
+    }
+    std::iter::once(pin).chain(group.into_iter().filter(|q| *q != pin && !leim.contains(q))).collect()
+}
+
+/// Move an ALM's LUT inputs to the pins the router chose (`moves`: old pin
+/// → new pin, all within swap groups); the masks follow from the new pins.
+pub fn apply_swaps(alm: &mut Alm, moves: &[(u8, u8)]) {
+    let to = |q: u8| moves.iter().find(|m| m.0 == q).map_or(q, |m| m.1);
+    match &mut alm.logic {
+        Logic::Six { pos, .. } => {
+            for p in pos.iter_mut() {
+                if (*p as usize) < 6 && six_pins(*p).len() == 1 {
+                    let new = to(SIX_PIN[*p as usize]);
+                    *p = SIX_PIN.iter().position(|&q| q == new).expect("a 6-LUT pin") as u8;
+                }
+            }
+        }
+        Logic::Five { halves } => {
+            for half in halves.iter_mut().flatten() {
+                for q in half.pins.iter_mut() {
+                    *q = to(*q);
+                }
+            }
+        }
+        Logic::Arith { .. } => {}
+    }
+}
+
 /// The delay model's LUT input class of a pin (README (u)).
 pub fn pin_letter(pin: u8) -> char {
     match pin {

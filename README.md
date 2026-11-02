@@ -2579,6 +2579,58 @@ at the entry half before rippling.
   2.7 %, cpu3 3.0 → 2.1 %. What is left on ctl2 (+5–7 %) is routing hops,
   not carry [inf].
 
+### (z8) Phase 9: routing quality
+
+Measured as in (z4): a5pnr's placement goes to Quartus as locked atoms
+(`--quartus`), Quartus routes it, quartus_sta times it; a5pnr's model times
+a5pnr's own routes of the *same* placement (`tools/timing/compare.py`, per
+flop endpoint, the worst data delay). With the STA's carry arcs fixed (z7)
+the baseline is smaller than phase 8's figures, which partly measured the
+STA's own chain error.
+
+- **The LAB-input budget** [obs, inf]: a LAB's data pins take their nets
+  over its 80 local lines, and Quartus' legalizer rejects a LAB with "too
+  many LAB line inputs" by a rule that is [unk]. Counting what reached the
+  pins: it rejected a5pnr LABs with 61, 59 (phase 8's CPU r5) and 55 (this
+  phase's first try, with a budget of 56) distinct nets, 53–60 of them
+  from outside the LAB; it took a5pnr LABs with up to 51; its own CPU fit
+  (cqr) has at most 52 (48 from outside). All 80 lines take both wires and
+  LAB outputs (graph), so it isn't a plain split. a5pnr's placer now keeps
+  every LAB at **50 nets** or fewer (`place::LAB_INPUTS`), and Quartus took
+  the whole CPU placement (`specimens/runs/qcpu1`, 209 LABs, every atom
+  locked; phase 8 had to leave 17 LABs to Quartus).
+- **LUT input swapping** (`pack::swap_group`, `route.rs`): a LUT input's
+  sink may end on any pin it can move to (a 6-LUT's A, B, E, F; a 5-LUT
+  half's own C, D, E; never a pin a LEIM flop reads), PathFinder settles
+  which net gets which pin, and the masks are rebuilt from the pins chosen.
+  On the CPU 3,566 inputs in 1,209 ALMs moved; every check still passes
+  (simulation catches a wrong permutation: ctl and arith, 0 mismatches).
+- **Local feedback**: a5pnr's router could always take LAB_RE → LL → LEIM
+  inside a LAB, but with fixed pins a source's two local lines rarely
+  reached the sink pin's LEIM. Swapping makes it more often possible: of
+  the CPU's 1,146 connections inside one LAB, 244 → 358 run over the local
+  lines alone.
+- **Measured** [obs] on the CPU placement Quartus routed (`qcpu1`,
+  quartus_sta **174.6 MHz**; the model on Quartus' routes of it is 4.4 %
+  median high, `fit.py eval --sta new`), per flop endpoint, 195 endpoints,
+  model on a5pnr's routes minus quartus_sta on Quartus':
+
+  | router | median (relative) | mean | model, register to register | iterations |
+  |---|---|---|---|---|
+  | phase 8's (pins fixed at packing) | +0.91 ns (+16.3 %) | +0.93 ns | 129 MHz | 17 |
+  | + LUT input swapping | +0.75 ns (+13.0 %) | +0.78 ns | 136 MHz | 10 |
+  | + criticality squared in the router | **+0.68 ns (+12.0 %)** | +0.71 ns | **141 MHz** | 9 |
+  | (rejected) criticality to the 4th | +0.71 ns (+12.4 %) | +0.74 ns | 137 MHz | 24 |
+  | (rejected) a second pass with criticalities from the routes | +0.78 ns (+13.8 %) | +0.81 ns | 126 MHz | 12 |
+
+  On fr (no Quartus reference, model only) criticality squared gives 249
+  MHz register to register against 246 and routes in 7 iterations instead
+  of 52. On ctl's placement (`qctl0`, quartus_sta 572 MHz on Quartus'
+  routes) the gap is +0.21 ns (+20 %) with or without swapping: its
+  critical paths are carry chains, whose pins don't move. So of the CPU's
+  141 → 175 MHz, about a third is the model reading high (4.4 %) and the
+  rest a5pnr's routes [inf]. Runs: `specimens/p9/route`, `specimens/p9/sta`.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
