@@ -11,3 +11,6 @@ for h in EN=1,ACLR=0,ACLRN=1,SCLR=0 EN=0,ACLR=0,ACLRN=1,SCLR=0 EN=1,ACLR=1,ACLRN
     run iq specimens/p10/alm/iq0 designs/p10/iq/iq.pins 3000 "$h" $O/iq.v; done
 O=specimens/p10/oracle/ct/rtl
 for h in CEA=1,CEB=1,SCLR=0,ACLR=0,ACLRN=1 ""; do run ct specimens/p9/alm/ct0 designs/ct/ct.pins 3000 "$h" $O/ct.v; done
+# DSP multipliers: Quartus' dq3 (dq2 without the sum of two products), every
+# product bit in a fabric flop (README (z11)).
+run dq3 specimens/p10/alm/dq30 designs/p10/dq3/dq3.pins 3000 "" designs/p10/dq3/dq3.v

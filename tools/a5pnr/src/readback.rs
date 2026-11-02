@@ -740,7 +740,14 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         }
     }
     for (name, n) in &outputs {
-        let plain = sig(Some(*n)).unwrap_or_else(|| "1'bx".into());
+        // An unrouted output reads 1, through the RPI's inverter if set:
+        // Quartus' constant-0 output in dq3 is exactly that [obs].
+        let plain = match (sig(Some(*n)), inverted_rpi.contains(n)) {
+            (Some(s), false) => s,
+            (Some(s), true) => format!("~{s}"),
+            (None, false) => "1'b1".into(),
+            (None, true) => "1'b0".into(),
+        };
         let (data, en) = io_out.get(name).cloned().unwrap_or_default();
         let data = if data.is_empty() { plain } else { data };
         match en {

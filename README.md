@@ -2871,8 +2871,13 @@ from the mode's baseline). **Quartus' dq2 image, its sum-of-two block left
 out, runs like `dq2.v` for 3,000 cycles from power-up: q1–q4 (235
 registers), 0 mismatches** [obs]; before the inverters were understood the
 two signed blocks (whose pins read the inverted flop) mismatched from cycle
-19. `designs/p10/dq3` (dq2 without the sum of two) is the audit's clean
-copy.
+19. `designs/p10/dq3` (dq2 without the sum of two, compiled after the rule was
+written; its blocks sit at other rows and other pins read the inverted
+flop) **runs like its RTL for 3,000 cycles, 196 registers, 0 mismatches**
+[obs, held out], once the readback also knew that Quartus drives its
+constant-0 output by leaving the pin's data unrouted and inverting its RPI:
+**an unrouted I/O data pin reads 1** [obs], as an unrouted MLAB address or
+DSP operand pin does.
 
 **a5pnr maps multipliers** (`tools/a5pnr/yosys/mul_map.v`, `src/dsp.rs`):
 before synth, yosys narrows each `$mul` (`wreduce`) and maps a product of
@@ -2893,15 +2898,15 @@ every earlier design's cells unchanged (CPU 587 LUTs, 182 carry halves,
 
 `designs/p10/mul` (a self-test after chipsmith's mult-selftest: eight
 products, 9x9 to 27x27, signed and unsigned, each checked against a
-shift-and-add reference in the fabric): 407 ALMs, 8 DSP blocks, model 222
-MHz. **All four checks pass** (`specimens/p10/mul/r1`, the first build):
-extract = design (11,975 edges, 4,896 attributes, 449 DIRECT values),
-2,000 cycles from random states and 2,000 free-running with 627 registers
-(including the 336 DSP output-register bits), 0 mismatches, asm2 0 of
-418,234 attributes differ, pfg identical, integrity OK. From power-up
-(`r2`, the RTL's slot multiplexer as continuous assignments: iverilog
-never ran its `always @*` at time 0) 20,000 cycles, its error count 0 on
-both sides, 0 mismatches.
+shift-and-add reference in the fabric; its slot multiplexer is written as
+continuous assignments, since iverilog never ran an `always @*` version at
+time 0): 407 ALMs in 89 LABs, 8 DSP blocks, model 222 MHz. **All four
+checks pass** (`specimens/p10/mul/r2`): extract = design (11,745 edges,
+4,692 attributes, 431 DIRECT values), 2,000 cycles from random states and
+2,000 free-running with 627 registers (including the 336 DSP
+output-register bits), 0 mismatches, and 20,000 cycles from power-up with
+the self-test's error count 0 on both sides, 0 mismatches; asm2 0 of
+414,664 attributes differ; pfg identical, integrity OK.
 
 ### quartus_sta fails under chipsmith [obs]
 

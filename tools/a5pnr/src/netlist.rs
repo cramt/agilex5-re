@@ -413,6 +413,35 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
         }
         cells[k] = Cell::M20k(m);
     }
+    // An MLAB RAM address bit constant on one port only (picorv32's
+    // register file) is a driven constant there: an unrouted address pin
+    // reads 1 (README (z6)), and only a bit constant on both ports may stay
+    // unrouted.
+    for k in 0..cells.len() {
+        let Cell::Mlab(m) = &cells[k] else { continue };
+        let mut m = m.clone();
+        let mut changed = false;
+        for j in 0..m.waddr.len().min(m.raddr.len()) {
+            let (w, r) = (m.waddr[j], m.raddr[j]);
+            if matches!(w, Sig::Const(_)) == matches!(r, Sig::Const(_)) {
+                continue;
+            }
+            for s in [&mut m.waddr[j], &mut m.raddr[j]] {
+                if let Sig::Const(v) = *s {
+                    let n = *consts[v as usize].get_or_insert_with(|| {
+                        let n = fresh(&mut nets, format!("const{}", v as u8));
+                        cells.push(Cell::Lut { ins: vec![], mask: v as u64, out: n });
+                        n
+                    });
+                    *s = Sig::Net(n);
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            cells[k] = Cell::Mlab(m);
+        }
+    }
     // A multiplier's constant operand bits: a pin left unrouted reads 1
     // (README (z11)), so every operand pin carries a driven signal.
     for k in 0..cells.len() {

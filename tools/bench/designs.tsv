@@ -1,0 +1,13 @@
+# The bench's designs (docs/vs-quartus-pro.md): name, a5pnr top, pins, sources
+# (comma-separated, relative to the repository; $C is chipsmith's examples), the
+# environment for a5pnr's flow, and Quartus' source when it differs from a5pnr's
+# (the CPU's ROM is a5pnr's A5_M20K; Quartus gets it as inferred RTL, README (z4)).
+name	top	pins	sources	env	quartus
+blinky	blinky	designs/p6/blinky.pins	designs/p6/blinky.v	-	-
+leds	leds	designs/p6/leds.pins	designs/p6/leds.v	-	-
+acc	acc	designs/p6/acc.pins	designs/p6/acc.v	-	-
+cpu	cpu	designs/p7/cpu/cpu.pins	designs/p7/cpu/cpu.v,designs/p7/cpu/femtorv32_quark.v	-	cpu_mlab
+cpu_ff	cpu	designs/p7/cpu/cpu.pins	designs/p7/cpu/cpu.v,designs/p7/cpu/femtorv32_quark.v	A5_MLAB=0	cpu_logic
+sha256	sha256_de25	designs/p10/bench/sha256_de25.pins	designs/p10/bench/sha256_de25.v,$C/sha256/src/sha256.v,$C/sha256/src/sha256_core.v,$C/sha256/src/sha256_k_constants.v,$C/sha256/src/sha256_w_mem.v	-	-
+picorv32	picorv32_de25	designs/p10/bench/picorv32_de25.pins	designs/p10/bench/picorv32_de25.v,$C/picorv32/src/picorv32.v	-	-
+mul	mul	designs/p10/mul/mul.pins	designs/p10/mul/mul.v	-	-
