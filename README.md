@@ -3230,6 +3230,57 @@ equal to its `_pfg.rbf`): `blinky.rbf` 18e90707… (= phase 8's), `leds.rbf`
 c67946ab…, `rf.rbf` 9125aab9…, `fr.rbf` 8fcf2750…, `cpu.rbf` 910c213b…,
 `cpu_ff.rbf` 031446c8….
 
+**Phase 10** (z10)–(z12), in `specimens/board/p10/` (git-ignored). **These
+are the current files**; phase 8's A/B pairs (steps 18 and 19) still come
+first, then the new pair (step 27). Each `<d>.rbf` is a5db's and equals
+`quartus_pfg`'s `<d>_pfg.rbf`; every one passed all four checks
+(`specimens/p10/s1/summary.tsv`, `specimens/p10/cpu/*.check.log`,
+`specimens/p10/synth/v2/cpu`). blinky, acc, ram, rom, ramx, pll and rf are
+byte-identical to phase 9's; leds, ctl, arith and fr differ in placement
+and routing only (a5pnr now numbers nets no name covers, so its constant
+LUTs' nets move), not in what they compute.
+
+27. **`cpu_cs.rbf` against `cpu.rbf`**: the same FemtoRV32 (register file
+    in MLAB RAM), synthesized by chipsmith (`A5_SYNTH=chipsmith`, 450 ALMs)
+    and by yosys (453 ALMs): both as step 17. One working and the other not
+    points at that synthesis (or, for `cpu_cs.rbf` alone, at a5synth's
+    `A5_ARITH` and flop mapping).
+28. **`io.rbf` (I/O registers)**: KEY0, KEY1 and SW[3:0] are sampled in
+    their pins' input registers, LED[7:0] come from output registers.
+    LED[3:0] follow SW[3:0] at once, except LED2, which takes SW2 once per
+    1.34 s, and LED3, which stays dark while KEY0 is held. LED4 blinks with
+    a 1.34 s period, LED5 with 0.67 s and freezes while KEY1 is held, LED6
+    (0.34 s) and LED7 (0.17 s) go dark while KEY0 is held. Diagnosis: no
+    LED reacts at all, the IO96 output registers or their clock (VIO X106,
+    X107 `GLOBAL_LOCAL_SEL` I3); LED[3:0] stuck while LED4 blinks, the
+    input registers (HVIO clock row 49, IO96 lane 5 flyby); LED5 doesn't
+    freeze, an output register's clock enable (through an RPI inverter);
+    LED6 not dark under KEY0, an inverted asynchronous clear (RPI), LED7 not
+    dark, the straight active-low one; LED3 not dark, an input register's
+    clear. The GPIO pins (H16, Y1 in; C2, P1 out, P1 with an OE register)
+    need a probe; C2 toggles at 25 MHz XOR the inputs.
+29. **`mul.rbf` (DSP blocks)**: eight products, 9x9 to 27x27, signed and
+    unsigned, each checked against a shift-and-add reference. LED0 dark
+    and LED1 toggling every 0.17 s (LED2 0.34 s, LED3 0.67 s): every
+    product right. LED0 lit: a wrong product; LED[7:4] count them in
+    binary up to 15 (a lit LED4 alone after the first pass: one mode is
+    wrong every time). LED1 not toggling: the DSP clock or the fabric.
+30. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `ctl.rbf`, `arith.rbf`,
+    `rom.rbf`, `ramx.rbf`, `pll.rbf`, `rf.rbf`, `fr.rbf`: as steps 23, 24
+    and 26. **`cpu.rbf`**, **`cpu_ff.rbf`**: as step 25.
+
+Rebuild: `tools/a5pnr/suite.sh specimens/p10/s1 designs/p6/<d> designs/p7/<d>
+designs/fr/fr designs/p9/rf designs/p10/io/io designs/p10/mul/mul`,
+`OUT=specimens/p10/cpu designs/p7/cpu/go.sh r1`, with `A5_MLAB=0` `… go.sh
+ff1`, and with `A5_SYNTH=chipsmith` `OUT=specimens/p10/synth/v2 … go.sh cpu`.
+SHA-256 (phase 10, each a5db `.rbf` equal to its `_pfg.rbf`): `io.rbf`
+a4869e91…, `mul.rbf` 2ec946ab…, `cpu.rbf` 0ef29cb3…, `cpu_ff.rbf`
+955d6bf8…, `cpu_cs.rbf` 877930f8…, `leds.rbf` 40eb7666…, `ctl.rbf`
+cfce635e…, `arith.rbf` dd830f2a…, `fr.rbf` 99f66baa…; `blinky.rbf`
+18e90707…, `acc.rbf` ddd12ace…, `ram.rbf` fe6b2b2c…, `rom.rbf` cd577dcf…,
+`ramx.rbf` c8d6cd36…, `pll.rbf` c67946ab…, `rf.rbf` 9125aab9… (= phase
+9's).
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
