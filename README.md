@@ -2908,6 +2908,77 @@ output-register bits), 0 mismatches, and 20,000 cycles from power-up with
 the self-test's error count 0 on both sides, 0 mismatches; asm2 0 of
 414,664 attributes differ; pfg identical, integrity OK.
 
+### (z12) Phase 10: chipsmith's synthesis as a5pnr's front end
+
+`tools/a5synth` (Rust) runs chipsmith's Verilog front end and its
+device-independent synthesis (`chipsmith-verilog`, `chipsmith-synth`,
+`chipsmith-netlist`, cargo git dependencies pinned to chipsmith `open`
+0fd5991, as cyclone2-re's cram pins chipsmith-cyclone2) with its LUT
+mapper at K = 6 (`lutmap::map_module_k`, chipsmith ADR-0013), in the pass
+order of chipsmith's Cyclone II synthesis, and writes the cells
+`tools/a5pnr/synth.sh` gets from yosys, in yosys' JSON: `$lut`,
+`A5_ARITH` chains (its own `$alu` mapping: a start half for the carry-in,
+p = A ^ B ^ BI, g = A & (B ^ BI), a carry out read as data from the next
+sum or one more half), flops legalised to the LAB's controls (an enable,
+a synchronous clear the enable gates, an asynchronous clear of either
+polarity; a reset or power-up value of 1 kept inverted; a reset that
+contradicts the power-up value becomes logic; constant enables and resets
+folded, also after LUT mapping), `$__A5_MLAB_` RAM for memories of up to
+32 words with one clocked write port (a synchronous read becomes an
+asynchronous one and a register; per-bit write enables that are one mux
+are one enable), and the hand-instantiated `A5_M20K`/`A5_IOPLL` as they
+are. `A5_SYNTH=chipsmith tools/a5pnr/flow.sh …` uses it; a5pnr reads it
+unchanged (it now gives nets no netname covers a slot, and reads
+`$tribuf`).
+
+**Checks** [obs]: every phase 6–10 design through the flow with chipsmith's
+synthesis and the simulation check (`specimens/p10/synth/suite`: blinky,
+leds, acc, ram, ctl, arith, rom, ramx, pll, fr, rf, io; the CPU with its
+register file in MLAB, `specimens/p10/synth/cs1`: 20,000 cycles from
+power-up and 300 from random states, 2,048 registers; picorv32: 300 cycles
+from random states with 1,536 registers and 5,000 from power-up with the
+CPU running, outputs compared): **extract = design and 0 mismatches
+everywhere**.
+
+**LUTs and ALMs** (`tools/a5synth/compare.sh`; ALMs are a5pnr's packing,
+`--pack-only`; Quartus Pro's from its own fit of the same RTL):
+
+| design | yosys: LUTs / ALMs | chipsmith: LUTs / ALMs | Quartus Pro ALMs | synthesis time, yosys / chipsmith |
+|---|---|---|---|---|
+| blinky, leds, acc, ram, rom, ramx, ctl | equal within 1 LUT and 1 ALM | | | 30–70 s / ≤ 1 s |
+| arith | 4 / 23 | 4 / 24 | | 47 s / 0.4 s |
+| io | 19 / 24 | 11 / 19 | | 46 s / 0.3 s |
+| rf (MLAB RAM) | 1 / 23 (12 RAM bits) | 1 / 21 (8: the unread ones dropped) | | 34 s / 0.6 s |
+| fr (random 2–7-input functions) | 879 / 505 | **320 / 209** | 233 (phase 8) | 110 s / 4 s |
+| CPU, register file in MLAB | 587 / 453 | 442 / 450 | | 68 s / 1 s |
+| CPU, register file in flops | 1,392 / 1,393 | **1,174 / 1,343** | 1,082 (1,171 LUTs + 195 carry cells, phase 8) | 73 s / 4 s |
+| sha256 | 4,066 / 2,620 | **2,058 / 2,111** | (bench) | 102 s / 17 s |
+| picorv32 | 1,218 / 805 | **473 / 506** | (bench) | 98 s / 2 s |
+
+- **chipsmith's mapper needs fewer LUTs everywhere it matters**: the CPU's
+  1,392 → 1,174 (Quartus' synthesis: about 1,170, so the LUT gap phase 8
+  put down to synthesis is closed), fr 879 → 320, sha256 4,066 → 2,058,
+  picorv32 1,218 → 473 [obs]. picorv32's flops also drop 381 → 345: chipsmith
+  removes the instruction-word register bits its five-word ROM can only
+  ever load as constants [inf]; the random-state check (which leaves
+  registers the netlist doesn't have at the RTL's own values) passes.
+- **ALMs follow LUTs less closely than LUT counts suggest**: the mapper
+  minimises LUTs with K = 6 and makes many 6-input LUTs, which take a
+  whole ALM, where two LUTs of up to five inputs share one. The MLAB CPU
+  shows it: 442 LUTs (143 6-input) pack into 450 ALMs, yosys' 587 (36
+  6-input) into 453; picorv32 219 of 473. **What chipsmith would need**
+  (not changed here; chipsmith `open` untouched): a LUT mapper cost that
+  knows the fracturable 6-LUT, i.e. an area per cut of K = 6 that charges a
+  6-input cut one ALM and a cut of ≤ 5 inputs half of one (two of them pair
+  when they share A and B: ≤ 8 distinct inputs, 2 shared), e.g. a
+  `LutSize`-like parameter `LutCost`/area table for `map_module_k`; and a
+  device-independent multiplier hook (chipsmith-synth maps `$mul` to blocks
+  only in chipsmith-cyclone2's `mult`), so a5synth could place products in
+  DSP blocks instead of gates (a5synth lowers `$mul` to LUTs today; the
+  yosys flow maps them, (z11)).
+- Synthesis time drops from 30–110 s (yosys from nixpkgs, two `abc` runs)
+  to under 20 s.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
