@@ -3263,8 +3263,9 @@ LUTs' nets move), not in what they compute.
     unsigned, each checked against a shift-and-add reference. LED0 dark
     and LED1 toggling every 0.17 s (LED2 0.34 s, LED3 0.67 s): every
     product right. LED0 lit: a wrong product; LED[7:4] count them in
-    binary up to 15 (a lit LED4 alone after the first pass: one mode is
-    wrong every time). LED1 not toggling: the DSP clock or the fabric.
+    binary up to 15, so all four lit means wrong products keep coming (one
+    mode wrong every pass fills it within a millisecond), a lower count a
+    rare error. LED1 not toggling: the DSP clock or the fabric.
 30. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `ctl.rbf`, `arith.rbf`,
     `rom.rbf`, `ramx.rbf`, `pll.rbf`, `rf.rbf`, `fr.rbf`: as steps 23, 24
     and 26. **`cpu.rbf`**, **`cpu_ff.rbf`**: as step 25.
