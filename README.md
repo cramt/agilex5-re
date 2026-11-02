@@ -2524,10 +2524,29 @@ change). Runs in `specimens/p9/alm`, readbacks in `specimens/p9/oracle`.
 | V16's ioclk mux | pl | Quartus sets `xif_p2c_ioclk_2to1_mux_u1` P0 with V16 only a PLL reference; pa (V16 a PLL reference too) leaves it idle, as a5pnr does [obs] | readback ignores pin-level clock muxes |
 | LAB clock delay | cqr | `smxclk_dly` DELAY_2..4, `smxclk_dly_off` ENABLE_DELAY on 219 LABs and `regclk = DFF_LABCLK_PHI1_0` on 476 flops: the LAB clock through a programmable delay [inf: timing only] | readback treats PHI1 as the same clock |
 | hyper-registers | cql (phase 8's CPU fit, retiming on) | **readback stop**: 1,556 routing muxes at `flop_mode = FLOP` (registers in the routing); a5pnr never writes them, so the CPU was recompiled with retiming off (`designs/p9/cqr`) | none needed |
+| chains over four LABs, carry out as data, a pin as carry-in, subtract; active-high and active-low clears; a preset; power-up 1; enable and clear in both priorities | oc (64-bit accumulator, comparators, ct's controls without I/O registers) under seven holds of CEA, CEB, SCLR, ACLR, ACLRN, CIN | **pass** (3,000 cycles, 213 registers, 0 mismatches each) after one fix | |
+| a second clock domain | oc (CLOCK2_50, BF23) | **fail in the readback**: CLOCK2_50 reaches the spine through `Vertical_seam_tap_mux` I161 → I125, a mux at its idle setting (`usable` class 4), which no decode shows, so the LAB clock read x | readback: a clock-network mux nothing configures passes its idle input [obs]; a5pnr doesn't route over such edges |
+| a preset's power-up | oc | Quartus ignores a declared power-up 0 on a preset register ("will power up to High"): it is an inverted flop on the clear; a5pnr's synthesis refuses that combination | the oracle's RTL says 1 |
+| every LAB/MLAB ALM setting | all of the above | the readback ignored unknown settings outside MLABs; now it stops on any it doesn't read or know to be inert (`leout`, the ALM's `regctrl_reg` `ce_sel`/`clr_sel`), and every image above still reads back | strict |
+| the whole ALM, M20K ROM, clock enable, LAB clock delays | cqr (Quartus' CPU, register file in flops, retiming off) from power-up, SW0 held each way | **pass** (3,000 and 10,000 cycles, 230 registers and the LEDs, 0 mismatches) | |
+| routing muxes, `FAST_WIRE`, the clock network, DCM/P2C, pins in and out | every design above: each decoded edge is a mux setting; V16 and BF23 through the DCM, switchbox, seam, spine and row clocks; HVIO and IO96 inputs and outputs | **pass** (as part of each) | |
+| I/O registers | ct (FAST_INPUT/OUTPUT_REGISTER on 3.3-V pins) | **readback stop**: not modelled. The register clock enters at HIOL `GLOBAL_LOCAL_SEL` I5 → RPI I29 → REDMUX I372, a LUT constant through an inverted HIOL RPI feeds each register's (active-low) clock enable, and `xinv_fr_in_clk` = IN_INV [obs, ct] | step 5 (not reached) |
 
 The oracle designs' RTL got the device's power-up 0s where it had none
-(mq's second RAM, ar's registers), which the simulation needs and Quartus
-already assumed.
+(mq's second RAM, ar's registers, cqr's CPU in `specimens/p9/oracle/cqr/rtl`
+only), which the simulation needs and Quartus already assumed.
+`tools/alm/oracles_p9.sh` reruns all 18 holds of the seven oracle designs.
+
+**What failed, and what a5pnr wrote**: of the rules a5pnr's writer shares
+with the readback, none was wrong in a5pnr's images. The M20K read enable
+was wrong in the *model* both checks share (`A5_M20K` in cells_sim.v);
+a5pnr's bits for it are Quartus' (RE pin 39), so the images are unchanged
+and so is what the board should show (ramx with KEY1 held: frozen either
+way, since its write address moves on). The unrouted MLAB address pin and
+the idle clock mux are readback rules a5pnr doesn't exercise (no MLAB RAM
+yet; it never routes over an idle mux). So no phase-8 board file becomes
+wrong through the audit; phase 9's files differ because placement and
+routing changed ((z8), "Board test").
 
 ### (z7) Phase 9: the STA's carry arcs
 
