@@ -3310,6 +3310,47 @@ critical warning, which a real design should follow.
 
 ## Plan
 
+**Phase 10 status** (branch `phase10`): I/O registers, DSP multipliers,
+chipsmith's synthesis as a front end, a bench against Quartus Pro.
+
+- Step 1 (I/O registers): **done** (z10). Quartus' iq (input, output and OE
+  registers on 13 HVIO and 9 IO96 pins, enables, both clear polarities, a
+  preset, a synchronous clear) and ct decoded: the controls are active-low
+  pins of the I/O block next to the pin's data (HVIO O − 4..O − 1, IO96 U + 2,
+  4, 5), driven through the I/O routing tile's RPI inverters, the OE
+  register holds the inverse, `IN_INV` is what a rising-edge input register
+  needs. Readback model, oracle: iq under six holds and ct under two with
+  random inputs, 0 mismatches; mutations caught. a5pnr writes them (pins.txt
+  `reg`): `designs/p10/io` through all four checks.
+- Step 2 (DSP): **done for registered 18x18 and 27x27 multiplies** (z11).
+  The pins and the per-pin input inverters (`dsp_proginv_l/h`) from Quartus'
+  dq2; four modes in `db/sm4revb/dsp/modes.tsv`; readback: dq2 and held-out
+  dq3 0 mismatches. yosys maps `$mul` to `A5_MUL`, a5pnr absorbs the output
+  register: `designs/p10/mul` (eight products against a fabric reference)
+  through all four checks.
+- Step 3 (chipsmith's synthesis): **done** (z12). `tools/a5synth`, chipsmith
+  pinned at 0fd5991, `A5_SYNTH=chipsmith`: every design through the
+  simulation check; LUTs 1,392 → 1,174 on the CPU (Quartus about 1,170),
+  sha256 4,066 → 2,058, fr 879 → 320; ALMs follow less (6-input LUTs don't
+  pair). chipsmith would need an ALM-aware LUT cost and a multiplier hook
+  (nothing changed in chipsmith).
+- Step 4 (bench): see (z13) and `docs/vs-quartus-pro.md`.
+- Board: steps 27–30 of "Board test", files in `specimens/board/p10/`.
+
+Open after phase 10 [unk]:
+
+- Everything on silicon, still; now also the I/O registers and DSP blocks
+  (steps 28, 29).
+- I/O registers: IO96 synchronous clear, the clock entry of other HVIO
+  blocks and IO96 lanes, what `IN_BUF` does, DDIO; the Quartus export of
+  I/O registers, DSPs and MLAB RAM.
+- DSP: input and pipeline registers, sums, MAC, 9x9, enables and clears,
+  the pins of `dsp_proginv_h[36..53]`, DSP timing.
+- picorv32's register-level check under chipsmith's synthesis (x's in the
+  RTL simulation).
+- What an unrouted fabric pin passes (an unrouted I/O output reads 1
+  through its inverter as 0, z11).
+
 **Phase 9 status** (branch `phase9`): every rule a5pnr writes checked
 against Quartus' own images; the router, the STA's carry arcs and MLAB RAM.
 
