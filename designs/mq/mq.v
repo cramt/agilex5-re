@@ -18,7 +18,7 @@ module mq (
     (* ramstyle = "M20K, no_rw_check" *) reg [31:0] ra [0:511];
     integer k;
     initial for (k = 0; k < 512; k = k + 1) ra[k] = (k * 32'h9e3779b1) ^ (k << 21) ^ 32'h5a5a0f0f;
-    reg [31:0] qa;
+    reg [31:0] qa = 0;
     always @(posedge clk) begin
         if (WE) begin
             if (lfsr[9])  ra[lfsr[8:0]][7:0]   <= lfsr[31:24];
@@ -30,7 +30,10 @@ module mq (
     end
 
     (* ramstyle = "M20K, no_rw_check" *) reg [31:0] rb [0:511];
-    reg [31:0] qb, qb2;
+    reg [31:0] qb = 0, qb2 = 0;
+    // Empty at power-up, as the device has it; the compiled run
+    // (specimens/runs/mq0) predates this initial block and the 0s.
+    initial for (k = 0; k < 512; k = k + 1) rb[k] = 0;
     always @(posedge clk) begin
         if (lfsr[13]) rb[lfsr[22:14]] <= lfsr;
         if (RE) qb <= rb[a];

@@ -128,11 +128,13 @@ fn main() -> Result<()> {
         bail!("usage: a5pnr <db> <graph> <delays.tsv> <netlist.json> <top> <pins.txt> <out design.txt> [--seed N] [--effort X] [--no-timing] [--pack pairs|related|single]");
     };
     let (mut seed, mut effort, mut timing_driven, mut pack_mode) = (1u64, 1.0f64, true, pack::PackMode::Pairs);
+    let mut swap_pins = true;
     let mut quartus: Option<String> = None;
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--seed" => seed = it.next().context("--seed N")?.parse()?,
+            "--no-swap" => swap_pins = false,
             "--effort" => effort = it.next().context("--effort X")?.parse()?,
             "--no-timing" => timing_driven = false,
             "--quartus" => quartus = Some(it.next().context("--quartus DIR")?.clone()),
@@ -149,15 +151,16 @@ fn main() -> Result<()> {
     }
     let t0 = std::time::Instant::now();
     let nl = netlist::read(json, top)?;
-    let packed = pack::pack(&nl, pack_mode)?;
-    let [n6, n55, n5, n_arith, n_ff] = sta::alm_kinds(&packed);
+    let mut packed = pack::pack(&nl, pack_mode)?;
+    let [n6, n55, n5, n_arith, n_ff, n_ram] = sta::alm_kinds(&packed);
     let n_ffs = nl.cells.iter().filter(|c| matches!(c, netlist::Cell::Ff(_))).count();
     let ff_alms = packed.alms.iter().filter(|a| a.slots.iter().any(|s| matches!(s, Some(pack::Slot::Ff { .. })))).count();
     eprintln!(
-        "pack: {} cells into {} ALMs ({n6} 6-LUT, {n55} two 5-LUTs, {n5} one 5-LUT, {n_arith} arithmetic in {} chains, {n_ff} flops only; {ff_alms} with flops), {n_ffs} flops, {} M20Ks, {} clocks",
+        "pack: {} cells into {} ALMs ({n6} 6-LUT, {n55} two 5-LUTs, {n5} one 5-LUT, {n_arith} arithmetic in {} chains, {n_ff} flops only, {n_ram} MLAB RAM in {} MLABs; {ff_alms} with flops), {n_ffs} flops, {} M20Ks, {} clocks",
         nl.cells.len(),
         packed.alms.len(),
         packed.chains.len(),
+        packed.mlabs.len(),
         packed.m20ks.len(),
         packed.clocks.len()
     );
@@ -252,7 +255,7 @@ fn main() -> Result<()> {
     // seed: with every LUT input fixed to a pin at packing, two sinks in a
     // LAB can need the same local line (the CPU, specimens/p8/cpu/r4).
     let mut attempts = 0;
-    let (pl, place_s, lines, rnets, sink_conns, routed, route_s) = loop {
+    let (pl, place_s, lines, rnets, _sink_conns, routed, route_s) = loop {
         let t1 = std::time::Instant::now();
         let mut pl = place::place(&packed, &nl, &labs, &sites, &port_xy, seed, None, effort)?;
         let mut dtab = None;
@@ -296,19 +299,28 @@ fn main() -> Result<()> {
                 End::Pll(k) => Ok(pll_node[k]),
             }
         };
-        // Nets as source and sink nodes; per sink the connections it serves.
+        // Nets as source and sink nodes; per sink the connections it serves
+        // and the pins it may swap to.
         let mut rnets = Vec::new();
         let mut sink_conns: Vec<HashMap<u32, Vec<usize>>> = Vec::new();
         for (net, (d, sinks)) in &packed.nets {
             let mut by_node: HashMap<u32, Vec<usize>> = HashMap::default();
+            let mut alt_of: HashMap<u32, Vec<u32>> = HashMap::default();
             for e in sinks {
                 let n = node(e)?;
                 let ci = sta.conn_of.get(&(*net, *e)).copied().unwrap_or(usize::MAX);
                 by_node.entry(n).or_default().push(ci);
+                if let End::In { alm, pin } = *e {
+                    if swap_pins {
+                        let alts = pack::swap_group(&packed.alms[alm], pin)[1..].iter().map(|&q| node(&End::In { alm, pin: q })).collect::<Result<Vec<_>>>()?;
+                        alt_of.insert(n, alts);
+                    }
+                }
             }
             let mut ss: Vec<u32> = by_node.keys().copied().collect();
             ss.sort();
-            rnets.push(route::Net { name: nl.nets[*net as usize].clone(), source: node(d)?, sinks: ss, clock: packed.clocks.contains(net) });
+            let alts = ss.iter().map(|n| alt_of.get(n).cloned().unwrap_or_default()).collect();
+            rnets.push(route::Net { name: nl.nets[*net as usize].clone(), source: node(d)?, sinks: ss, alts, clock: packed.clocks.contains(net) });
             sink_conns.push(by_node);
         }
         let order: Vec<usize> = {
@@ -345,24 +357,98 @@ fn main() -> Result<()> {
         break (pl, place_s, lines, rnets, sink_conns, routed, route_s);
     };
 
-    // Timing of the routed design (README (u), (z)): each routed hop costs
-    // its node type's mean, cells their arcs' means.
-    let mut conn_delay = vec![0f32; sta.conns.len()];
-    for (ni, tree) in routed.trees.iter().enumerate() {
-        let parent: HashMap<u32, u32> = tree.iter().map(|&(a, b)| (b, a)).collect();
-        for (s, cs) in &sink_conns[ni] {
-            let mut d = 0.0f32;
-            let mut m = *s;
-            while let Some(&p) = parent.get(&m) {
-                d += base[g.ty[m as usize] as usize];
-                m = p;
+    // The pins the router swapped LUT inputs to (README (z8)): per ALM, old
+    // pin → new pin, then the sinks and masks follow.
+    let mut moves: HashMap<usize, Vec<(u8, u8)>> = HashMap::default();
+    let pin_of_node = |n: u32| -> Option<(usize, u8)> {
+        let (x, y, i) = (g.x[n as usize] as u32, g.y[n as usize] as u32, g.i[n as usize]);
+        let l = labs.iter().position(|l| l.x == x && l.y == y)?;
+        let a = pl.at.iter().position(|&(la, k)| la == l && k as u32 == i / 8)?;
+        Some((a, (i % 8) as u8))
+    };
+    let mut swapped = 0;
+    for (ni, net) in rnets.iter().enumerate() {
+        for (si, &s) in net.sinks.iter().enumerate() {
+            let r = routed.reached[ni][si];
+            if r != s {
+                let ((a, old), (_, new)) = (pin_of_node(s).context("swapped sink")?, pin_of_node(r).context("swapped pin")?);
+                moves.entry(a).or_default().push((old, new));
+                swapped += 1;
             }
-            for &c in cs {
-                if c != usize::MAX {
-                    conn_delay[c] = d;
+        }
+    }
+    for (&a, m) in &moves {
+        pack::apply_swaps(&mut packed.alms[a], m);
+    }
+    for (_, sinks) in packed.nets.values_mut() {
+        for e in sinks.iter_mut() {
+            if let End::In { alm, pin } = e {
+                if let Some(&(_, new)) = moves.get(alm).and_then(|m| m.iter().find(|m| m.0 == *pin)) {
+                    *pin = new;
                 }
             }
         }
+    }
+    if swapped > 0 {
+        eprintln!("route: {swapped} LUT inputs swapped to other pins in {} ALMs", moves.len());
+    }
+    // LAB-local feedback: a connection inside one LAB can run LAB_RE → LL →
+    // LEIM → LAB_RE, as Quartus' critical paths do (README (z4), (z8)).
+    let (mut local, mut direct) = (0, 0);
+    for (ni, net) in rnets.iter().enumerate() {
+        let src = net.source as usize;
+        if g.type_name(net.source) != "LAB_RE" {
+            continue;
+        }
+        let parent: HashMap<u32, u32> = routed.trees[ni].iter().map(|&(a, b)| (b, a)).collect();
+        for &r in &routed.reached[ni] {
+            if g.type_name(r) != "LAB_RE" || (g.x[r as usize], g.y[r as usize]) != (g.x[src], g.y[src]) {
+                continue;
+            }
+            local += 1;
+            let mut hops = 0;
+            let mut m = r;
+            while let Some(&p) = parent.get(&m) {
+                hops += 1;
+                m = p;
+            }
+            direct += (hops == 3) as usize;
+        }
+    }
+    eprintln!("route: {local} connections inside one LAB, {direct} of them over its local lines alone");
+    // A connection's sink node, as the loop's `node` (outputs and
+    // un-routed ends: None).
+    let end_node = |e: &End| -> Option<u32> {
+        let lab_re = |l: usize, pin: u32| g.node(&format!("LAB_RE:X{}Y{}Z0I{pin}", labs[l].x, labs[l].y));
+        match *e {
+            End::In { alm, pin } => lab_re(pl.at[alm].0, 8 * pl.at[alm].1 as u32 + pin as u32),
+            End::Ctl { alm, ctl } => lab_re(pl.at[alm].0, emit::ctl_pin(&lines[&pl.at[alm].0], ctl)),
+            End::Port(p) => port_node.get(&p).copied(),
+            End::M20k { m, pin } => {
+                let (x, y) = pl.m20k_at[m];
+                g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{pin}"))
+            }
+            End::Out { .. } | End::Pll(_) => None,
+        }
+    };
+    // Timing of the routed design (README (u), (z)): each routed hop costs
+    // its node type's mean, cells their arcs' means; on the swapped pins.
+    let sta = sta::Sta::new(&nl, &packed, &delay);
+    let net_index: HashMap<u32, usize> = packed.nets.keys().map(|k| (*k, rnets.iter().position(|r| r.name == nl.nets[*k as usize]).unwrap_or(usize::MAX))).collect();
+    let mut conn_delay = vec![0f32; sta.conns.len()];
+    let parents: Vec<HashMap<u32, u32>> = routed.trees.iter().map(|tree| tree.iter().map(|&(a, b)| (b, a)).collect()).collect();
+    for (c, (net, e)) in sta.conns.iter().enumerate() {
+        let ni = net_index[net];
+        if ni == usize::MAX {
+            continue;
+        }
+        let Some(mut m) = end_node(e) else { continue };
+        let mut d = 0.0f32;
+        while let Some(&p) = parents[ni].get(&m) {
+            d += base[g.ty[m as usize] as usize];
+            m = p;
+        }
+        conn_delay[c] = d;
     }
     let rep = sta.analyse(&conn_delay);
     if rep.worst > 0.0 {

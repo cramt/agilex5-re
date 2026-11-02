@@ -15,11 +15,12 @@ use anyhow::{bail, Context, Result};
 use crate::netlist::Netlist;
 use crate::pack::{Ctl, End, Packed};
 
-/// A LAB site.
+/// A LAB site, or an MLAB's (for RAM only: a5pnr puts no logic there).
 #[derive(Clone, Copy, Debug)]
 pub struct Lab {
     pub x: u32,
     pub y: u32,
+    pub mlab: bool,
 }
 
 pub fn labs(db: &str) -> Result<Vec<Lab>> {
@@ -27,8 +28,8 @@ pub fn labs(db: &str) -> Result<Vec<Lab>> {
     let mut out = Vec::new();
     for l in text.lines().skip(1) {
         let f: Vec<&str> = l.split('\t').collect();
-        if f[1] == "cw_la_lab" && !f[0].contains("rsp") {
-            out.push(Lab { x: f[3].parse()?, y: f[4].parse()? });
+        if (f[1] == "cw_la_lab" || f[1] == "cw_ml_mlab") && !f[0].contains("rsp") {
+            out.push(Lab { x: f[3].parse()?, y: f[4].parse()?, mlab: f[1] == "cw_ml_mlab" });
         }
     }
     out.sort_by_key(|l| (l.x, l.y));
@@ -74,19 +75,36 @@ pub struct Placement {
     pub m20k_at: Vec<(u32, u32)>,
 }
 
+/// Distinct nets a LAB's data pins may take. Each enters on one of the
+/// LAB's 80 local lines (LL, then a LEIM to the pin), and Quartus'
+/// legalizer rejects a LAB with too many ("too many LAB line inputs") by a
+/// rule that is [unk]: it rejected a5pnr LABs with 55, 59 and 61 nets (53,
+/// 58, 60 from outside the LAB) and took ones with 51; its own CPU fit
+/// takes at most 52 (48 from outside). 50 is under all of it [inf,
+/// README (z8)].
+pub const LAB_INPUTS: usize = 50;
+
 /// How many of each control line a LAB's ALMs ask for, and whether that
 /// fits: two clocks, two enables, one synchronous clear, two asynchronous
-/// clears (an ALM without one still takes a line, left inactive).
+/// clears (an ALM without one still takes a line, left inactive); and the
+/// nets on its ALMs' data pins.
 #[derive(Default, Clone)]
-struct LabUse(HashMap<Ctl, u32>);
+struct LabUse(HashMap<Ctl, u32>, HashMap<u32, u32>);
 
 impl LabUse {
-    fn add(&mut self, ctls: &[Ctl], d: i32) {
+    fn add(&mut self, ctls: &[Ctl], ins: &[u32], d: i32) {
         for c in ctls {
             let e = self.0.entry(*c).or_default();
             *e = (*e as i32 + d) as u32;
             if *e == 0 {
                 self.0.remove(c);
+            }
+        }
+        for n in ins {
+            let e = self.1.entry(*n).or_default();
+            *e = (*e as i32 + d) as u32;
+            if *e == 0 {
+                self.1.remove(n);
             }
         }
     }
@@ -101,10 +119,10 @@ impl LabUse {
                 Ctl::Ce(_) => ce += 1,
                 Ctl::Sclr(_) => sclr += 1,
                 Ctl::Aclr(Some(_)) => aclr += 1,
-                Ctl::Aclr(None) => {}
+                Ctl::Aclr(None) | Ctl::Wa(..) => {}
             }
         }
-        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1
+        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.1.len() <= LAB_INPUTS
     }
 }
 
@@ -148,6 +166,22 @@ pub fn place(
     let lab_at: HashMap<(u32, u32), usize> = labs.iter().enumerate().map(|(i, l)| ((l.x, l.y), i)).collect();
     let n = p.alms.len();
     let ctls: Vec<Vec<Ctl>> = p.alms.iter().map(|a| a.ctls(nl)).collect();
+    // Per ALM, the nets on its data pins (clocks ride the clock network).
+    let mut ins: Vec<Vec<u32>> = vec![Vec::new(); n];
+    for (&net, (_, sinks)) in &p.nets {
+        if p.clocks.contains(&net) {
+            continue;
+        }
+        for e in sinks {
+            if let End::In { alm, .. } = e {
+                ins[*alm].push(net);
+            }
+        }
+    }
+    for v in &mut ins {
+        v.sort();
+        v.dedup();
+    }
     let mut occ: HashMap<(usize, u8), usize> = HashMap::default();
     let mut uses: Vec<LabUse> = vec![LabUse::default(); labs.len()];
     let mut at = vec![(usize::MAX, 0u8); n];
@@ -167,6 +201,22 @@ pub fn place(
     let m20k_at: Vec<(u32, u32)> = sites[..p.m20ks.len()].to_vec();
     let mut by_dist: Vec<usize> = (0..labs.len()).collect();
     by_dist.sort_by_key(|&i| (labs[i].x as i64 - cx as i64).abs() + (labs[i].y as i64 - cy as i64).abs());
+    // MLAB RAMs (README (z9)) go to the MLABs nearest the ports' centre and
+    // stay there, as the M20Ks do; logic stays out of MLABs.
+    let mut in_ram = vec![false; n];
+    {
+        let mut free = by_dist.iter().copied().filter(|&l| labs[l].mlab);
+        for g in &p.mlabs {
+            let l = free.next().context("more MLAB RAMs than MLABs")?;
+            for (k, &a) in g.iter().enumerate() {
+                occ.insert((l, k as u8), a);
+                at[a] = (l, k as u8);
+                uses[l].add(&ctls[a], &ins[a], 1);
+                in_ram[a] = true;
+            }
+        }
+    }
+    by_dist.retain(|&l| !labs[l].mlab);
     let mut chain_of = vec![usize::MAX; n];
     for (ci, c) in p.chains.iter().enumerate() {
         for &a in c {
@@ -181,11 +231,14 @@ pub fn place(
         let mut trial: HashMap<usize, LabUse> = HashMap::default();
         for (j, &a) in c.iter().enumerate() {
             let l = *lab_at.get(&(x, y.checked_sub(((k0 + j) / 10) as u32)?))?;
+            if labs[l].mlab {
+                return None;
+            }
             let s = (l, ((k0 + j) % 10) as u8);
             if occ.get(&s).is_some_and(|&o| !c.contains(&o)) {
                 return None;
             }
-            trial.entry(l).or_insert_with(|| uses[l].clone()).add(&ctls[a], 1);
+            trial.entry(l).or_insert_with(|| uses[l].clone()).add(&ctls[a], &ins[a], 1);
             slots.push(s);
         }
         trial.values().all(LabUse::ok).then_some(slots)
@@ -199,13 +252,13 @@ pub fn place(
         for (j, s) in slots.into_iter().enumerate() {
             occ.insert(s, c[j]);
             at[c[j]] = s;
-            uses[s.0].add(&ctls[c[j]], 1);
+            uses[s.0].add(&ctls[c[j]], &ins[c[j]], 1);
         }
     }
     {
         let mut li = 0;
         for a in 0..n {
-            if chain_of[a] != usize::MAX {
+            if chain_of[a] != usize::MAX || in_ram[a] {
                 continue;
             }
             'find: loop {
@@ -213,7 +266,7 @@ pub fn place(
                 for k in 0..10u8 {
                     if !occ.contains_key(&(l, k)) {
                         let mut u = uses[l].clone();
-                        u.add(&ctls[a], 1);
+                        u.add(&ctls[a], &ins[a], 1);
                         if u.ok() {
                             occ.insert((l, k), a);
                             at[a] = (l, k);
@@ -302,7 +355,7 @@ pub fn place(
             _ => 0.0,
         }
     };
-    let movable: Vec<usize> = (0..n).filter(|&a| chain_of[a] == usize::MAX).collect();
+    let movable: Vec<usize> = (0..n).filter(|&a| chain_of[a] == usize::MAX && !in_ram[a]).collect();
     if n == 0 || nets.is_empty() {
         return Ok(Placement { at, m20k_at });
     }
@@ -349,6 +402,9 @@ pub fn place(
         let tx = labs[l0].x as i64 + rng.below(2 * r as usize + 1) as i64 - r;
         let ty = labs[l0].y as i64 + rng.below(2 * r as usize + 1) as i64 - r;
         let &tl = lab_at.get(&(tx.clamp(0, 255) as u32, ty.clamp(0, 255) as u32))?;
+        if labs[tl].mlab {
+            return None;
+        }
         // The ALMs that move, old and new slots.
         let mut moved: Vec<(usize, (usize, u8), (usize, u8))> = Vec::new();
         if chain_of[a] != usize::MAX {
@@ -356,6 +412,9 @@ pub fn place(
             let k0 = 0;
             for (j, &m) in c.iter().enumerate() {
                 let l = *lab_at.get(&(labs[tl].x, labs[tl].y.checked_sub(((k0 + j) / 10) as u32)?))?;
+                if labs[l].mlab {
+                    return None;
+                }
                 let s = (l, ((k0 + j) % 10) as u8);
                 if occ.get(&s).is_some_and(|o| !c.contains(o)) {
                     return None;
@@ -378,8 +437,8 @@ pub fn place(
         // LAB control lines.
         let mut trial: HashMap<usize, LabUse> = HashMap::default();
         for &(m, from, to) in &moved {
-            trial.entry(from.0).or_insert_with(|| uses[from.0].clone()).add(&ctls[m], -1);
-            trial.entry(to.0).or_insert_with(|| uses[to.0].clone()).add(&ctls[m], 1);
+            trial.entry(from.0).or_insert_with(|| uses[from.0].clone()).add(&ctls[m], &ins[m], -1);
+            trial.entry(to.0).or_insert_with(|| uses[to.0].clone()).add(&ctls[m], &ins[m], 1);
         }
         if !trial.values().all(LabUse::ok) {
             return None;

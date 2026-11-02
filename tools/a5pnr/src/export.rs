@@ -106,6 +106,7 @@ pub fn write(
         let k = k as u32;
         let site = |h: usize| format!("LABCELL_X{x}_Y{y}_N{}", 6 * k + 3 * h as u32);
         match &alm.logic {
+            Logic::Ram { .. } => bail!("MLAB RAM in the Quartus export: not done (README (z9))"),
             Logic::Six { cell, pos } => {
                 let Cell::Lut { ins, mask, out } = &nl.cells[*cell] else { unreachable!() };
                 let w = widen(*mask, pos);

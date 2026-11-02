@@ -5,7 +5,10 @@
 # flops with the LAB's controls (README (y): enable, synchronous clear that
 # the enable gates, asynchronous clear of either polarity; anything else
 # becomes LUT logic; flops power up at 0) and A5_M20K instances
-# (yosys/cells.v).
+# (yosys/cells.v), and memories that fit as MLAB RAM (yosys/mlab.txt;
+# A5_MLAB=0 keeps them in flops). An MLAB reads with no clock, so a
+# synchronous read stays the RTL's own register (-nordff): merged into the
+# read port, yosys would rebuild it under a name of its own (README (z9)).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 top=$1; out=$2; shift 2
@@ -14,7 +17,8 @@ base=${out%.json}
 nix shell nixpkgs#yosys -c yosys -q -l "$base.yosys.log" -p "
 read_verilog -lib $here/yosys/cells.v
 read_verilog$inc $*
-synth -top $top -flatten -run :fine
+synth -top $top -flatten -run :fine $( [[ ${A5_MLAB:-1} == 1 ]] && echo "-nordff" )
+$( [[ ${A5_MLAB:-1} == 1 ]] && echo "memory_libmap -lib $here/yosys/mlab.txt" )
 memory_map
 opt -full
 techmap -map $here/yosys/arith_map.v

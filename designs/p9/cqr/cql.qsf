@@ -1,0 +1,33 @@
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY cql
+set_global_assignment -name VERILOG_FILE ../../../designs/p8/cql/cql.v
+# The run directory is specimens/runs/<name>; the CPU's sources stay in p7.
+set_global_assignment -name VERILOG_FILE femtorv32_logic.v
+set_global_assignment -name SEARCH_PATH ../../../designs/p7/cpu
+set_global_assignment -name SDC_FILE cql.sdc
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
+set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+
+# designs/p7/cpu/cpu.pins
+set_location_assignment PIN_V16 -to CLOCK1_50
+set_location_assignment PIN_C8 -to KEY0
+set_location_assignment PIN_DK24 -to SW0
+set_location_assignment PIN_DF35 -to LED[0]
+set_location_assignment PIN_DJ32 -to LED[1]
+set_location_assignment PIN_DN22 -to LED[2]
+set_location_assignment PIN_DP23 -to LED[3]
+set_location_assignment PIN_DN25 -to LED[4]
+set_location_assignment PIN_DP25 -to LED[5]
+set_location_assignment PIN_DJ27 -to LED[6]
+set_location_assignment PIN_DP30 -to LED[7]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CLOCK1_50
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to KEY0
+set_instance_assignment -name IO_STANDARD "1.1-V" -to SW0
+set_instance_assignment -name IO_STANDARD "1.1-V" -to LED[*]
+# Phase 9 oracle (README (z6)): designs/p8/cql with retiming off, so no
+# hyper-registers (cql0 used 1,556) and every register is the RTL's.
+set_global_assignment -name ALLOW_REGISTER_RETIMING OFF

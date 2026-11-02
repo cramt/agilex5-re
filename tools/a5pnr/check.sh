@@ -8,7 +8,8 @@
 #  3. tools/readback.sh: asm2 (Quartus' assembler) against a5db's decode;
 #  4. quartus_pfg -c on the .sof (its .rbf must equal a5db's) and
 #     quartus_pfg --check_integrity on a5db's .rbf; tools/bitstream.py check.
-# Results go to <out>/check.txt.
+# Results go to <out>/check.txt. CHECK_NO_QUARTUS=1 skips 3 and 4 (while
+# iterating, with Quartus busy elsewhere).
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd); repo=$(dirname "$(dirname "$here")")
 top=$1; pins=$(realpath "$2"); out=$(realpath "$3"); shift 3
@@ -17,10 +18,10 @@ export CHIPSMITH_INSTALL_ROOT=${CHIPSMITH_INSTALL_ROOT:-/pool/dev/altera_pro}
 r=$out/check.txt; : > "$r"
 # The three parts are independent: asm2 and pfg run while extract and the
 # simulation do (README (x)).
-(
+[[ -n ${CHECK_NO_QUARTUS:-} ]] && : > "$out/check.asm2" && : > "$out/check.pfg" || (
     "$repo/tools/readback.sh" "$out/$top.sof" "$out/asm2" 2>&1 | tail -3 | sed 's/^/asm2: /' > "$out/check.asm2"
 ) &
-(
+[[ -n ${CHECK_NO_QUARTUS:-} ]] || (
     cd "$out" && "$repo/tools/quartus.sh" quartus_pfg -c "$top.sof" "${top}_pfg.rbf" > pfg.log 2>&1
     "$repo/tools/quartus.sh" quartus_pfg --check_integrity "$top.rbf" > integrity.log 2>&1
     {

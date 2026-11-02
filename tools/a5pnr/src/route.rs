@@ -18,12 +18,19 @@ pub struct Net {
     pub name: String,
     pub source: u32,
     pub sinks: Vec<u32>,
+    /// Per sink, other nodes that serve as well: the pins a LUT input may
+    /// swap to (pack::swap_group, README (z8)); the router takes whichever
+    /// is cheapest, and PathFinder settles which net gets which pin.
+    pub alts: Vec<Vec<u32>>,
     pub clock: bool,
 }
 
 pub struct Routed {
     /// Per net: the tree's edges as (from, to).
     pub trees: Vec<Vec<(u32, u32)>>,
+    /// Per net and sink, the node the route ends at (the sink or one of
+    /// its alternatives).
+    pub reached: Vec<Vec<u32>>,
     pub iterations: usize,
 }
 
@@ -45,6 +52,7 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
     let mut stamp_now = 0u32;
     let lab_re = g.type_id("LAB_RE");
     let mut trees: Vec<Vec<(u32, u32)>> = vec![Vec::new(); nets.len()];
+    let mut reached: Vec<Vec<u32>> = nets.iter().map(|n| n.sinks.clone()).collect();
     let mut pres = 0.5f32;
     // A* lower bound per column and row: the fastest wire per unit length
     // (H12, V8 in the delay model), times 2 (VPR's astar_fac, a little greedier).
@@ -57,6 +65,10 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
     };
     let (hx, hy) = (2.0 * per('H').min(0.05), 2.0 * per('V').min(0.05));
     let mut reroute = vec![true; nets.len()];
+    // Criticality squared: only the most critical connections ignore
+    // congestion (README (z8): the CPU 136 → 141 MHz register to register,
+    // fr 52 → 7 routing iterations; the 4th power and a second pass with
+    // criticalities from the routes did worse).
     for iter in 1..=max_iter {
         let t_iter = std::time::Instant::now();
         let mut routed_n = 0;
@@ -82,12 +94,15 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
                 (b.0.min(x - MARGIN), b.1.max(x + MARGIN), b.2.min(y - MARGIN), b.3.max(y + MARGIN))
             });
             // Most critical sinks first, then the nearest.
-            let mut sinks: Vec<(u32, f32)> = net.sinks.iter().copied().zip(crit[ni].iter().copied()).collect();
+            let mut sinks: Vec<(usize, u32, f32)> = net.sinks.iter().copied().zip(crit[ni].iter().copied()).enumerate().map(|(i, (s, c))| (i, s, c)).collect();
             let (sx, sy) = (g.x[net.source as usize] as i32, g.y[net.source as usize] as i32);
-            sinks.sort_by_key(|&(s, c)| (std::cmp::Reverse((c * 10.0) as i32), (g.x[s as usize] as i32 - sx).abs() + (g.y[s as usize] as i32 - sy).abs()));
-            for &(t, cr) in &sinks {
-                let cr = cr.min(0.98);
-                if in_tree.contains(&t) {
+            sinks.sort_by_key(|&(_, s, c)| (std::cmp::Reverse((c * 10.0) as i32), (g.x[s as usize] as i32 - sx).abs() + (g.y[s as usize] as i32 - sy).abs()));
+            for &(si, t, cr) in &sinks {
+                let cr = (cr * cr).min(0.98);
+                let alts = net.alts.get(si).map(Vec::as_slice).unwrap_or(&[]);
+                let target = |m: u32| m == t || alts.contains(&m);
+                if let Some(&m) = in_tree.iter().find(|&&m| target(m)) {
+                    reached[ni][si] = m;
                     continue;
                 }
                 let (tx, ty) = (g.x[t as usize] as i32, g.y[t as usize] as i32);
@@ -115,8 +130,9 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
                     }
                     expanded = 0;
                     while let Some((Reverse(fb), m)) = heap.pop() {
-                        if m == t {
+                        if target(m) {
                             found = true;
+                            reached[ni][si] = m;
                             break;
                         }
                         let gm = cost[m as usize];
@@ -161,7 +177,7 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
                 if !found {
                     bail!("net {}: no path to {} (iteration {iter}, {expanded} nodes expanded)", net.name, g.name(t));
                 }
-                let mut m = t;
+                let mut m = reached[ni][si];
                 while prev[m as usize] != u32::MAX {
                     let p = prev[m as usize];
                     trees[ni].push((p, m));
@@ -174,7 +190,7 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
         let over: Vec<usize> = (0..n).filter(|&k| occ[k] > 1).collect();
         eprintln!("route: iteration {iter}: {routed_n} nets routed, {} overused nodes, {:.1} s", over.len(), t_iter.elapsed().as_secs_f64());
         if over.is_empty() {
-            return Ok(Routed { trees, iterations: iter });
+            return Ok(Routed { trees, reached, iterations: iter });
         }
         if iter == max_iter {
             for &k in &over {

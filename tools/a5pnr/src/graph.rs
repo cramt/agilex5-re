@@ -12,6 +12,9 @@ pub const NO: u8 = 0;
 pub const MUX: u8 = 1;
 pub const PASS: u8 = 2;
 pub const CLOCK: u8 = 3;
+/// An edge whose mux setting is the mux's idle state (a5db usable): a mux
+/// nothing configures passes that input.
+pub const IDLE: u8 = 4;
 
 pub struct Graph {
     pub types: Vec<String>,

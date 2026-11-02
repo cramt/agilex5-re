@@ -1,10 +1,12 @@
 // Simulation models of a5pnr's cells (README (w), (y)), used on both sides
 // of tools/a5pnr/simcheck.py: the source design's instances and the netlist
 // rebuilt from the image. A5_M20K: write address, data and enables are
-// registered on CLK; byte b of word WADDR is written when WE and BE[b]; the
-// read address is registered when RE; read data is the word at the
-// registered read address, through one more register when OUTREG. Contents
-// start at INIT (bit 32a + k is word a, bit k).
+// registered on CLK; byte b of word WADDR is written when WE and BE[b]; when
+// RE is high the word at RADDR is read (before that edge's write) and held
+// while RE is low, through one more register when OUTREG [obs: Quartus' mq
+// image against its RTL, README (z6); phases 6-8 registered only the
+// address, so a later write to it showed through]. Contents start at INIT
+// (bit 32a + k is word a, bit k).
 module A5_M20K #(parameter [16383:0] INIT = 16384'h0, parameter OUTREG = 0) (
     input CLK,
     input WE,
@@ -16,8 +18,7 @@ module A5_M20K #(parameter [16383:0] INIT = 16384'h0, parameter OUTREG = 0) (
     output [31:0] RDATA
 );
     reg [31:0] mem [0:511];
-    reg [8:0] ra = 0;
-    reg [31:0] q = 0;
+    reg [31:0] r = 0, q = 0;
     integer i;
     initial for (i = 0; i < 512; i = i + 1) mem[i] = INIT[32 * i +: 32];
     always @(posedge CLK) begin
@@ -27,10 +28,40 @@ module A5_M20K #(parameter [16383:0] INIT = 16384'h0, parameter OUTREG = 0) (
             if (BE[2]) mem[WADDR][23:16] <= WDATA[23:16];
             if (BE[3]) mem[WADDR][31:24] <= WDATA[31:24];
         end
-        if (RE) ra <= RADDR;
-        q <= mem[ra];
+        if (RE) r <= mem[RADDR];
+        q <= r;
     end
-    assign RDATA = OUTREG ? q : mem[ra];
+    assign RDATA = OUTREG ? q : r;
+endmodule
+
+// An M20K as the image holds it, for the readback (src/readback.rs): the
+// physical 40-bit word in four 10-bit byte lanes (BE[b] writes bits
+// 10b..10b + 9), as A5_M20K otherwise. Which 32 of the 40 bits a design
+// uses is the fitter's choice: a5pnr takes 8 of each lane, Quartus without
+// byte enables bits 0..31 (mq, README (z6)). CE is the clock enable
+// `m20k_clkensel` selects (Quartus' CPU ROM, cqr), gating everything
+// clocked [inf].
+module A5_M20K40 #(parameter [20479:0] INIT = 20480'h0, parameter OUTREG = 0) (
+    input CLK,
+    input CE,
+    input WE,
+    input [3:0] BE,
+    input RE,
+    input [8:0] WADDR,
+    input [39:0] WDATA,
+    input [8:0] RADDR,
+    output [39:0] RDATA
+);
+    reg [39:0] mem [0:511];
+    reg [39:0] r = 0, q = 0;
+    integer i;
+    initial for (i = 0; i < 512; i = i + 1) mem[i] = INIT[40 * i +: 40];
+    always @(posedge CLK) if (CE) begin
+        if (WE) for (i = 0; i < 4; i = i + 1) if (BE[i]) mem[WADDR][10 * i +: 10] <= WDATA[10 * i +: 10];
+        if (RE) r <= mem[RADDR];
+        q <= r;
+    end
+    assign RDATA = OUTREG ? q : r;
 endmodule
 
 // A5_IOPLL as simcheck sees it: the output follows the reference. The
