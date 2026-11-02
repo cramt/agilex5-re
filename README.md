@@ -2686,6 +2686,29 @@ STA's own chain error.
   lines in the ffmap) and follows `wire X = reg;` aliases back to the
   register: femtorv32's `rs1` only ever appeared as `aluIn1`, so its RTL
   copy was never given its random state (a gap phase 8's runs didn't hit).
+- Every design through `tools/a5pnr/suite.sh` on phase 9's final code
+  (`specimens/p9/s1`, the CPUs `specimens/p9/cpu`; the model's Fmax is the
+  longest path including the pins, as before):
+
+  | design | ALMs / LABs (phase 8) | M20K | route iterations | model Fmax | extract = design | simcheck | asm2 differ | pfg |
+  |---|---|---|---|---|---|---|---|---|
+  | blinky | 13 / 2 (13 / 2) | 0 | 1 | 528 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | leds | 19 / 2 (19 / 2) | 0 | 6 | 312 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | ram | 16 / 2 (16 / 2) | 1 | 4 | 424 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | acc | 37 / 6 (37 / 6) | 0 | 5 | 245 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | arith | 23 / 4 (23 / 4) | 0 | 3 | 497 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | ctl | 39 / 9 (39 / 8) | 0 | 5 | 377 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | rom | 17 / 2 (17 / 2) | 1 | 4 | 424 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | ramx | 17 / 3 (17 / 3) | 1 | 4 | 469 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | pll | 27 / 4 (27 / 4) | 0 | 1 | 515 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | fr | 505 / 69 (505 / 75) | 0 | 8 | 113 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | rf | 23 / 5 (new) | 0 | 4 | 475 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | cpu (register file in MLAB) | 453 / 78 (1,393 / 215) | 1 | 32 | 113 MHz | yes | 0 mismatches | 0 | identical, OK |
+  | cpu_ff (register file in flops) | 1,393 / 206 | 1 | 15 | 136 MHz | yes | 0 mismatches | 0 | identical, OK |
+
+  The model's figures aren't comparable with phase 8's for designs with
+  carry chains (blinky 393 → 528 MHz, arith 352 → 497): its carry arcs
+  changed (z7). fr has 69 LABs instead of 75 under the input budget.
 - Not done [unk]: logic in an MLAB beside RAM, RAMs deeper than 32 words
   (memory_libmap would build them from several with a read mux; not tried),
   the read register inside the MLAB (Quartus uses LAB clock 1 for it, (z5)),
