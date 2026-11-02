@@ -2398,7 +2398,8 @@ side.
   0 (cql's six), so a5pnr's do now; a chain's first `cin` is left open.
 - **The model on Quartus' routes** [obs, `tools/timing/fit.py eval`,
   held out]: Quartus' own CPU (cql, 1,508 paths launched by flops): mean
-  −2.4 %, |error| median 3.3 %, 95th percentile 12.5 %; a5pnr's ctl
+  −2.4 %, |error| median 3.3 %, 95th percentile 12.5 %; a5pnr's CPU
+  placement routed by Quartus: +0.7 %, 3.0 %, 8.9 %; a5pnr's ctl
   placement routed by Quartus (442 paths): mean +1.5 %, median 12.5 %, 95th
   21.6 %, nearly all of it carry chains. Refitting on rt, ar, hx and mm
   (twice phase 6's training set) moves these by under a point, so the
@@ -2419,10 +2420,22 @@ side.
   about 0.9 ns of a5pnr's 2.46 there is routing [inf]: Quartus' critical
   paths run LAB_RE → LL → LEIM inside a LAB, where a5pnr's routes for the
   design use 160 H0, 79 H1 and 77 V1 hops.
-- **The CPU**: Quartus' legalizer rejects one LAB of a5pnr's r5 placement,
-  "too many LAB line inputs": a5pnr routed 76 local lines into LAB X75 Y25,
-  where Quartus' own LABs use at most 73 (cql, fr) [obs]; a5pnr has no such
-  budget yet. A rerun leaves that LAB's 35 cells to Quartus.
+- **The CPU** [obs, r5's placement, `specimens/p8/qx/cpu3`, `sta/cpu3`]:
+  Quartus' legalizer rejects LABs of a5pnr's placement with "too many LAB
+  line inputs": a5pnr routed 76 and 71 local lines into LABs X75 Y25 and
+  X73 Y25, where Quartus' own LABs use at most 73 (cql, fr); its budget
+  counts something a little different [unk], and a5pnr has none. With the
+  17 LABs that use 60 or more local lines left to Quartus (324 of 2,802
+  cells), it keeps the rest (all 261 locked atoms on reported paths where
+  a5pnr put them). quartus_sta: **181.0 MHz** on Quartus' routes of
+  a5pnr's placement, against **300.7 MHz for Quartus' own fit** (cql) and
+  the model's **125 MHz on a5pnr's own routes**. The model on Quartus'
+  routes of this placement: mean +0.7 %, |error| median 3.0 %, 95th
+  percentile 8.9 %, max 13.1 % (2,000 paths launched by flops); per flop
+  endpoint a5pnr's routes cost +1.57 ns (+28.6 %, median of 160) more than
+  Quartus' on the same placement. So the CPU's 125 → 301 MHz splits about
+  evenly into routing (125 → 181 on one placement) and placement and
+  synthesis (181 → 301) [inf: the two runs differ in both].
 
 Other a5pnr changes: hash maps with a fixed hasher (`src/det.rs`), so a seed
 gives the same placement every run (std's RandomState didn't: the CPU's r2
@@ -2714,11 +2727,14 @@ images, two LUTs per ALM, and quartus_sta on a5pnr's placement.
   1,393 ALMs (Quartus: 1,082 for the same RTL). Every design passes every
   check.
 - Step 2 (timing truth): **placement only** (z4). `a5pnr --quartus` writes
-  the placement as Quartus atoms with locations, and Quartus keeps it; it
-  takes no routing constraints. The model on Quartus' routes: 3.3 %
-  median error on Quartus' own CPU, 12.5 % on a5pnr's placement (carry
-  chains, whose arcs a5pnr's STA strings wrongly). a5pnr's routes cost
-  more than Quartus' on the same placement (ctl: +57 % per endpoint).
+  the placement as Quartus atoms with locations, and Quartus keeps it
+  (but for LABs past its LAB-input budget); it takes no routing
+  constraints. The model on Quartus' routes: 3.0–3.3 % median error on the
+  CPU (Quartus' placement and a5pnr's), 12.5 % on ctl (carry chains, whose
+  arcs a5pnr's STA strings wrongly). The CPU: quartus_sta 181 MHz on
+  a5pnr's placement, 301 MHz on Quartus' own fit, the model 125 MHz on
+  a5pnr's routes; a5pnr's routes cost +29 % (CPU) and +57 % (ctl) per
+  endpoint over Quartus' on the same placement.
 - Step 3 (I/O registers): **not done**.
 - Step 4 (MLAB RAM): **the bits and the readback, checked on Quartus' ml
   image** (z5); a5pnr doesn't map RAMs to MLABs yet.
@@ -2734,6 +2750,8 @@ Open after phase 8 [unk]:
 - a5pnr's routes: why they cost more than Quartus' on the same placement
   (LAB-local feedback through LL/LEIM; LUT input pins are fixed at
   packing, so the router can't swap them).
+- Quartus' LAB-input budget (it rejects 71 local lines in a5pnr's LAB but
+  uses 73 in its own); a5pnr should respect one.
 - The STA's carry arcs: `cin → cout` per ALM and data → `cout` to the
   half-LAB's end in one step, as quartus_sta reports them.
 - Exact routes in Quartus: no command found that sets one.
