@@ -2496,6 +2496,39 @@ which word for an initial content other than 0 (the read index is the
 MLAB by itself ("Unsupported Mixed Feed Through Setting in Auto MLAB
 Conversion"): in cq it used two M20Ks, one per read port.
 
+### (z6) Phase 9: every rule a5pnr writes, against Quartus' own images
+
+Phase 8's lesson, applied to every rule: for each rule a5pnr's writer and
+its readback share, a Quartus-compiled design that uses it is decoded by
+`a5db extract`, rebuilt by `a5pnr readback` and simulated against its RTL
+from power-up (`tools/alm/oracle.sh`), under every hold of its control
+inputs. The readback's own rules are what is under test; where it met
+something it didn't know it stopped (it bails rather than guesses), and
+each such stop is a row below. New tools: `tools/alm/atoms.sh` (the atom
+dump of an existing run, 15–20 min and 4 GB for a small design),
+`tools/alm/qsf2pins.py`, `ORACLE_REUSE=1` (re-simulate after a readback
+change). Runs in `specimens/p9/alm`, readbacks in `specimens/p9/oracle`.
+
+| rule (what a5pnr writes or reads) | oracle design | result | fix |
+|---|---|---|---|
+| carry chain: sum, carry, chain start at 0, ALM 4 → 5 (`DISABLE_BTO`), into the LAB below (`hipi_clken`) | ar (32-bit accumulator, ternary adder, comparator, subtractor; 6 `DISABLE_BTO`, 1 LAB crossing) | **pass** | |
+| enable, synchronous clear (the enable gates it), active-low asynchronous clear, power-up 0 | ar under KEY0, KEY1, EN held each way | **pass** (2,000–3,000 cycles, 127 registers, 0 mismatches each) | |
+| M20K contents and word order, write and byte enables, output register | mq (512 x 32 with contents and byte enables; 512 x 32 with RE and output register) under WE, RE held each way | **pass** after two fixes | readback: the physical 40-bit word |
+| M20K read enable | mq, RE low | **fail**: `A5_M20K` (cells_sim.v) registered only the read address under RE, so a later write to that address showed through; Quartus implements `if (RE) q <= mem[a]` with the RE pin, i.e. RE holds the read data | model: RE latches the data (old data on a same-address write) |
+| M20K data pins | mq | **readback stop**: Quartus packs a 32-bit word without byte enables into bits 0–31 of the 40 (pins 83–114), a5pnr into 8 of each 10-bit lane; both are the same pin rule (bit j in at 57 + j / 40 − j, out at 83 + j) | readback models the 40-bit word (`A5_M20K40`) |
+| M20K clock enable | cqr (Quartus' CPU ROM) | **readback stop**: Quartus gates the ROM's read with `xsecmux/xclk0/m20k_clkensel = CLKEN_SEL` and pin 41, not RE (39) | modelled (pin 41, `CLKEN_SEL_INV` inverted); a5pnr doesn't write it |
+| MLAB RAM with initial contents | mi (32 x 20 asynchronous read, 16 x 8 registered, every word its own initial value) under KEY0 (write enable) held each way | **pass** (3,000 cycles, 82 registers, 0 mismatches) after one fix | |
+| MLAB word order | mi | 32-word RAM: word a, bit b at stored[32h + a] [obs, 20 of 20 halves]; **16-word RAM: word a at stored[32h + 16 + a]** [obs, 8 of 8]: the unrouted address bit 4 reads **1**, not the 0 phase 8 inferred | readback: unrouted MLAB address pins read 1 |
+| a flop in a chain's spare half | mi (`rdaddr_reg[1]` in the last ALM of a counter chain) | **readback stop**: in arithmetic mode `LUTOUT_5LUT` is the half's 5-LUT over {E, D, C, B, A} (p in the low 16 bits, g in the high), used as a pass-through (p = 0, g = 1: E) | modelled; a5pnr doesn't use it |
+| IOPLL (V16, output 0), its clock into the fabric | pl (24-bit counter on the PLL clock) | **pass** (25 registers, 0 mismatches); `locked` not modelled (x on both sides) | |
+| V16's ioclk mux | pl | Quartus sets `xif_p2c_ioclk_2to1_mux_u1` P0 with V16 only a PLL reference; pa (V16 a PLL reference too) leaves it idle, as a5pnr does [obs] | readback ignores pin-level clock muxes |
+| LAB clock delay | cqr | `smxclk_dly` DELAY_2..4, `smxclk_dly_off` ENABLE_DELAY on 219 LABs and `regclk = DFF_LABCLK_PHI1_0` on 476 flops: the LAB clock through a programmable delay [inf: timing only] | readback treats PHI1 as the same clock |
+| hyper-registers | cql (phase 8's CPU fit, retiming on) | **readback stop**: 1,556 routing muxes at `flop_mode = FLOP` (registers in the routing); a5pnr never writes them, so the CPU was recompiled with retiming off (`designs/p9/cqr`) | none needed |
+
+The oracle designs' RTL got the device's power-up 0s where it had none
+(mq's second RAM, ar's registers), which the simulation needs and Quartus
+already assumed.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`

@@ -38,9 +38,12 @@ endmodule
 // physical 40-bit word in four 10-bit byte lanes (BE[b] writes bits
 // 10b..10b + 9), as A5_M20K otherwise. Which 32 of the 40 bits a design
 // uses is the fitter's choice: a5pnr takes 8 of each lane, Quartus without
-// byte enables bits 0..31 (mq, README (z6)).
+// byte enables bits 0..31 (mq, README (z6)). CE is the clock enable
+// `m20k_clkensel` selects (Quartus' CPU ROM, cqr), gating everything
+// clocked [inf].
 module A5_M20K40 #(parameter [20479:0] INIT = 20480'h0, parameter OUTREG = 0) (
     input CLK,
+    input CE,
     input WE,
     input [3:0] BE,
     input RE,
@@ -53,7 +56,7 @@ module A5_M20K40 #(parameter [20479:0] INIT = 20480'h0, parameter OUTREG = 0) (
     reg [39:0] r = 0, q = 0;
     integer i;
     initial for (i = 0; i < 512; i = i + 1) mem[i] = INIT[40 * i +: 40];
-    always @(posedge CLK) begin
+    always @(posedge CLK) if (CE) begin
         if (WE) for (i = 0; i < 4; i = i + 1) if (BE[i]) mem[WADDR][10 * i +: 10] <= WDATA[10 * i +: 10];
         if (RE) r <= mem[RADDR];
         q <= r;

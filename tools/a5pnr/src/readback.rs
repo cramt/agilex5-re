@@ -266,10 +266,11 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         // LAB clock 0 when CLKEN0 (80) is high, at the address on LAB_RE 156,
         // 157, 160, 161, 155 (bits 0..4), with half 0's data from C0 and half
         // 1's from D0. An address pin left unrouted (a 16-word RAM's bit 4)
-        // reads 0 on both ports [inf].
+        // reads 1 on both ports [obs: Quartus' mi stores a 16-word RAM's
+        // initial word a at 32h + 16 + a, README (z6)].
         let ram = kd == "ml" && lab_attr(x, y, "xpwrmgmt/lutram_mode_vcchg_power_saving") != Some("ENABLE_POWER_SAVING");
-        let pin0 = |pin: u32| sig(lab_node(x, y, pin)).unwrap_or_else(|| "1'b0".into());
-        let waddr = format!("{{{}, {}, {}, {}, {}}}", pin0(155), pin0(161), pin0(160), pin0(157), pin0(156));
+        let pin1 = |pin: u32| sig(lab_node(x, y, pin)).unwrap_or_else(|| "1'b1".into());
+        let waddr = format!("{{{}, {}, {}, {}, {}}}", pin1(155), pin1(161), pin1(160), pin1(157), pin1(156));
         let sclr = lab_sig(x, y, 82);
         let clr1 = match sig(lab_node(x, y, 86)) {
             Some(s) if inverted_lab.contains(&(x, y)) => format!("~{s}"),
@@ -284,6 +285,11 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             }
         }
         for ((u, a), val) in &attr {
+            // The LAB clock's programmable delay (Quartus' CPU without
+            // retiming, cqr: 219 LABs): timing only, nothing to simulate [inf].
+            if *u == uid && (a == "xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_dly" || (a == "xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_dly_off" && val == "ENABLE_DELAY")) {
+                continue;
+            }
             if *u == uid && a.starts_with("xsecmux") && ![
                 "xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off",
                 "xsecmux/xcw_la_lcb_adder/secmux_bto",
@@ -319,6 +325,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             let arith = get(&format!("{lut}/adder_mode")) == Some("ENABLE_ADDER");
             let mut outs: [String; 2] = [String::new(), String::new()];
             let mut lut6 = String::new();
+            let mut five: [String; 2] = [String::new(), String::new()];
             if arith {
                 // Half h: p over {D, C, B, A} at 32h, g at 32h + 16 (README (w)).
                 let (a, b) = (pin(3), pin(4));
@@ -354,10 +361,18 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     writeln!(v, "  assign {n}_co{h} = {n}_pp{h} ? {cin} : lut4({n}_g{h}, {n}_i{h});")?;
                     writeln!(v, "  assign {n}_s{h} = {cin} ^ {n}_pp{h};")?;
                     outs[h as usize] = format!("{n}_s{h}");
+                    // The half's whole 5-LUT, p below g, over {E_h, D, C, B,
+                    // A}: Quartus feeds an unrelated flop through it (p = 0,
+                    // g = 1 passes E) in a chain's spare half [obs, mi].
+                    let e = if h == 0 { pin(0) } else { pin(7) };
+                    let w: String = (0..32usize).rev().map(|i| (b'0' + stored[32 * h as usize + i]) as char).collect();
+                    writeln!(d, "  wire {n}_f{h};")?;
+                    writeln!(v, "  assign {n}_f{h} = lut5(32'b{w}, {{{e}, {d_in}, {c}, {b}, {a}}});", d_in = d_in)?;
+                    five[h as usize] = format!("{n}_f{h}");
                 }
             } else if ram {
                 let w: String = (0..64usize).rev().map(|i| (b'0' + stored[i]) as char).collect();
-                let lp = |q: u32| sig(lab_node(x, y, 8 * k + q)).unwrap_or_else(|| "1'b0".into());
+                let lp = |q: u32| sig(lab_node(x, y, 8 * k + q)).unwrap_or_else(|| "1'b1".into());
                 let raddr = format!("{{{}, {}, {}, {}, {}}}", lp(7), lp(6), lp(5), lp(4), lp(3));
                 writeln!(d, "  reg [63:0] {n}_m = 64'b{w}; wire {n}_q0, {n}_q1;")?;
                 for h in 0..2u32 {
@@ -415,6 +430,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     let input = get(&format!("{rb}/xreg{r}/reg_input")).unwrap_or("ARITH_SUMOUT");
                     let src = match (input, arith) {
                         ("ARITH_SUMOUT", true) => outs[h as usize].clone(),
+                        ("LUTOUT_5LUT", true) => five[h as usize].clone(),
                         ("LUTOUT_6LUT", false) => lut6.clone(),
                         ("LUTOUT_5LUT", false) => outs[h as usize].clone(),
                         // LEIM: the ALM's pin A (half 0) or B (half 1) (README (y)).
@@ -426,8 +442,11 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                     match mode {
                         Some("DFF_LATCH") => {
                             let clk = match get(&format!("{rb}/xlabclk_mux/regclk")) {
-                                Some("DFF_LABCLK0") => clk.clone(),
-                                Some("DFF_LABCLK1") => clk1.clone(),
+                                // PHI1: the LAB clock through its programmable
+                                // delay (smxclk_dly), the same clock to logic
+                                // (cqr: 476 flops) [inf].
+                                Some("DFF_LABCLK0" | "DFF_LABCLK_PHI1_0") => clk.clone(),
+                                Some("DFF_LABCLK1" | "DFF_LABCLK_PHI1_1") => clk1.clone(),
                                 o => bail!("{uid} {p} {rb}: regclk {o:?}"),
                             };
                             // xreg0's ce_sel and sclr_sel serve both registers
@@ -461,6 +480,9 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         // An unrouted enable is high; WE through its inverter is low.
         let en = |p: u32| eab(p).unwrap_or_else(|| "1'b1".into());
         let mut we = en(37);
+        // The clock enable on pin 41 when `m20k_clkensel` selects it
+        // (Quartus' CPU ROM, cqr) [obs]; idle, the clock always runs.
+        let mut ce = "1'b1".to_owned();
         let (mut outreg, mut init) = (true, vec![0u64; 512]);
         for ((u, a), val) in &attr {
             if *u != uid {
@@ -470,6 +492,10 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                 init[n.parse::<usize>()?] = u64::from_str_radix(val, 2)?;
             } else if a == "xsecmux/xwe0/m20k_invsel" && val == "INV_LEIM_SEL" {
                 we = format!("~{we}");
+            } else if a == "xsecmux/xclk0/m20k_clkensel" && val == "CLKEN_SEL" {
+                ce = en(41);
+            } else if a == "xsecmux/xclk0/m20k_clkensel" && val == "CLKEN_SEL_INV" {
+                ce = format!("~{}", en(41));
             } else if M20K_KNOWN.contains(&a.as_str()) {
                 outreg = false;
             } else if !crate::emit::M20K_SDP.iter().any(|(n, s)| a == &format!("xdigicore/{n}") && val == s) {
@@ -486,7 +512,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         }
         writeln!(
             v,
-            "  A5_M20K40 #(.INIT(20480'h{init_hex}), .OUTREG({})) m{x}_{y} (.CLK({}), .WE({we}), .BE({{{}, {}, {}, {}}}), .RE({}), .WADDR({{{}}}), .WDATA({{{}}}), .RADDR({{{}}}), .RDATA(m{x}_{y}_q));",
+            "  A5_M20K40 #(.INIT(20480'h{init_hex}), .OUTREG({})) m{x}_{y} (.CLK({}), .CE({ce}), .WE({we}), .BE({{{}, {}, {}, {}}}), .RE({}), .WADDR({{{}}}), .WDATA({{{}}}), .RADDR({{{}}}), .RDATA(m{x}_{y}_q));",
             outreg as u8,
             req(77),
             en(21),
