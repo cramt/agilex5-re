@@ -49,6 +49,11 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             "attr" | "direct" | "bit" if f[1].starts_with("hvio") && f[2].starts_with("xpllwrap_top/") => {
                 plls.insert(f[1].to_owned());
             }
+            // A clock pin's entry into the clock network (`a5db pins`, README
+            // (r)): the edges past it are what the model follows. Quartus'
+            // pl sets V16's 2:1 ioclk mux with V16 only a PLL reference; pa,
+            // with V16 a PLL reference too, leaves it idle [obs].
+            "attr" if f[1].starts_with("hvio") && f[2].starts_with("xif/xif_clk_mux/") => {}
             "attr" | "direct" => {
                 attr.insert((f[1].to_owned(), f[2].to_owned()), f[3].to_owned());
             }
@@ -445,9 +450,10 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             }
         }
     }
-    // M20Ks as 512 x 32 simple dual-port RAMs (README (w), (y)); the model
-    // is tools/a5pnr/yosys/cells_sim.v's A5_M20K.
-    let pos = |k: u32| 10 * (k / 8) + k % 8;
+    // M20Ks as 512 x 40 simple dual-port RAMs, the physical word
+    // (yosys/cells_sim.v's A5_M20K40): data bit j enters at pin 57 + j
+    // (j < 20) or 40 - j and leaves at 83 + j, contents are the 40 stored
+    // bits as they are (README (w), (y), (z6)).
     for &(x, y) in m20ks.keys() {
         let uid = format!("cw_mm_m20k_r{y}_c{x}");
         let eab = |p: u32| sig(g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{p}")));
@@ -455,18 +461,13 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         // An unrouted enable is high; WE through its inverter is low.
         let en = |p: u32| eab(p).unwrap_or_else(|| "1'b1".into());
         let mut we = en(37);
-        let (mut outreg, mut init) = (true, vec![0u32; 512]);
+        let (mut outreg, mut init) = (true, vec![0u64; 512]);
         for ((u, a), val) in &attr {
             if *u != uid {
                 continue;
             }
             if let Some(n) = a.strip_prefix("xdigicore/xdigicorepg/xcore/xary/m20k_eram_add") {
-                let w = u64::from_str_radix(val, 2)?;
-                let word = (0..32).fold(0u32, |acc, k| acc | ((w >> pos(k) & 1) as u32) << k);
-                if (0..40).any(|j| w >> j & 1 == 1 && !(0..32).any(|k| pos(k) == j)) {
-                    bail!("{uid} {a}: content outside the byte lanes");
-                }
-                init[n.parse::<usize>()?] = word;
+                init[n.parse::<usize>()?] = u64::from_str_radix(val, 2)?;
             } else if a == "xsecmux/xwe0/m20k_invsel" && val == "INV_LEIM_SEL" {
                 we = format!("~{we}");
             } else if M20K_KNOWN.contains(&a.as_str()) {
@@ -475,15 +476,17 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
                 bail!("{uid} {a} = {val}: M20K setting outside the model");
             }
         }
-        let bus = |f: &dyn Fn(u32) -> u32, n: u32| (0..n).rev().map(|i| req(f(i))).collect::<Vec<_>>().join(", ");
-        let init_hex: String = init.iter().rev().map(|w| format!("{w:08x}")).collect();
-        writeln!(d, "  wire [31:0] m{x}_{y}_q;")?;
-        for k in 0..32u32 {
-            writeln!(d, "  wire m{x}_{y}_q{} = m{x}_{y}_q[{k}];", 83 + pos(k))?;
+        // An unrouted data input reads 0 (a5pnr leaves 2 bits of each lane
+        // open and never reads them) [inf].
+        let bus = |f: &dyn Fn(u32) -> u32, n: u32, open: &str| (0..n).rev().map(|i| eab(f(i)).unwrap_or_else(|| open.into())).collect::<Vec<_>>().join(", ");
+        let init_hex: String = init.iter().rev().map(|w| format!("{w:010x}")).collect();
+        writeln!(d, "  wire [39:0] m{x}_{y}_q;")?;
+        for j in 0..40u32 {
+            writeln!(d, "  wire m{x}_{y}_q{} = m{x}_{y}_q[{j}];", 83 + j)?;
         }
         writeln!(
             v,
-            "  A5_M20K #(.INIT(16384'h{init_hex}), .OUTREG({})) m{x}_{y} (.CLK({}), .WE({we}), .BE({{{}, {}, {}, {}}}), .RE({}), .WADDR({{{}}}), .WDATA({{{}}}), .RADDR({{{}}}), .RDATA(m{x}_{y}_q));",
+            "  A5_M20K40 #(.INIT(20480'h{init_hex}), .OUTREG({})) m{x}_{y} (.CLK({}), .WE({we}), .BE({{{}, {}, {}, {}}}), .RE({}), .WADDR({{{}}}), .WDATA({{{}}}), .RADDR({{{}}}), .RDATA(m{x}_{y}_q));",
             outreg as u8,
             req(77),
             en(21),
@@ -491,9 +494,9 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             en(56),
             en(55),
             en(39),
-            bus(&|i| 25 + i, 9),
-            bus(&|k| { let j = pos(k); if j < 20 { 57 + j } else { 40 - j } }, 32),
-            bus(&|i| 52 - i, 9)
+            bus(&|i| 25 + i, 9, "1'bx"),
+            bus(&|j| if j < 20 { 57 + j } else { 40 - j }, 40, "1'b0"),
+            bus(&|i| 52 - i, 9, "1'bx")
         )?;
     }
     for (name, n) in &outputs {

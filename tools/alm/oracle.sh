@@ -4,13 +4,15 @@
 # against the RTL from power-up (the RTL at its initial values, the image at
 # its 0s; Quartus' retimed flops left out of the map).
 #   tools/alm/oracle.sh <run dir with atoms.txt (tools/alm/atoms.tcl)> <top> <pins> <out dir> <cycles> <rtl.v>...
-# SIMCHECK_HOLD as for simcheck.py (e.g. KEY0=1).
+# SIMCHECK_HOLD as for simcheck.py (e.g. KEY0=1). ORACLE_REUSE=1 keeps an
+# earlier run's synthesis and extract (after a readback change).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd); repo=$(dirname "$(dirname "$here")")
 run=$(realpath "$1"); top=$2; pins=$(realpath "$3"); out=$(realpath -m "$4"); cycles=$5; shift 5
 db=$repo/db/sm4revb; graph=$repo/specimens/rg/full
 mkdir -p "$out"
-"$repo/tools/a5pnr/synth.sh" "$top" "$out/$top.json" "$@" > "$out/synth.log" 2>&1
+reuse=${ORACLE_REUSE:-}
+[[ -n $reuse && -s $out/$top.json ]] || "$repo/tools/a5pnr/synth.sh" "$top" "$out/$top.json" "$@" > "$out/synth.log" 2>&1
 # a5db's pin uses (README (p)) from the netlist's port directions; a clock
 # pin is one that clocks a flop.
 specs=$(python3 -I - "$out/$top.json" "$top" "$pins" <<'PY'
@@ -29,7 +31,7 @@ for l in open(sys.argv[3]):
     print(f'{ball}={kind}:{volt}')
 PY
 )
-"$repo/tools/cap.sh" 12G "$repo/tools/a5db/target/release/a5db" extract "$db" "$graph" "$run/output_files/$top.sof" $specs > "$out/extract.txt" 2> "$out/extract.log"
+[[ -n $reuse && -s $out/extract.txt ]] || "$repo/tools/cap.sh" 12G "$repo/tools/a5db/target/release/a5db" extract "$db" "$graph" "$run/output_files/$top.sof" $specs > "$out/extract.txt" 2> "$out/extract.log"
 "$repo/tools/cap.sh" 6G "$repo/tools/a5pnr/target/release/a5pnr" readback "$graph" "$db" "$out/extract.txt" "$pins" "$top" "$out/readback.v" 2> "$out/readback.log"
 # The RTL's initial values, before synthesis inverts flops that start at 1.
 nix shell nixpkgs#yosys -c yosys -q -p "read_verilog $*; hierarchy -top $top; proc; flatten; write_json $out/$top.init.json" > /dev/null
