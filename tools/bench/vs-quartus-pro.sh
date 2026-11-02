@@ -17,15 +17,20 @@ mkdir -p "$out"
 mapfile -t all < <(awk -F'\t' '!/^#/ && $1 != "name" {print $1}' "$here/designs.tsv")
 designs=("${@:-${all[@]}}")
 field() { awk -F'\t' -v n="$1" -v c="$2" 'NR==1{for(i=1;i<=NF;i++) h[$i]=i} $1==n{print $h[c]}' <(grep -v '^#' "$here/designs.tsv"); }
-# Seconds from systemd's "1h 2min 3.456s" / "141ms".
-secs() { python3 -I -c 'import re,sys; s=sys.argv[1]; t=sum(float(v)*{"h":3600,"min":60,"s":1,"ms":.001,"us":1e-6}[u] for v,u in re.findall(r"([\d.]+)(h|min|ms|us|s)", s)); print(f"{t:.1f}")' "$1"; }
-unit() {  # unit <log> <command...>: runs it, prints "wall cpu status"
+# GNU time: wall, and user + system time of every process the build waited
+# for. The unit's own CPU accounting misses tools/cap.sh's scopes, which
+# leave the unit's cgroup.
+gtime=$(nix build --no-link --print-out-paths nixpkgs#time)/bin/time
+unit() {  # unit [--setenv=...] <log> <command...>: runs it, prints "wall cpu status"
+    local env=()
+    while [[ $1 == --setenv=* ]]; do env+=("$1"); shift; done
     local log=$1; shift
-    systemd-run --user --wait --collect -p MemoryMax=20G -p MemorySwapMax=0 --working-directory="$repo" \
-        --setenv=PATH="$PATH" --setenv=HOME="$HOME" --setenv=CHIPSMITH_INSTALL_ROOT --setenv=ORACLE_LICENSE_MAC --setenv=LM_LICENSE_FILE \
-        "$@" > "$log" 2>&1
+    systemd-run --user --wait --collect -q -p MemoryMax=20G -p MemorySwapMax=0 --working-directory="$repo" \
+        --setenv=PATH="$PATH" --setenv=HOME="$HOME" --setenv=CHIPSMITH_INSTALL_ROOT --setenv=ORACLE_LICENSE_MAC --setenv=LM_LICENSE_FILE "${env[@]}" \
+        "$gtime" -o "$log.time" -f '%e %U %S' "$@" > "$log" 2>&1
     local st=$?
-    echo "$(secs "$(grep -oP 'Service runtime: \K.*' "$log")") $(secs "$(grep -oP 'CPU time consumed: \K.*' "$log")") $st"
+    read -r e u sy < <(tail -n1 "$log.time")
+    echo "$e $(python3 -I -c "print(f'{$u + $sy:.1f}')") $st"
 }
 for rep in $(seq 1 "$reps"); do
     for d in "${designs[@]}"; do
@@ -44,11 +49,11 @@ for rep in $(seq 1 "$reps"); do
         opts=""
         if [[ $rep == 1 ]]; then opts="--quartus $out/runs/x_$d"; rm -rf "$out/runs/x_$d"; mkdir -p "$out/runs/x_$d"; fi
         load=$(cut -d' ' -f1 /proc/loadavg)
-        read -r w c st <<< "$(unit "$ar.unit.log" ${env:+--setenv=A5_${env#A5_}} --setenv=A5PNR_OPTS="$opts" "$repo/tools/a5pnr/flow.sh" "$top" "$pins" "$ar" "${srcs[@]}")"
+        read -r w c st <<< "$(unit ${env:+--setenv=A5_${env#A5_}} --setenv=A5PNR_OPTS="$opts" "$ar.unit.log" "$repo/tools/a5pnr/flow.sh" "$top" "$pins" "$ar" "${srcs[@]}")"
         if [[ $st != 0 && -n $opts ]]; then
             # The export refuses MLAB RAM, DSPs and I/O registers: time it without.
             rm -rf "$out/runs/x_$d"
-            read -r w c st <<< "$(unit "$ar.unit.log" ${env:+--setenv=A5_${env#A5_}} "$repo/tools/a5pnr/flow.sh" "$top" "$pins" "$ar" "${srcs[@]}")"
+            read -r w c st <<< "$(unit ${env:+--setenv=A5_${env#A5_}} "$ar.unit.log" "$repo/tools/a5pnr/flow.sh" "$top" "$pins" "$ar" "${srcs[@]}")"
         fi
         printf '%s\t%s\ta5pnr\t%s\t%s\t%s\t%s\t%s\n' "$rep" "$d" "$w" "$c" "$load" "$st" "$ar" >> "$out/runs.tsv"
         if [[ $rep == 1 ]]; then
