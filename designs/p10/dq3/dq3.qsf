@@ -1,0 +1,24 @@
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY dq3
+set_global_assignment -name VERILOG_FILE dq3.v
+set_global_assignment -name SDC_FILE dq3.sdc
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
+set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+
+set_location_assignment PIN_V16 -to CLOCK1_50
+set_location_assignment PIN_F2 -to O[0]
+set_location_assignment PIN_P2 -to O[1]
+set_location_assignment PIN_B3 -to O[2]
+set_location_assignment PIN_H4 -to O[3]
+set_location_assignment PIN_H14 -to O[4]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CLOCK1_50
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to O[0]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to O[1]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to O[2]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to O[3]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to O[4]
+set_global_assignment -name ALLOW_REGISTER_RETIMING OFF

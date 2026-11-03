@@ -1,0 +1,115 @@
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY iq
+set_global_assignment -name VERILOG_FILE iq.v
+set_global_assignment -name SDC_FILE iq.sdc
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
+set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
+set_global_assignment -name NUM_PARALLEL_PROCESSORS 2
+
+# HVIO GPIO0/GPIO1 pins (3.3 V), IO96 bank 2A switches and LEDs (1.1 V).
+set_location_assignment PIN_V16 -to CLOCK1_50
+set_location_assignment PIN_H16 -to EN
+set_location_assignment PIN_Y1 -to ACLR
+set_location_assignment PIN_C2 -to ACLRN
+set_location_assignment PIN_P1 -to SCLR
+set_location_assignment PIN_Y2 -to DA
+set_location_assignment PIN_U2 -to DB
+set_location_assignment PIN_L1 -to DC
+set_location_assignment PIN_B10 -to DD
+set_location_assignment PIN_A10 -to DE
+set_location_assignment PIN_B15 -to DF
+set_location_assignment PIN_DK24 -to SW[0]
+set_location_assignment PIN_DD24 -to SW[1]
+set_location_assignment PIN_DD27 -to SW[2]
+set_location_assignment PIN_DF27 -to SW[3]
+set_location_assignment PIN_F2 -to X[0]
+set_location_assignment PIN_P2 -to X[1]
+set_location_assignment PIN_B3 -to X[2]
+set_location_assignment PIN_H4 -to X[3]
+set_location_assignment PIN_H14 -to X[4]
+set_location_assignment PIN_C6 -to X[5]
+set_location_assignment PIN_H6 -to X[6]
+set_location_assignment PIN_B5 -to X[7]
+set_location_assignment PIN_H11 -to X[8]
+set_location_assignment PIN_A13 -to X[9]
+set_location_assignment PIN_C19 -to QA
+set_location_assignment PIN_AH19 -to QB
+set_location_assignment PIN_R14 -to QC
+set_location_assignment PIN_AG31 -to QD
+set_location_assignment PIN_AL37 -to QE
+set_location_assignment PIN_BV14 -to QF
+set_location_assignment PIN_DF35 -to L[0]
+set_location_assignment PIN_DJ32 -to L[1]
+set_location_assignment PIN_DN22 -to L[2]
+set_location_assignment PIN_DP23 -to L[3]
+set_location_assignment PIN_CD23 -to ZA
+set_location_assignment PIN_CE14 -to ZB
+set_location_assignment PIN_DN25 -to LZ
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CLOCK1_50
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to EN
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to ACLR
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to ACLRN
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to SCLR
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to DA
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to DB
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to DC
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to DD
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to DE
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to DF
+set_instance_assignment -name IO_STANDARD "1.1-V" -to SW[0]
+set_instance_assignment -name IO_STANDARD "1.1-V" -to SW[1]
+set_instance_assignment -name IO_STANDARD "1.1-V" -to SW[2]
+set_instance_assignment -name IO_STANDARD "1.1-V" -to SW[3]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[0]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[1]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[2]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[3]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[4]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[5]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[6]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[7]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[8]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to X[9]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to QA
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to QB
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to QC
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to QD
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to QE
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to QF
+set_instance_assignment -name IO_STANDARD "1.1-V" -to L[0]
+set_instance_assignment -name IO_STANDARD "1.1-V" -to L[1]
+set_instance_assignment -name IO_STANDARD "1.1-V" -to L[2]
+set_instance_assignment -name IO_STANDARD "1.1-V" -to L[3]
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to ZA
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to ZB
+set_instance_assignment -name IO_STANDARD "1.1-V" -to LZ
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to DA
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to DB
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to DC
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to DD
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to DE
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to DF
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to SW[0]
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to SW[1]
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to SW[2]
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to SW[3]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to QA
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to QB
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to QC
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to QD
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to QE
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to QF
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to L[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to L[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to L[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to L[3]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to ZA
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to ZB
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to LZ
+set_instance_assignment -name FAST_OUTPUT_ENABLE_REGISTER ON -to ZA
+set_instance_assignment -name FAST_OUTPUT_ENABLE_REGISTER ON -to ZB
+set_instance_assignment -name FAST_OUTPUT_ENABLE_REGISTER ON -to LZ
+set_global_assignment -name ALLOW_REGISTER_RETIMING OFF

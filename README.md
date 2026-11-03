@@ -2714,6 +2714,337 @@ STA's own chain error.
   the read register inside the MLAB (Quartus uses LAB clock 1 for it, (z5)),
   MLAB RAM in the Quartus export.
 
+### (z10) Phase 10: I/O registers
+
+`designs/p10/iq` (Quartus' oracle for this): input, output and OE registers
+on 13 HVIO pins in two blocks (hvio_3_1, hvio_0_1) and 9 IO96 pins (bank 2A's
+switches and LEDs), plain, with a clock enable, an active-high and an
+active-low asynchronous clear, a preset (a clear to 1) and a synchronous
+clear, each control on its own pin (`FAST_INPUT_REGISTER`,
+`FAST_OUTPUT_REGISTER`, `FAST_OUTPUT_ENABLE_REGISTER`, retiming off). Quartus
+packed all 23 into the I/O cells (`iq.fit.rpt`, "Fitter Netlist
+Optimizations"). Run `specimens/runs/iq0`, atoms `specimens/p10/alm/iq0`,
+readback `specimens/p10/oracle/iq`.
+
+- **Where the controls enter** [obs, `a5pnr drivers` on iq's decode, every
+  register]: each control is a pin of the I/O block next to the pin's own
+  data pins. On an HVIO pin, with O the block pin its OE path enters
+  (`pin_nodes.tsv` role `oe`): O − 4 the input register's synchronous
+  clear, O − 3 the asynchronous clear or preset all three registers share,
+  O − 2 the output and OE registers' clock enable, O − 1 the input
+  register's clock enable, O + 1 the output data (16 HVIO controls in
+  iq). On an IO96 pin, with U the block pin its output data enters (role
+  `out`): U + 2 the asynchronous clear, U + 4 the input register's clock
+  enable, U + 5 the output and OE registers' clock enable (13 controls;
+  the OE data enters at the `oe` boundary, which on DN25 is another block
+  pin than U's neighbours). An IO96 synchronous clear wasn't seen [unk].
+  The fabric ends at an I/O routing tile's RPI; the hops after it
+  (REDMUX, the block pin) have no bits.
+- **The clock** [obs]: a register clock pin of the block, entered from the
+  HIOL tile's `GLOBAL_LOCAL_SEL` I5 (each HIOL row has three, I5–I7, into
+  three block pins); every register of hvio_3_1 used the one at row 49
+  (`HVIOWR_RE` I2009), whichever row its pin sits in.
+- **Every control is active low** [obs]: the settings say so
+  (`a_rb_ncein_ireg_ena`, `a_rb_nceout_oreg_ena`, `a_rb_naclr_*_ena`,
+  `a_rb_nsclr_ireg_ena` turn each one on), and Quartus drives every clock
+  enable, every active-high clear and the synchronous clear through the
+  I/O routing tile's programmable inverter (`<path>/rpi_sel = INV` on a
+  HIOL or VIO tile), the active-low clear (ACLRN) straight. A register with
+  no enable still has its enable on, driven by a constant LUT through an
+  inverter. **So ct's two HIOL inverters (README (y)) are its two I/O
+  registers' clock enables, not "data inverters around both registers".**
+  `a5db rpimap` lists every HIOL and VIO inverter with its RPI node
+  (`db/sm4revb/io/rpi.tsv`, 20,982: the RPII → RPI edge's config is the
+  attribute's path).
+- **A preset is `a_rb_naclr_*_sel = *_NPRE_SEL`** on the shared clear
+  [obs]; an input register's synchronous clear is its own
+  (`a_rb_nsclr_ireg_ena`, O − 4); an output register's synchronous clear
+  Quartus folds into the data (qf).
+- **The OE register holds the inverse** [obs]: Quartus reports all three as
+  "Inverted", drives their data through an inverted RPI, and the buffer
+  drives the pad while the register holds 0. With a clear, an OE
+  register's shared clear is then a preset (`EREG_NPRE_SEL`, ZB, whose
+  RTL OE clears to 0).
+- **The input register's clock inverter** `xinv_fr_in_clk` is IN_INV on
+  every input register (ct and iq, 12 of 12); its idle setting is IN_BUF.
+  So IN_INV is what a rising-edge input register needs [obs]; that IN_BUF
+  would capture on the falling edge is [inf].
+- A registered input leaves on the pin's `in1` node, IO96 too; on IO96 its
+  4:1 `ireg_4to1_mux0` stays at its idle SEL3, and its header bit
+  45,136 + 229 L + p is 0, as for an output [obs: SW0–3 decoded as 4 `raw`
+  bits until the template got an IO96 `in_reg` use with that row]. The
+  IO96 lane's input flyby muxes (`xflyby/x<k>/sel_f`) are GPIO in the lane
+  with the registered inputs [obs; what they select is inf].
+
+`a5pnr readback` now models them (`src/ioreg.rs`): per pin the three
+registers as the block's flops on its register clock, their data, enables,
+clears, preset and synchronous clear at the block pins above, a signal
+through an inverted RPI arriving inverted, the OE register's 0 driving the
+pad. **Quartus' iq image runs like `iq.v` for 3,000 cycles from power-up
+under six holds of EN, ACLR, ACLRN, SCLR (the other inputs random every
+cycle, `SIMCHECK_RUN_RANDOM=1`, new in simcheck), 0 mismatches each; ct
+(which stopped the phase-9 readback) likewise, 0 mismatches** [obs]. The
+check has teeth: without the RPI inversions 27,094 mismatches, without the
+preset 4,979, without the synchronous clear 740 (`A5_RB_MUTATE`), the OE
+enable the other way round 6,000. Two oracle-side fixes: `tools/alm/ffmap.py`
+leaves I/O register atoms out (the pins observe them), `oracle.sh` takes a
+pin's use from a fourth column of the pins file.
+
+**a5pnr writes them** (`src/ioreg.rs`, `pack.rs`, `main.rs`): a fourth
+column `reg` in pins.txt puts the port's flop into the pin's I/O cell: an
+input's one flop on the pin, an output's flop driving it, and for a
+tristate output (yosys `$_TBUF_`, kept by `tribuf` in synth.sh when the
+RTL has a `'bz`) its OE flop as well. The flops leave the ALMs; their data
+and controls are routed to the RPIs that feed the block pins above
+(`End::Io`), the clock to the block's register clock entry (hvio_3_1:
+HIOL row 49 `GLOBAL_LOCAL_SEL` I5, hvio_0_1: row 9; IO96 lane 4: VIO X106
+I3, lane 5: X107 I3; other blocks and lanes are refused, [unk]). Every
+active-high control, and the OE register's data, gets its RPI's
+inverter; a flop without an enable gets a constant-1 LUT on it, as Quartus
+does. The block settings are `attr` lines, as `a5db extract` decodes them
+with the pins' plain uses (an IO96 registered input is `in_reg`); an IO96
+lane with a registered input sets its twelve flyby muxes. Not supported:
+a preset (a5pnr's flops have none), an output register's synchronous clear
+(it belongs in the data), an IO96 synchronous clear, the Quartus export.
+
+`designs/p10/io` (the board's KEY0, KEY1 and SW[3:0] in input registers,
+LED[7:0] from output registers with enables and both clear polarities,
+three GPIO pins with an input synchronous clear, an input asynchronous
+clear, an output register and an OE register): 24 ALMs in 8 LABs, 18 I/O
+registers. **All four checks pass**: extract = design (19 pins, 559 edges,
+369 attributes), the rebuilt netlist against `io.v` 2,000 cycles from random
+states and 2,000 free-running with 36 registers compared (the 18 I/O
+registers mapped), and 3,000 cycles from power-up with random inputs, 0
+mismatches; asm2 0 of 106,145 attributes differ; pfg's `.rbf` identical,
+integrity OK [obs, `specimens/p10/io/r1`].
+
+The audit (`tools/alm/oracles_p10.sh`): iq under six holds and ct under
+two, every other input random each cycle, 3,000 cycles each, **0
+mismatches in all eight** [obs].
+
+### (z11) Phase 10: DSP blocks
+
+Phase 5 rebuilt the DSP modes' bits (18x18, 27x27 MAC, 9x9 + 18x19), but
+which `MP_MAC_RE` pin carries which operand or product bit, and what the
+settings do, wasn't known. Two Quartus oracles: `designs/p10/dq` (18x18
+signed with registered operands, 18x18 unsigned, 27x27, a 27x27
+multiply-accumulate with enable and clear, a sum of two products; XOR-reduced,
+so only the low product bits are identifiable) and `designs/p10/dq2`: 18x18
+and 27x27, each signed and unsigned, and a sum of two 18x18 products, every
+operand bit straight from its own LFSR flop and every product bit into a
+fabric flop through a LUT of its own (`q[k] = p[k] ^ s[k]`). Runs
+`specimens/runs/dq0`, `dq20`; atoms `specimens/p10/alm/dq20`.
+
+- **The pins** [obs, `a5pnr drivers` on dq2's decode and the atoms' flop
+  locations, all operand and product bits of five blocks]: pin 0 is the
+  clock. An 18x18 product (`dsp_mode` TWO_18X19, the idle value) takes A on
+  pins 335 + i and B on 353 + j; a signed one routes A's sign bit to pin 280
+  as well (A is the 19-bit operand). A 27x27 product (ONE_27X27) takes A on
+  353 + i (i < 9) or 362 + i, B on 335 + i (i < 9) or 380 + i. Product bit k
+  leaves on pin 134 + k (k < 38) or 60 + k.
+- **The settings of a registered multiply** [obs, dq2 r47–r50]: Quartus puts
+  `p <= a * b` with operands straight from flops in the output register
+  alone (`dsp_oreg_ctrl = REGISTERED_OREG`, every other register's clock
+  `NO_CLK_OPTION_*`), plus `dsp_sign_{a,b}{x,y}` for signed products, the
+  four `dsp_pgm_invert_for_*` set, `dsp_clr_ctrl = NCLR_SELECTION`, power
+  gating off: 28 to 31 attributes per mode, kept as they are in
+  `db/sm4revb/dsp/modes.tsv`.
+- **`dsp_proginv_l` and `_h` are per-pin input inverters** [obs]: Quartus
+  keeps the LFSR's bit 0 as an inverted flop (it starts at 1), and in each of
+  the four blocks reading it the masks differ from the other blocks of the
+  same mode in exactly one bit, the bit of the pin that reads it: l[36] for
+  pin 353, l[18] for 335, h[27] for 398. So l[k] is pin 263 + k (k < 18) or
+  317 + k, h[k] pin 371 + k (k < 36). The masks set the bits of the pins a
+  mode leaves unrouted, and in 27x27 mode h[0..17] too, pins 371–388, which
+  carry A's bits 9–26 [inf: inverted on their way in, and an unrouted pin
+  reads 1]. A mode's baseline is Quartus' mask with that one bit cleared
+  (the signed and unsigned 27x27 baselines are equal); the pins of
+  h[36..53] are [unk].
+- Not modelled: input and pipeline registers (dq's blocks and dq2's sum of
+  two products use them), the sum, MAC, 9x9 and floating-point modes,
+  enables and clears, the dynamic controls, cascades.
+
+`a5pnr readback` models a block whose settings are exactly one of the four
+modes': its product, `$signed` or not, on the block's clock into a 54-bit
+output register, each operand pin through its inverter (a bit differing
+from the mode's baseline). **Quartus' dq2 image, its sum-of-two block left
+out, runs like `dq2.v` for 3,000 cycles from power-up: q1–q4 (235
+registers), 0 mismatches** [obs]; before the inverters were understood the
+two signed blocks (whose pins read the inverted flop) mismatched from cycle
+19. `designs/p10/dq3` (dq2 without the sum of two, compiled after the rule was
+written; its blocks sit at other rows and other pins read the inverted
+flop) **runs like its RTL for 3,000 cycles, 196 registers, 0 mismatches**
+[obs, held out], once the readback also knew that Quartus drives its
+constant-0 output by leaving the pin's data unrouted and inverting its RPI
+[obs]: so an unrouted I/O data pin reads 1 [inf], as an unrouted MLAB
+address pin does (and, inferred, a DSP operand pin). The readback models
+only that case; an output nothing it models reaches stays unknown (phase
+9's pl and its PLL `locked`). The phase-9 audit (`oracles_p9.sh`, 18 holds
+of six designs) still passes with every phase-10 readback change, 0
+mismatches [obs].
+
+**a5pnr maps multipliers** (`tools/a5pnr/yosys/mul_map.v`, `src/dsp.rs`):
+before synth, yosys narrows each `$mul` (`wreduce`) and maps a product of
+two operands of up to 27 bits, both signed or both unsigned, to `A5_MUL`
+(18x18 when both fit), the operands extended to the multiplier's width so
+that every operand pin carries a signal (`A5_DSP=0` leaves products to
+LUTs). a5pnr takes the flops that register the product (each product bit
+must go straight into one flop with no enable or clear, one clock) as the
+block's output register, places blocks on the DSP sites nearest the ports'
+centre (as M20Ks), routes the operands and the clock to the pins above,
+and writes the mode's settings with its baseline masks. The STA times a
+block as an M20K [inf]; the Quartus export refuses DSPs. On the way:
+yosys' carry out of a comparison (`step <= 64`) read the chain's internal
+carry, which no ALM pin exports; `arith_map.v` now takes the top carry from
+the sum of one more half and the others from the next sum, which leaves
+every earlier design's cells unchanged (CPU 587 LUTs, 182 carry halves,
+453 ALMs).
+
+`designs/p10/mul` (a self-test after chipsmith's mult-selftest: eight
+products, 9x9 to 27x27, signed and unsigned, each checked against a
+shift-and-add reference in the fabric; its slot multiplexer is written as
+continuous assignments, since iverilog never ran an `always @*` version at
+time 0): 407 ALMs in 89 LABs, 8 DSP blocks, model 222 MHz. **All four
+checks pass** (`specimens/p10/mul/r2`): extract = design (11,745 edges,
+4,692 attributes, 431 DIRECT values), 2,000 cycles from random states and
+2,000 free-running with 627 registers (including the 336 DSP
+output-register bits), 0 mismatches, and 20,000 cycles from power-up with
+the self-test's error count 0 on both sides, 0 mismatches; asm2 0 of
+414,664 attributes differ; pfg identical, integrity OK.
+
+### (z12) Phase 10: chipsmith's synthesis as a5pnr's front end
+
+`tools/a5synth` (Rust) runs chipsmith's Verilog front end and its
+device-independent synthesis (`chipsmith-verilog`, `chipsmith-synth`,
+`chipsmith-netlist`, cargo git dependencies pinned to chipsmith `open`
+0fd5991, as cyclone2-re's cram pins chipsmith-cyclone2) with its LUT
+mapper at K = 6 (`lutmap::map_module_k`, chipsmith ADR-0013), in the pass
+order of chipsmith's Cyclone II synthesis, and writes the cells
+`tools/a5pnr/synth.sh` gets from yosys, in yosys' JSON: `$lut`,
+`A5_ARITH` chains (its own `$alu` mapping: a start half for the carry-in,
+p = A ^ B ^ BI, g = A & (B ^ BI), a carry out read as data from the next
+sum or one more half), flops legalised to the LAB's controls (an enable,
+a synchronous clear the enable gates, an asynchronous clear of either
+polarity; a reset or power-up value of 1 kept inverted; a reset that
+contradicts the power-up value becomes logic; constant enables and resets
+folded, also after LUT mapping), `$__A5_MLAB_` RAM for memories of up to
+32 words with one clocked write port (a synchronous read becomes an
+asynchronous one and a register; per-bit write enables that are one mux
+are one enable), and the hand-instantiated `A5_M20K`/`A5_IOPLL` as they
+are. `A5_SYNTH=chipsmith tools/a5pnr/flow.sh …` uses it; a5pnr reads it
+unchanged (it now gives nets no netname covers a slot, and reads
+`$tribuf`).
+
+**Checks** [obs, `specimens/p10/synth/v2`]: every phase 6–10 design through
+the flow with chipsmith's synthesis and the simulation check: blinky, leds,
+acc, ram, ctl, arith, rom, ramx, pll, fr, rf, io and mul from random states
+(2,000 cycles and 2,000 free-running, fr 240 registers, mul 631) and 3,000
+from power-up with random inputs; sha256 300 cycles from random states with
+1,907 registers and 5,000 from power-up hashing; the CPU (register file in
+MLAB) 20,000 cycles from power-up running its program and asm2 0 of
+291,825 attributes differing, pfg identical: **extract = design and 0
+mismatches everywhere**, with two harness findings. The first checks
+compared outputs and MLAB words only: chipsmith's `purge_wires` drops every
+internal name (`opt_clean -purge`), so no flop lined up with an RTL
+register; a5synth keeps them now. And from random states the CPU showed 48
+mismatches, all register 14 written with x at cycle 0: chipsmith proves
+`core.PC[0]` constant 0 and removes it, so the check left the RTL's PC[0]
+at x (it has no initial value); with the RTL's PC starting at 0, 300 + 300
+cycles and 2,252 registers, 0 mismatches. picorv32 matches its RTL on every
+output for 5,000 cycles from power-up with the CPU running (331 LED
+changes); its register-level comparison is [unk]: x's in the RTL simulation
+that a power-up-0 copy of picorv32.v doesn't remove (simcheck now tries a
+register's shallowest name first, since a top-level register is also its
+submodule's port wire).
+
+**LUTs and ALMs** (`tools/a5synth/compare.sh`; ALMs are a5pnr's packing,
+`--pack-only`; Quartus Pro's from its own fit of the same RTL):
+
+| design | yosys: LUTs / ALMs | chipsmith: LUTs / ALMs | Quartus Pro: LUTs / ALMs (the bench's fit, (z13)) | synthesis time, yosys / chipsmith |
+|---|---|---|---|---|
+| blinky, leds, acc, ram, rom, ramx, ctl | equal within 1 LUT and 1 ALM | | | 30–70 s / ≤ 1 s |
+| arith | 4 / 23 | 4 / 24 | | 47 s / 0.4 s |
+| io | 19 / 24 | 11 / 19 | | 46 s / 0.3 s |
+| rf (MLAB RAM) | 1 / 23 (12 RAM bits) | 1 / 21 (8: the unread ones dropped) | | 34 s / 0.6 s |
+| fr (random 2–7-input functions) | 879 / 505 | **320 / 209** | — / 233 (phase 8) | 110 s / 4 s |
+| CPU, register file in MLAB | 587 / 453 | 442 / 450 | 542 / 390 | 68 s / 1 s |
+| CPU, register file in flops | 1,392 / 1,393 | **1,174 / 1,343** | 2,390 / 1,454 (2,960 registers: duplicated for speed); phase 8's cql 1,171 / 1,082 | 73 s / 4 s |
+| sha256 | 4,066 / 2,620 | **2,058 / 2,111** | 2,344 / 1,457 | 102 s / 17 s |
+| picorv32 | 1,218 / 805 | **473 / 506** | 687 / 378 (register file in 2 M20Ks) | 98 s / 2 s |
+
+- **chipsmith's mapper needs fewer LUTs everywhere it matters**: the CPU's
+  1,392 → 1,174 (Quartus' synthesis for area, phase 8's cql: about 1,170,
+  so the LUT gap phase 8 put down to synthesis is closed), fr 879 → 320,
+  sha256 4,066 → 2,058 (Quartus 2,344), picorv32 1,218 → 473 (Quartus 687,
+  with its register file in M20K) [obs]. Quartus' bench fits trade area
+  for speed (Hyper-Retiming on, a 2 ns clock: the flop CPU's 1,229
+  registers become 2,960), so its ALMs there are not its smallest. picorv32's flops also drop 381 → 345: chipsmith
+  removes the instruction-word register bits its five-word ROM can only
+  ever load as constants [inf]; the random-state check (which leaves
+  registers the netlist doesn't have at the RTL's own values) passes.
+- **ALMs follow LUTs less closely than LUT counts suggest**: the mapper
+  minimises LUTs with K = 6 and makes many 6-input LUTs, which take a
+  whole ALM, where two LUTs of up to five inputs share one. The MLAB CPU
+  shows it: 442 LUTs (143 6-input) pack into 450 ALMs, yosys' 587 (36
+  6-input) into 453; picorv32 219 of 473. **What chipsmith would need**
+  (not changed here; chipsmith `open` untouched): a LUT mapper cost that
+  knows the fracturable 6-LUT, i.e. an area per cut of K = 6 that charges a
+  6-input cut one ALM and a cut of ≤ 5 inputs half of one (two of them pair
+  when they share A and B: ≤ 8 distinct inputs, 2 shared), e.g. a
+  `LutSize`-like parameter `LutCost`/area table for `map_module_k`; and a
+  device-independent multiplier hook (chipsmith-synth maps `$mul` to blocks
+  only in chipsmith-cyclone2's `mult`), so a5synth could place products in
+  DSP blocks instead of gates (a5synth lowers `$mul` to LUTs today; the
+  yosys flow maps them, (z11)).
+- Synthesis time drops from 30–110 s (yosys from nixpkgs, two `abc` runs)
+  to under 20 s.
+
+### (z13) Phase 10: a5pnr against Quartus Prime Pro
+
+`tools/bench/vs-quartus-pro.sh` builds eight designs (blinky, leds, acc,
+the CPU with its register file in MLAB and in flops, chipsmith's sha256 and
+picorv32 examples on DE25-Nano tops, the DSP self-test) with Quartus Pro and
+with a5pnr's flow, three interleaved reps, each build in a systemd unit of
+its own, on the shared machine (load 4 to 47). Full write-up:
+[docs/vs-quartus-pro.md](docs/vs-quartus-pro.md). [obs] (`specimens/p10/bench`):
+
+| design | tool | wall s, median [min-max] | CPU s | load | ALMs | LABs | M20K | DSP | Fmax (MHz) |
+|---|---|---|---|---|---|---|---|---|---|
+| blinky | Quartus Pro | 2359 [1133-2784] | 1887 [1306-1923] | 25 | 13 | 3 | 0 | 0 | 820 (restricted 362) |
+| blinky | a5pnr | 124 [78-164] | 106 [85-111] | 38 | 13 | 2 | 0 | 0 | 830 (restricted 366), model 528 |
+| leds | Quartus Pro | 2306 [1396-3842] | 1911 [1546-1980] | 34 | 19 | 3 | 0 | 0 | 805 (restricted 366) |
+| leds | a5pnr | 129 [114-195] | 116 [116-120] | 27 | 19 | 2 | 0 | 0 | 805 (restricted 366), model 344 |
+| acc | Quartus Pro | 1714 [1586-2829] | 1862 [1788-1933] | 22 | 36 | 6 | 0 | 0 | 616 (restricted 362) |
+| acc | a5pnr | 128 [126-233] | 117 [117-122] | 23 | 37 | 6 | 0 | 0 | 465 (restricted 353), model 245 |
+| cpu | Quartus Pro | 2205 [1779-3760] | 2140 [2043-2314] | 19 | 390 | 54 | 1 | 0 | 300 (restricted 300) |
+| cpu | a5pnr | 282 [222-397] | 250 [232-260] | 22 | 453 | 86 | 1 | 0 | model 109 |
+| cpu_ff | Quartus Pro | 2703 [1795-2996] | 2541 [2214-2544] | 15 | 1454 | 186 | 1 | 0 | 319 (restricted 319) |
+| cpu_ff | a5pnr | 500 [410-621] | 509 [356-555] | 21 | 1394 | 207 | 1 | 0 | 161 (restricted 161), 1 LAB left to Quartus, model 132 |
+| sha256 | Quartus Pro | 2688 [2064-2700] | 2465 [2252-2484] | 17 | 1457 | 243 | 0 | 0 | 200 (restricted 200) |
+| sha256 | a5pnr | 1258 [887-1280] | 1023 [878-1032] | 25 | 2620 | 301 | 0 | 0 | 75 (restricted 75) (placed with a 44-net LAB budget), 12 LABs left to Quartus, model 72 |
+| picorv32 | Quartus Pro | 2239 [1564-2737] | 2103 [1768-2133] | 33 | 378 | 58 | 2 | 0 | 479 (restricted 344) |
+| picorv32 | a5pnr | 178 [169-391] | 202 [188-234] | 20 | 805 | 110 | 0 | 0 | model 159 |
+| mul | Quartus Pro | 2332 [1649-3196] | 2220 [1921-2236] | 8 | 329 | 45 | 0 | 6 | 243 (restricted 243) |
+| mul | a5pnr | 170 [147-346] | 172 [164-186] | 14 | 407 | 89 | 0 | 8 | model 222 |
+
+- **a5pnr is 5x to 19x faster in wall time** (blinky 2 minutes against
+  Quartus' 39), except sha256 (2.1x: a5pnr's place and route take 18
+  minutes there); 5x to 18x less CPU time.
+- **Quartus wins on area** where its synthesis does more (sha256 1,457
+  against 2,620 ALMs, picorv32 378 against 805, the MLAB CPU 390 against
+  453) and **on Fmax by 2x to 3x** on the deep designs: the flop CPU 319
+  against 161 MHz, sha256 200 against 75 (a5pnr's placement, Quartus'
+  routes); the small designs sit at the clock's pulse-width limit on both.
+- **Quartus' LAB legalizer rejects some of a5pnr's LABs** within a5pnr's
+  50-net budget: one LAB of the flop CPU, and of sha256 more than eight
+  (one per fitter run); a second sha256 placement with a 44-net budget still
+  had 12 of 315 rejected, which Quartus then placed itself. Nets per LAB,
+  nets from outside it, nets per half-LAB and LEIMs used rank the rejected
+  LABs mid-field: the rule is still [unk] (`tools/bench/unlock_fit.sh`
+  leaves them to Quartus one at a time).
+- Not measured: Fmax of a5pnr's placement where the export refuses MLAB
+  RAM, DSPs or I/O registers (the MLAB CPU, picorv32, mul: model only).
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -2948,6 +3279,58 @@ equal to its `_pfg.rbf`): `blinky.rbf` 18e90707… (= phase 8's), `leds.rbf`
 c67946ab…, `rf.rbf` 9125aab9…, `fr.rbf` 8fcf2750…, `cpu.rbf` 910c213b…,
 `cpu_ff.rbf` 031446c8….
 
+**Phase 10** (z10)–(z12), in `specimens/board/p10/` (git-ignored). **These
+are the current files**; phase 8's A/B pairs (steps 18 and 19) still come
+first, then the new pair (step 27). Each `<d>.rbf` is a5db's and equals
+`quartus_pfg`'s `<d>_pfg.rbf`; every one passed all four checks
+(`specimens/p10/s1/summary.tsv`, `specimens/p10/cpu/*.check.log`,
+`specimens/p10/synth/v2/cpu`). blinky, acc, ram, rom, ramx, pll and rf are
+byte-identical to phase 9's; leds, ctl, arith and fr differ in placement
+and routing only (a5pnr now numbers nets no name covers, so its constant
+LUTs' nets move), not in what they compute.
+
+27. **`cpu_cs.rbf` against `cpu.rbf`**: the same FemtoRV32 (register file
+    in MLAB RAM), synthesized by chipsmith (`A5_SYNTH=chipsmith`, 450 ALMs)
+    and by yosys (453 ALMs): both as step 17. One working and the other not
+    points at that synthesis (or, for `cpu_cs.rbf` alone, at a5synth's
+    `A5_ARITH` and flop mapping).
+28. **`io.rbf` (I/O registers)**: KEY0, KEY1 and SW[3:0] are sampled in
+    their pins' input registers, LED[7:0] come from output registers.
+    LED[3:0] follow SW[3:0] at once, except LED2, which takes SW2 once per
+    1.34 s, and LED3, which stays dark while KEY0 is held. LED4 blinks with
+    a 1.34 s period, LED5 with 0.67 s and freezes while KEY1 is held, LED6
+    (0.34 s) and LED7 (0.17 s) go dark while KEY0 is held. Diagnosis: no
+    LED reacts at all, the IO96 output registers or their clock (VIO X106,
+    X107 `GLOBAL_LOCAL_SEL` I3); LED[3:0] stuck while LED4 blinks, the
+    input registers (HVIO clock row 49, IO96 lane 5 flyby); LED5 doesn't
+    freeze, an output register's clock enable (through an RPI inverter);
+    LED6 not dark under KEY0, an inverted asynchronous clear (RPI), LED7 not
+    dark, the straight active-low one; LED3 not dark, an input register's
+    clear. The GPIO pins (H16, Y1 in; C2, P1 out, P1 with an OE register)
+    need a probe; C2 toggles at 25 MHz XOR the inputs.
+29. **`mul.rbf` (DSP blocks)**: eight products, 9x9 to 27x27, signed and
+    unsigned, each checked against a shift-and-add reference. LED0 dark
+    and LED1 toggling every 0.17 s (LED2 0.34 s, LED3 0.67 s): every
+    product right. LED0 lit: a wrong product; LED[7:4] count them in
+    binary up to 15, so all four lit means wrong products keep coming (one
+    mode wrong every pass fills it within a millisecond), a lower count a
+    rare error. LED1 not toggling: the DSP clock or the fabric.
+30. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `ctl.rbf`, `arith.rbf`,
+    `rom.rbf`, `ramx.rbf`, `pll.rbf`, `rf.rbf`, `fr.rbf`: as steps 23, 24
+    and 26. **`cpu.rbf`**, **`cpu_ff.rbf`**: as step 25.
+
+Rebuild: `tools/a5pnr/suite.sh specimens/p10/s1 designs/p6/<d> designs/p7/<d>
+designs/fr/fr designs/p9/rf designs/p10/io/io designs/p10/mul/mul`,
+`OUT=specimens/p10/cpu designs/p7/cpu/go.sh r1`, with `A5_MLAB=0` `… go.sh
+ff1`, and with `A5_SYNTH=chipsmith` `OUT=specimens/p10/synth/v2 … go.sh cpu`.
+SHA-256 (phase 10, each a5db `.rbf` equal to its `_pfg.rbf`): `io.rbf`
+a4869e91…, `mul.rbf` 2ec946ab…, `cpu.rbf` 0ef29cb3…, `cpu_ff.rbf`
+955d6bf8…, `cpu_cs.rbf` 877930f8…, `leds.rbf` 40eb7666…, `ctl.rbf`
+cfce635e…, `arith.rbf` dd830f2a…, `fr.rbf` 99f66baa…; `blinky.rbf`
+18e90707…, `acc.rbf` ddd12ace…, `ram.rbf` fe6b2b2c…, `rom.rbf` cd577dcf…,
+`ramx.rbf` c8d6cd36…, `pll.rbf` c67946ab…, `rf.rbf` 9125aab9… (= phase
+9's).
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
@@ -2975,6 +3358,57 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 10 status** (branch `phase10`): I/O registers, DSP multipliers,
+chipsmith's synthesis as a front end, a bench against Quartus Pro.
+
+- Step 1 (I/O registers): **done** (z10). Quartus' iq (input, output and OE
+  registers on 13 HVIO and 9 IO96 pins, enables, both clear polarities, a
+  preset, a synchronous clear) and ct decoded: the controls are active-low
+  pins of the I/O block next to the pin's data (HVIO O − 4..O − 1, IO96 U + 2,
+  4, 5), driven through the I/O routing tile's RPI inverters, the OE
+  register holds the inverse, `IN_INV` is what a rising-edge input register
+  needs. Readback model, oracle: iq under six holds and ct under two with
+  random inputs, 0 mismatches; mutations caught. a5pnr writes them (pins.txt
+  `reg`): `designs/p10/io` through all four checks.
+- Step 2 (DSP): **done for registered 18x18 and 27x27 multiplies** (z11).
+  The pins and the per-pin input inverters (`dsp_proginv_l/h`) from Quartus'
+  dq2; four modes in `db/sm4revb/dsp/modes.tsv`; readback: dq2 and held-out
+  dq3 0 mismatches. yosys maps `$mul` to `A5_MUL`, a5pnr absorbs the output
+  register: `designs/p10/mul` (eight products against a fabric reference)
+  through all four checks.
+- Step 3 (chipsmith's synthesis): **done** (z12). `tools/a5synth`, chipsmith
+  pinned at 0fd5991, `A5_SYNTH=chipsmith`: every design through the
+  simulation check; LUTs 1,392 → 1,174 on the CPU (Quartus about 1,170),
+  sha256 4,066 → 2,058, fr 879 → 320; ALMs follow less (6-input LUTs don't
+  pair). chipsmith would need an ALM-aware LUT cost and a multiplier hook
+  (nothing changed in chipsmith).
+- Step 4 (bench): **done** (z13), `docs/vs-quartus-pro.md`. a5pnr 5x to
+  19x faster in wall time on seven of eight designs (sha256 2.1x); Quartus
+  smaller where its synthesis does more and 2x to 3x faster in Fmax on the
+  deep designs; its LAB legalizer rejects some a5pnr LABs by a rule [unk].
+- Board: steps 27–30 of "Board test", files in `specimens/board/p10/`.
+
+Open after phase 10 [unk]:
+
+- Everything on silicon, still; now also the I/O registers and DSP blocks
+  (steps 28, 29).
+- I/O registers: IO96 synchronous clear, the clock entry of other HVIO
+  blocks and IO96 lanes, what `IN_BUF` does, DDIO; the Quartus export of
+  I/O registers, DSPs and MLAB RAM.
+- DSP: input and pipeline registers, sums, MAC, 9x9, enables and clears,
+  the pins of `dsp_proginv_h[36..53]`, DSP timing.
+- picorv32's register-level check under chipsmith's synthesis (x's in the
+  RTL simulation).
+- What an unrouted fabric pin passes (an unrouted I/O output reads 1
+  through its inverter as 0, z11).
+- Quartus' LAB-input rule, still: LABs within 44 nets rejected (z13).
+
+Next: the board test (phase 10 files, steps 27–30, after phase 8's A/B
+pairs); an ALM-aware LUT cost in chipsmith's mapper (z12) and a5synth as
+the default front end once it is; MLAB, DSP and I/O-register atoms in the
+Quartus export, so every bench design gets a quartus_sta Fmax; a5pnr's
+placement and routing time on sha256-sized designs (z13).
 
 **Phase 9 status** (branch `phase9`): every rule a5pnr writes checked
 against Quartus' own images; the router, the STA's carry arcs and MLAB RAM.

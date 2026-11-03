@@ -32,3 +32,14 @@ module A5_IOPLL #(parameter REF_KHZ = 50000, parameter OUT_KHZ = 100000) (
     output OUTCLK
 );
 endmodule
+
+// A multiplier of a DSP block (README (z11)): 18x18 (WIDE = 0: A[17:0],
+// B[17:0], P[35:0]) or 27x27 (WIDE = 1), both operands signed or both
+// unsigned. a5pnr registers P in the block's output register: every
+// product bit must go straight into a flop (yosys/mul_map.v makes these).
+(* blackbox *)
+module A5_MUL #(parameter SIGNED = 0, parameter WIDE = 0) (
+    input [26:0] A, B,
+    output [53:0] P
+);
+endmodule

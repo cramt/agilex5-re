@@ -25,6 +25,12 @@ pub enum Cell {
     Mlab(Mlab),
     /// An IOPLL: output 0 of the reference pin's PLL (yosys/cells.v).
     Pll { refclk: u32, out: u32, ref_khz: u64, out_khz: u64 },
+    /// A DSP block's multiplier (yosys/cells.v A5_MUL, README (z11)): the
+    /// mode's operand bits (constants already on LUTs) and the product bits.
+    Mul { mode: crate::dsp::Mode, a: Vec<Sig>, b: Vec<Sig>, p: Vec<Option<u32>> },
+    /// A tristate driver (yosys `$_TBUF_`): y = e ? a : z. Only an output
+    /// pin with an OE register takes one (README (z10)).
+    Tbuf { a: Sig, e: Sig, y: u32 },
 }
 
 /// An M20K as a 512 x 32 simple dual-port RAM (yosys/cells_sim.v).
@@ -181,7 +187,18 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
         }
     }
     let names: HashMap<u32, String> = names.into_iter().map(|(k, (_, v))| (k, v)).collect();
-    let max = names.keys().copied().max().unwrap_or(0) as usize + 1;
+    // Nets no netname covers (chipsmith's synthesis purges unnamed wires,
+    // tools/a5synth) still get a slot.
+    let mut max = names.keys().copied().max().unwrap_or(0) as usize + 1;
+    for c in m["cells"].as_object().context("cells")?.values() {
+        for v in c["connections"].as_object().into_iter().flat_map(|o| o.values()) {
+            for b in v.as_array().into_iter().flatten() {
+                if let Some(n) = b.as_u64() {
+                    max = max.max(n as usize + 1);
+                }
+            }
+        }
+    }
     let mut nets: Vec<String> = (0..max).map(|i| names.get(&(i as u32)).cloned().unwrap_or_else(|| format!("n{i}"))).collect();
     let mut cells = Vec::new();
     let fresh = |nets: &mut Vec<String>, name: String| -> u32 {
@@ -322,6 +339,22 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
                     init,
                 }));
             }
+            "A5_MUL" => {
+                let flag = |k: &str| -> Result<bool> { Ok(param(p, k)?.iter().any(|&b| b)) };
+                let mode = crate::dsp::Mode { wide: flag("WIDE")?, signed: flag("SIGNED")? };
+                let w = mode.width();
+                let pb = bits(&conn["P"])?.into_iter().map(|s| if let Sig::Net(n) = s { Some(n) } else { None }).collect();
+                cells.push(Cell::Mul { mode, a: bits(&conn["A"])?[..w].to_vec(), b: bits(&conn["B"])?[..w].to_vec(), p: pb });
+            }
+            "$_TBUF_" => {
+                cells.push(Cell::Tbuf { a: one("A")?, e: one("E")?, y: net(one("Y")?)? });
+            }
+            // chipsmith's synthesis keeps the word-level cell (tools/a5synth).
+            "$tribuf" => {
+                for ((a, e), y) in bits(&conn["A"])?.into_iter().zip(std::iter::repeat(one("EN")?)).zip(bits(&conn["Y"])?) {
+                    cells.push(Cell::Tbuf { a, e, y: net(y)? });
+                }
+            }
             "A5_IOPLL" => {
                 let khz = |k: &str| -> Result<u64> { Ok(param(p, k)?.iter().enumerate().fold(0u64, |a, (i, &b)| a | (b as u64) << i)) };
                 cells.push(Cell::Pll { refclk: net(one("REFCLK")?)?, out: net(one("OUTCLK")?)?, ref_khz: khz("REF_KHZ")?, out_khz: khz("OUT_KHZ")? });
@@ -379,6 +412,55 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
             tie(s, false, &mut cells, &mut nets);
         }
         cells[k] = Cell::M20k(m);
+    }
+    // An MLAB RAM address bit constant on one port only (picorv32's
+    // register file) is a driven constant there: an unrouted address pin
+    // reads 1 (README (z6)), and only a bit constant on both ports may stay
+    // unrouted.
+    for k in 0..cells.len() {
+        let Cell::Mlab(m) = &cells[k] else { continue };
+        let mut m = m.clone();
+        let mut changed = false;
+        for j in 0..m.waddr.len().min(m.raddr.len()) {
+            let (w, r) = (m.waddr[j], m.raddr[j]);
+            if matches!(w, Sig::Const(_)) == matches!(r, Sig::Const(_)) {
+                continue;
+            }
+            for s in [&mut m.waddr[j], &mut m.raddr[j]] {
+                if let Sig::Const(v) = *s {
+                    let n = *consts[v as usize].get_or_insert_with(|| {
+                        let n = fresh(&mut nets, format!("const{}", v as u8));
+                        cells.push(Cell::Lut { ins: vec![], mask: v as u64, out: n });
+                        n
+                    });
+                    *s = Sig::Net(n);
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            cells[k] = Cell::Mlab(m);
+        }
+    }
+    // A multiplier's constant operand bits: a pin left unrouted reads 1
+    // (README (z11)), so every operand pin carries a driven signal.
+    for k in 0..cells.len() {
+        let Cell::Mul { a, b, .. } = &cells[k] else { continue };
+        let (mut a, mut b) = (a.clone(), b.clone());
+        for s in a.iter_mut().chain(b.iter_mut()) {
+            if let Sig::Const(v) = *s {
+                let n = *consts[v as usize].get_or_insert_with(|| {
+                    let n = fresh(&mut nets, format!("const{}", v as u8));
+                    cells.push(Cell::Lut { ins: vec![], mask: v as u64, out: n });
+                    n
+                });
+                *s = Sig::Net(n);
+            }
+        }
+        if let Cell::Mul { a: a0, b: b0, .. } = &mut cells[k] {
+            *a0 = a;
+            *b0 = b;
+        }
     }
     for v in aliases.values_mut() {
         v.sort();

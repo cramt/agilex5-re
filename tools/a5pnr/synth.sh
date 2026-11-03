@@ -9,14 +9,27 @@
 # A5_MLAB=0 keeps them in flops). An MLAB reads with no clock, so a
 # synchronous read stays the RTL's own register (-nordff): merged into the
 # read port, yosys would rebuild it under a name of its own (README (z9)).
+# A design with a tristate output (`1'bz`) keeps it as a $_TBUF_ (tribuf):
+# an output pin with an OE register takes it (README (z10)). A design with
+# a multiplication gets its products of up to 27 x 27 bits in DSP blocks
+# before synth (yosys/mul_map.v, README (z11); A5_DSP=0 leaves them to LUTs).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 top=$1; out=$2; shift 2
+# A5_SYNTH=chipsmith: chipsmith's synthesis instead (tools/a5synth, README
+# (z12)), the same cells in the same JSON.
+if [[ ${A5_SYNTH:-yosys} == chipsmith ]]; then
+    "$here/../cap.sh" 12G "$here/../a5synth/target/release/a5synth" "$top" "$out" "$@" 2> "${out%.json}.a5synth.log"
+    cat "${out%.json}.a5synth.log"
+    exit 0
+fi
 inc=""; for f in "$@"; do inc="$inc -I$(dirname "$(realpath "$f")")"; done
 base=${out%.json}
 nix shell nixpkgs#yosys -c yosys -q -l "$base.yosys.log" -p "
 read_verilog -lib $here/yosys/cells.v
 read_verilog$inc $*
+$( grep -q "'bz" "$@" && echo "hierarchy -top $top; proc; flatten; tribuf" )
+$( [[ ${A5_DSP:-1} == 1 ]] && sed 's,//.*,,; s,(\*[^*]*\*),,g' "$@" | grep -q '\*' && echo "hierarchy -top $top; proc; flatten; opt_expr; wreduce t:\$mul; techmap -map $here/yosys/mul_map.v t:\$mul" )
 synth -top $top -flatten -run :fine $( [[ ${A5_MLAB:-1} == 1 ]] && echo "-nordff" )
 $( [[ ${A5_MLAB:-1} == 1 ]] && echo "memory_libmap -lib $here/yosys/mlab.txt" )
 memory_map

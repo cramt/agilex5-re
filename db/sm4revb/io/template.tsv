@@ -151,6 +151,11 @@ io96	pin	in	*	{uid}	x0/xio12phytop_{L}/io12phy/io75xddrfmxrx_rxtop_{p}/i_rx_tggp
 io96	pin	in	*	{uid}	x0/xiocenter_wrap/xiossmwr/iossm_mem_init_122_bit[{28864+32*L+p}]	1
 io96	pin	in	*	{uid}	x0/xiophyadaptwr_{L}/x_gpio_{p}/xio_gpio_ireg_4to1_mux0/rb_mux_sel[0]	0
 io96	pin	in	*	{uid}	x0/xiophyadaptwr_{L}/x_gpio_{p}/xio_gpio_ireg_4to1_mux0/rb_mux_sel[1]	0
+# A registered IO96 input (README (z10), iq: SW0-3): the input's buffer bits, and the
+# header bit an output clears, cleared too; its register settings are attr lines.
+io96	pin	in_reg	*	@{obj}/hdr	{45136+229*L+p}	0
+io96	pin	in_reg	*	{uid}	x0/xio12phytop_{L}/io12phy/io75xddrfmxrx_rxtop_{p}/i_rx_tggpiorxen	1
+io96	pin	in_reg	*	{uid}	x0/xiocenter_wrap/xiossmwr/iossm_mem_init_122_bit[{28864+32*L+p}]	1
 io96	pin	out	*	@{obj}/hdr	{45136+229*L+p}	0
 io96	pin	out	*	{uid}	x0/xio12phytop_{L}/io12phy/from_io12phy_av_bb_map_o_tx_drvstatctrl_{p}[0]	0
 io96	pin	out	*	{uid}	x0/xio12phytop_{L}/io12phy/from_io12phy_av_bb_map_o_tx_drvstatctrl_{p}[1]	1

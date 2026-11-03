@@ -5,6 +5,7 @@
 //!     --effort X     annealing moves per temperature, x N^(4/3) (1)
 //!     --no-timing    wire length only, no timing-driven placement or routing
 //!     --quartus DIR  also write the placement as a Quartus project (export.rs)
+//!     --pack-only    stop after packing (the ALM count, for comparing synthesis)
 //!     --pack M       pairs (default): two LUTs of up to five inputs per ALM;
 //!                    related: only LUTs that share inputs or connect;
 //!                    single: one LUT per ALM in 6-LUT mode (phase 7)
@@ -17,9 +18,11 @@
 //! delays.tsv: tools/timing/fit.py's model (node costs, timing).
 
 mod det;
+mod dsp;
 mod emit;
 mod export;
 mod graph;
+mod ioreg;
 mod netlist;
 mod pack;
 mod place;
@@ -34,6 +37,14 @@ use anyhow::{bail, Context, Result};
 
 use netlist::Sig;
 use pack::End;
+
+/// A flop's names for the ffmap (every visible name of its output, `!`
+/// before each when the image holds the inverse).
+fn ff_names(nl: &netlist::Netlist, i: usize, inv: bool) -> String {
+    let netlist::Cell::Ff(f) = &nl.cells[i] else { unreachable!("an I/O register is a flop") };
+    let names = nl.aliases.get(&f.q).cloned().unwrap_or_else(|| vec![nl.nets[f.q as usize].clone()]);
+    names.iter().map(|n| format!("{}{n}", if inv { "!" } else { "" })).collect::<Vec<_>>().join("|")
+}
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -129,12 +140,14 @@ fn main() -> Result<()> {
     };
     let (mut seed, mut effort, mut timing_driven, mut pack_mode) = (1u64, 1.0f64, true, pack::PackMode::Pairs);
     let mut swap_pins = true;
+    let mut pack_only = false;
     let mut quartus: Option<String> = None;
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--seed" => seed = it.next().context("--seed N")?.parse()?,
             "--no-swap" => swap_pins = false,
+            "--pack-only" => pack_only = true,
             "--effort" => effort = it.next().context("--effort X")?.parse()?,
             "--no-timing" => timing_driven = false,
             "--quartus" => quartus = Some(it.next().context("--quartus DIR")?.clone()),
@@ -150,8 +163,24 @@ fn main() -> Result<()> {
         }
     }
     let t0 = std::time::Instant::now();
-    let nl = netlist::read(json, top)?;
-    let mut packed = pack::pack(&nl, pack_mode)?;
+    let mut nl = netlist::read(json, top)?;
+    // Pins: port → (ball, std), and the ports whose flops go into the pin's
+    // I/O cell (a fourth column `reg`, README (z10)).
+    let mut pin_of: HashMap<String, (String, String)> = HashMap::default();
+    let mut reg_ports: Vec<String> = Vec::new();
+    for l in std::fs::read_to_string(pins).context("reading pins")?.lines() {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        if f.len() >= 3 && !f[0].starts_with('#') {
+            pin_of.insert(f[0].to_owned(), (f[1].to_owned(), f[2].to_owned()));
+            if f.get(3) == Some(&"reg") {
+                reg_ports.push(f[0].to_owned());
+            }
+        }
+    }
+    let reg_idx: Vec<usize> = reg_ports.iter().map(|n| nl.ports.iter().position(|p| &p.name == n).with_context(|| format!("pins.txt: no port {n}"))).collect::<Result<_>>()?;
+    let io = ioreg::choose(&mut nl, &reg_idx)?;
+    let nl = nl;
+    let mut packed = pack::pack(&nl, pack_mode, &io)?;
     let [n6, n55, n5, n_arith, n_ff, n_ram] = sta::alm_kinds(&packed);
     let n_ffs = nl.cells.iter().filter(|c| matches!(c, netlist::Cell::Ff(_))).count();
     let ff_alms = packed.alms.iter().filter(|a| a.slots.iter().any(|s| matches!(s, Some(pack::Slot::Ff { .. })))).count();
@@ -164,15 +193,11 @@ fn main() -> Result<()> {
         packed.m20ks.len(),
         packed.clocks.len()
     );
-
-    // Pins: port → (ball, std), and the ball's boundary nodes (README (t)).
-    let mut pin_of: HashMap<String, (String, String)> = HashMap::default();
-    for l in std::fs::read_to_string(pins).context("reading pins")?.lines() {
-        let f: Vec<&str> = l.split_whitespace().collect();
-        if f.len() >= 3 && !f[0].starts_with('#') {
-            pin_of.insert(f[0].to_owned(), (f[1].to_owned(), f[2].to_owned()));
-        }
+    if pack_only {
+        return Ok(());
     }
+
+    // The balls' boundary nodes (README (t)).
     let mut nodes_of: HashMap<(String, String), String> = HashMap::default();
     let mut io96: HashMap<String, bool> = HashMap::default();
     for l in std::fs::read_to_string(format!("{db}/io/pin_nodes.tsv"))?.lines() {
@@ -202,8 +227,13 @@ fn main() -> Result<()> {
             continue;
         }
         let is_clock = p.input && matches!(p.net, Sig::Net(n) if packed.clocks.contains(&n));
+        let registered = io.iter().any(|r| r.port == pi);
         let (role, usage) = if is_clock {
             ("clock", "clock_in")
+        } else if p.input && registered {
+            // A registered input leaves on in1; on IO96 its pin use is
+            // in_reg (README (z10)).
+            ("in1", if io96.get(ball) == Some(&true) { "in_reg" } else { "in" })
         } else if p.input {
             (if io96.get(ball) == Some(&true) { "in0" } else { "in1" }, "in")
         } else {
@@ -236,9 +266,103 @@ fn main() -> Result<()> {
         anyhow::ensure!(o.status.success(), "iopll.py: {}", String::from_utf8_lossy(&o.stderr));
         pll_text.push_str(&String::from_utf8(o.stdout)?);
     }
+    // I/O cells (README (z10)): each register's data and control nodes, the
+    // RPIs to invert (every active-high control, and the OE register's
+    // data: it holds the inverse) and the block settings.
+    let io_pins = ioreg::pins(&g, db)?;
+    let rpis = ioreg::rpis(&g, db)?;
+    let rpi_blk = ioreg::rpi_of_block(&g, &rpis);
+    let rpi_name: HashMap<u32, (String, String)> = rpis.iter().map(|(k, &v)| (v, k.clone())).collect();
+    let mut io_node: HashMap<(usize, ioreg::Role), u32> = HashMap::default();
+    let mut io_attrs: Vec<(String, String, String)> = Vec::new();
+    let mut io_ffmap = String::new();
+    {
+        use ioreg::Role;
+        let mut flyby: std::collections::BTreeSet<(String, String)> = Default::default();
+        for r in &io {
+            let pname = &nl.ports[r.port].name;
+            let ball = &pin_of[pname].0;
+            let p = io_pins.get(ball).with_context(|| format!("{pname}: ball {ball} has no I/O register block in the model"))?;
+            let ctl = |role: Role| -> Result<u32> {
+                let b = p.block_pin(role).and_then(|n| g.node(&n)).with_context(|| format!("{ball}: no {role:?} pin"))?;
+                rpi_blk.get(&b).copied().with_context(|| format!("{ball}: no RPI feeds {}", g.name(b)))
+            };
+            let clk = ioreg::clock_node(p)?;
+            io_node.insert((r.port, Role::Clk), g.node(&clk).with_context(|| format!("no node {clk}"))?);
+            let mut inv: Vec<u32> = Vec::new();
+            let mut set = |sub: &str, v: &str| io_attrs.push((p.uid.clone(), format!("{}/{sub}", p.path), v.to_owned()));
+            if let Some(i) = r.input {
+                io_node.insert((r.port, Role::Q), *port_node.get(&r.port).context("registered input node")?);
+                io_node.insert((r.port, Role::InCe), ctl(Role::InCe)?);
+                inv.push(ctl(Role::InCe)?);
+                set("xio_gpio_ireg/xinv_fr_in_clk/a_rb_sel", "IN_INV");
+                set("xio_gpio_ireg/xio_gpio_in_clk_rst_gen/a_rb_fr_in_clk_ena", "FR_IN_CLK_ENA");
+                set("xio_gpio_ireg/xio_gpio_in_clk_rst_gen/a_rb_ncein_ireg_ena", "NCEIN_IREG_ENA");
+                set("xio_gpio_ireg_4to1_mux1/a_rb_mux_sel", "SEL1");
+                if r.aclr.is_some() {
+                    set("xio_gpio_ireg/xio_gpio_in_clk_rst_gen/a_rb_naclr_ireg_ena", "NACLR_IREG_ENA");
+                }
+                if r.sclr.is_some() {
+                    io_node.insert((r.port, Role::InSclr), ctl(Role::InSclr)?);
+                    inv.push(ctl(Role::InSclr)?);
+                    set("xio_gpio_ireg/xio_gpio_in_clk_rst_gen/a_rb_nsclr_ireg_ena", "NSCLR_IREG_ENA");
+                }
+                // An IO96 lane with a registered input sets its twelve flyby
+                // muxes to GPIO [obs, iq lane 5].
+                if p.io96 {
+                    let lane = p.path.trim_start_matches("x0/xiophyadaptwr_").split('/').next().unwrap_or("").to_owned();
+                    flyby.insert((p.uid.clone(), lane));
+                }
+                writeln!(io_ffmap, "{}\tio_{}_i", ff_names(&nl, i, false), pname.replace(['[', ']'], "_"))?;
+            }
+            if let Some(o) = r.output {
+                io_node.insert((r.port, Role::Out), ctl(Role::Out)?);
+                io_node.insert((r.port, Role::OutCe), ctl(Role::OutCe)?);
+                inv.push(ctl(Role::OutCe)?);
+                set("xio_gpio_oreg/xio_gpio_out_clk_rst_gen/a_rb_fr_out_clk_oreg_ena", "FR_OUT_CLK_OREG_ENA");
+                set("xio_gpio_oreg/xio_gpio_out_clk_rst_gen/a_rb_nceout_oreg_ena", "NCEOUT_OREG_ENA");
+                set("xio_gpio_oreg_4to1_mux/a_rb_mux_sel", "SEL1");
+                if r.aclr.is_some() {
+                    set("xio_gpio_oreg/xio_gpio_out_clk_rst_gen/a_rb_naclr_oreg_ena", "NACLR_OREG_ENA");
+                }
+                writeln!(io_ffmap, "{}\tio_{}_o", ff_names(&nl, o, false), pname.replace(['[', ']'], "_"))?;
+            }
+            if let Some(e) = r.oe {
+                io_node.insert((r.port, Role::Oe), ctl(Role::Oe)?);
+                inv.push(ctl(Role::Oe)?);
+                set("xio_gpio_ereg/xio_gpio_oe_clk_rst_gen/a_rb_fr_out_clk_ereg_ena", "FR_OUT_CLK_EREG_ENA");
+                set("xio_gpio_ereg/xio_gpio_oe_clk_rst_gen/a_rb_nceout_ereg_ena", "NCEOUT_EREG_ENA");
+                set("xio_gpio_ereg_4to1_mux/a_rb_mux_sel", "SEL1");
+                if r.aclr.is_some() {
+                    // The OE register holds the inverse: its clear is a preset.
+                    set("xio_gpio_ereg/xio_gpio_oe_clk_rst_gen/a_rb_naclr_ereg_ena", "NACLR_EREG_ENA");
+                    set("xio_gpio_ereg/xio_gpio_oe_clk_rst_gen/a_rb_naclr_ereg_sel", "EREG_NPRE_SEL");
+                }
+                writeln!(io_ffmap, "{}\tio_{}_e", ff_names(&nl, e, true), pname.replace(['[', ']'], "_"))?;
+            }
+            if let Some(a) = r.aclr {
+                io_node.insert((r.port, Role::Aclr), ctl(Role::Aclr)?);
+                if !a.active_low {
+                    inv.push(ctl(Role::Aclr)?);
+                }
+            }
+            for n in inv {
+                let (u, path) = rpi_name.get(&n).with_context(|| format!("{} has no inverter", g.name(n)))?;
+                io_attrs.push((u.clone(), format!("{path}/rpi_sel"), "INV".into()));
+            }
+        }
+        for (uid, lane) in flyby {
+            for k in 0..12 {
+                io_attrs.push((uid.clone(), format!("x0/xiofbradapt/xio12_{lane}/xp2c/xflyby/x{k}/sel_f"), "GPIO".into()));
+            }
+        }
+        io_attrs.sort();
+        io_attrs.dedup();
+    }
     let port_xy: HashMap<usize, (u32, u32)> = port_node.iter().map(|(&p, &n)| (p, (g.x[n as usize] as u32, g.y[n as usize] as u32))).collect();
     let labs = place::labs(db)?;
     let sites = place::m20k_sites(db)?;
+    let dsites = place::dsp_sites(db)?;
     let mut delay: HashMap<String, f32> = HashMap::default();
     for l in std::fs::read_to_string(delays).context("reading delays")?.lines().skip(1) {
         let f: Vec<&str> = l.split('\t').collect();
@@ -257,7 +381,7 @@ fn main() -> Result<()> {
     let mut attempts = 0;
     let (pl, place_s, lines, rnets, _sink_conns, routed, route_s) = loop {
         let t1 = std::time::Instant::now();
-        let mut pl = place::place(&packed, &nl, &labs, &sites, &port_xy, seed, None, effort)?;
+        let mut pl = place::place(&packed, &nl, &labs, &sites, &dsites, &port_xy, seed, None, effort)?;
         let mut dtab = None;
         if timing_driven {
             let t = route::delay_table(&g, &base, &labs)?;
@@ -267,13 +391,16 @@ fn main() -> Result<()> {
             let conns: Vec<(End, End, f64)> = sta.conns.iter().enumerate().map(|(i, (n, e))| (packed.nets[n].0, *e, (r0.crit[i] as f64).powi(8))).collect();
             let delay_fn = |dx: i64, dy: i64| t.lab(dx, dy) as f64;
             let tc = place::TimingCost { conns, delay: &delay_fn, lambda: 0.5 };
-            pl = place::place(&packed, &nl, &labs, &sites, &port_xy, seed, Some(&tc), effort)?;
+            pl = place::place(&packed, &nl, &labs, &sites, &dsites, &port_xy, seed, Some(&tc), effort)?;
             let r1 = sta.analyse(&est(&pl));
             eprintln!("timing: timing-driven placement, {:.3} ns estimated ({})", r1.worst, r1.at);
             dtab = Some(t);
         }
         let place_s = t1.elapsed().as_secs_f64();
         if let Some(dir) = &quartus {
+            if !io.is_empty() || !packed.dsps.is_empty() {
+                bail!("--quartus: I/O registers and DSP blocks aren't exported yet");
+            }
             export::write(dir, top, &nl, &packed, &labs, &pl, &pin_of)?;
             eprintln!("quartus: project in {dir}");
         }
@@ -297,6 +424,12 @@ fn main() -> Result<()> {
                     g.node(&name).with_context(|| format!("no node {name}"))
                 }
                 End::Pll(k) => Ok(pll_node[k]),
+                End::Io { port, role } => io_node.get(&(port, role)).copied().with_context(|| format!("{}: no I/O node for {role:?}", nl.ports[port].name)),
+                End::Dsp { d, pin } => {
+                    let (x, y) = pl.dsp_at[d];
+                    let name = format!("MP_MAC_RE:X{x}Y{y}Z0I{pin}");
+                    g.node(&name).with_context(|| format!("no node {name}"))
+                }
             }
         };
         // Nets as source and sink nodes; per sink the connections it serves
@@ -428,6 +561,11 @@ fn main() -> Result<()> {
                 let (x, y) = pl.m20k_at[m];
                 g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{pin}"))
             }
+            End::Io { port, role } => io_node.get(&(port, role)).copied(),
+            End::Dsp { d, pin } => {
+                let (x, y) = pl.dsp_at[d];
+                g.node(&format!("MP_MAC_RE:X{x}Y{y}Z0I{pin}"))
+            }
             End::Out { .. } | End::Pll(_) => None,
         }
     };
@@ -493,8 +631,27 @@ fn main() -> Result<()> {
     for (a, b) in &edges {
         writeln!(text, "edge\t{a}\t{b}")?;
     }
-    let (attrs, directs) = emit::blocks(&nl, &packed, &labs, &pl, &lines);
-    for (u, a, v) in &attrs {
+    let (attrs, mut directs) = emit::blocks(&nl, &packed, &labs, &pl, &lines);
+    // DSP blocks (README (z11)): their mode's settings as Quartus writes
+    // them (db/sm4revb/dsp/modes.tsv), and the output register in the ffmap.
+    let mut attrs = attrs;
+    let dsp_modes = dsp::modes(db)?;
+    let mut dsp_ffmap = String::new();
+    for (d, u) in packed.dsps.iter().enumerate() {
+        let netlist::Cell::Mul { mode, .. } = &nl.cells[u.cell] else { unreachable!() };
+        let (x, y) = pl.dsp_at[d];
+        let uid = format!("cw_dssm_r{y}_c{x}");
+        for (kind, a, v) in dsp_modes.get(mode).with_context(|| format!("dsp/modes.tsv has no {}", mode.name()))? {
+            let row = (uid.clone(), a.clone(), v.clone());
+            if kind == "direct" { directs.push(row) } else { attrs.push(row) }
+        }
+        for (k, f) in u.regs.iter().enumerate() {
+            if let Some(f) = f {
+                writeln!(dsp_ffmap, "{}\td{x}_{y}_p[{k}]", ff_names(&nl, *f, false))?;
+            }
+        }
+    }
+    for (u, a, v) in attrs.iter().chain(&io_attrs) {
         writeln!(text, "attr\t{u}\t{a}\t{v}")?;
     }
     for (u, a, v) in &directs {
@@ -502,13 +659,14 @@ fn main() -> Result<()> {
     }
     text.push_str(&pll_text);
     std::fs::write(out, text)?;
-    std::fs::write(format!("{out}.ffmap"), emit::ffmap(&nl, &packed, &labs, &pl)?)?;
+    std::fs::write(format!("{out}.ffmap"), emit::ffmap(&nl, &packed, &labs, &pl)? + &io_ffmap + &dsp_ffmap)?;
     let labs_used: std::collections::BTreeSet<usize> = pl.at.iter().map(|a| a.0).collect();
     eprintln!(
-        "a5pnr: {} ALMs in {} LABs, {} M20Ks, {} nets, {} edges, {} routing iterations, model Fmax {:.0} MHz; place {place_s:.1} s, route {route_s:.1} s, {:.1} s total",
+        "a5pnr: {} ALMs in {} LABs, {} M20Ks, {} DSPs, {} nets, {} edges, {} routing iterations, model Fmax {:.0} MHz; place {place_s:.1} s, route {route_s:.1} s, {:.1} s total",
         packed.alms.len(),
         labs_used.len(),
         packed.m20ks.len(),
+        packed.dsps.len(),
         rnets.len(),
         edges.len(),
         routed.iterations,

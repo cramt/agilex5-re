@@ -23,6 +23,10 @@ enum Src {
     Port(usize),
     /// M20K (x, y) output pin.
     M20k(u32, u32, u32),
+    /// The input register of input port k (README (z10)).
+    IoIn(usize),
+    /// DSP block (x, y) output pin (README (z11)).
+    Dsp(u32, u32, u32),
 }
 
 /// The M20K settings a5pnr's 512 x 32 use writes (emit::M20K_SDP); any
@@ -64,7 +68,27 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     // Routing-tile attributes: only the clear inverters are modelled. An
     // inverted clear's last hop (RPII → RPI) conducts, inverted.
     let mut inverted_lab: HashSet<(u32, u32)> = HashSet::default();
+    // I/O registers (README (z10)): the routing tiles' programmable
+    // inverters in front of the I/O blocks, and the blocks' register
+    // settings, per pin.
+    let rpis = crate::ioreg::rpis(g, db)?;
+    let io_pins = crate::ioreg::pins(g, db)?;
+    let mut inverted_rpi: HashSet<u32> = HashSet::default();
+    let mut io_attr: HashMap<(String, String), String> = HashMap::default();
     for ((u, a), v) in &attr {
+        if u.starts_with("cw_rt_hiol") || u.starts_with("cw_rt_vio") {
+            let Some(path) = a.strip_suffix("/rpi_sel") else { bail!("{u} {a} = {v}: routing attribute outside the model") };
+            let n = *rpis.get(&(u.clone(), path.to_owned())).with_context(|| format!("{u} {path}: no such inverter in io/rpi.tsv"))?;
+            if v != "INV" {
+                bail!("{u} {a} = {v}: outside the model");
+            }
+            inverted_rpi.insert(n);
+            continue;
+        }
+        if (u.starts_with("hvio") || u.starts_with("pio")) && (a.contains("xiogpio_reg/") || a.contains("/x_gpio_") || a.contains("/xflyby/")) {
+            io_attr.insert((u.clone(), a.clone()), v.clone());
+            continue;
+        }
         let Some(rest) = u.strip_prefix("cw_rt_lab_base_r") else {
             if u.starts_with("cw_rt_") || u.starts_with("hvio") || u.starts_with("pio") {
                 bail!("{u} {a} = {v}: routing or I/O attribute outside the model");
@@ -103,12 +127,19 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     }
     let mut inputs: Vec<(String, u32)> = Vec::new();
     let mut outputs: Vec<(String, u32)> = Vec::new();
+    // Which pins have which registers (the 4:1 muxes in front of the
+    // buffer and behind the input select the registered path, SEL1).
+    let io_has = |ball: &str, sub: &str| -> bool {
+        io_pins.get(ball).is_some_and(|p| io_attr.get(&(p.uid.clone(), format!("{}/{sub}/a_rb_mux_sel", p.path))).is_some_and(|v| v == "SEL1"))
+    };
     for (b, u) in &balls {
         let name = port_of.get(b).with_context(|| format!("ball {b} isn't in {pins}"))?.clone();
         let role = match u.as_str() {
             "clock_in" => "clock",
             "out" => "out",
             "in0" | "in1" => u.as_str(),
+            // A registered input leaves on in1, IO96 too [obs, iq].
+            "in" | "in_reg" if io_has(b, "xio_gpio_ireg_4to1_mux1") => "in1",
             "in" => if io96[b] { "in0" } else { "in1" },
             _ => bail!("pin use {u} is outside the model"),
         };
@@ -120,6 +151,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
     // the same LAB_RE pins, `xcw_ml_le_*` for `xcw_la_le_*` [obs].
     let mut labs: BTreeMap<(u32, u32), &str> = BTreeMap::new();
     let mut m20ks: BTreeMap<(u32, u32), ()> = BTreeMap::new();
+    let mut dsps: BTreeMap<(u32, u32), ()> = BTreeMap::new();
     for (u, _) in attr.keys() {
         if let Some(rest) = u.strip_prefix("cw_mm_m20k_r") {
             let (y, x) = rest.split_once("_c").context("uid")?;
@@ -130,7 +162,10 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         } else if let Some(rest) = u.strip_prefix("cw_ml_mlab_r") {
             let (y, x) = rest.split_once("_c").context("uid")?;
             labs.insert((x.parse()?, y.parse()?), "ml");
-        } else if !u.starts_with("cw_rt_lab_base") {
+        } else if let Some(rest) = u.strip_prefix("cw_dssm_r") {
+            let (y, x) = rest.split_once("_c").context("uid")?;
+            dsps.insert((x.parse()?, y.parse()?), ());
+        } else if !(u.starts_with("cw_rt_lab_base") || u.starts_with("cw_rt_hiol") || u.starts_with("cw_rt_vio") || u.starts_with("hvio") || u.starts_with("pio")) {
             bail!("{u}: block type outside the model");
         }
     }
@@ -146,8 +181,10 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             }
         }
     }
-    for (k, (_, n)) in inputs.iter().enumerate() {
-        sources.push((Src::Port(k), *n));
+    let ball_of: HashMap<String, String> = port_of.iter().map(|(b, p)| (p.clone(), b.clone())).collect();
+    for (k, (name, n)) in inputs.iter().enumerate() {
+        let registered = ball_of.get(name).is_some_and(|b| io_has(b, "xio_gpio_ireg_4to1_mux1"));
+        sources.push((if registered { Src::IoIn(k) } else { Src::Port(k) }, *n));
     }
     // A PLL passes its reference clock on (for this check its frequency
     // doesn't matter): V16's PLL output 0 is HVIOWR_RE I16 (README (y)).
@@ -163,6 +200,14 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         for pin in 83..123u32 {
             if let Some(n) = g.node(&format!("MEDIUM_EAB_RE:X{x}Y{y}Z0I{pin}")) {
                 sources.push((Src::M20k(x, y, pin), n));
+            }
+        }
+    }
+    for &(x, y) in dsps.keys() {
+        for k in 0..54 {
+            let pin = crate::dsp::p_pin(k) as u32;
+            if let Some(n) = g.node(&format!("MP_MAC_RE:X{x}Y{y}Z0I{pin}")) {
+                sources.push((Src::Dsp(x, y, pin), n));
             }
         }
     }
@@ -223,6 +268,8 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             Src::Lab(x, y, p) => format!("l{x}_{y}_o{p}"),
             Src::Port(k) => inputs[*k].0.replace(['[', ']'], "_"),
             Src::M20k(x, y, p) => format!("m{x}_{y}_q{p}"),
+            Src::IoIn(k) => format!("io_{}_i", inputs[*k].0.replace(['[', ']'], "_")),
+            Src::Dsp(x, y, p) => format!("d{x}_{y}_q{p}"),
         })
     };
     let lab_node = |x: u32, y: u32, pin: u32| g.node(&format!("LAB_RE:X{x}Y{y}Z0I{pin}"));
@@ -544,8 +591,171 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             bus(&|i| 52 - i, 9, "1'bx")
         )?;
     }
+    // DSP blocks (README (z11)): a block's settings must be exactly one
+    // multiplier mode's; its product, registered on the block's clock.
+    let dsp_modes = crate::dsp::modes(db)?;
+    for &(x, y) in dsps.keys() {
+        let uid = format!("cw_dssm_r{y}_c{x}");
+        // The proginv masks are per-pin inverters (dsp::proginv_pin), read
+        // below, not part of the mode.
+        let mut have: Vec<(String, String)> = attr.iter().filter(|((u, a), _)| *u == uid && !crate::dsp::is_proginv(a)).map(|((_, a), v)| (a.clone(), v.clone())).collect();
+        have.sort();
+        let mode = dsp_modes.iter().find(|(_, rows)| {
+            let mut want: Vec<(String, String)> = rows.iter().filter(|(_, a, _)| !crate::dsp::is_proginv(a)).map(|(_, a, v)| (a.clone(), v.clone())).collect();
+            want.sort();
+            want == have
+        });
+        let Some((&m, rows)) = mode else { bail!("{uid}: DSP settings outside the model (no mode of dsp/modes.tsv matches)") };
+        // Inverted pins: the bits of the block's proginv masks that differ
+        // from the mode's (dsp::proginv_pin).
+        let mut inv: HashMap<u16, bool> = HashMap::default();
+        for (h, name) in [(false, "xcw_dssm_core/dsp_proginv_l"), (true, "xcw_dssm_core/dsp_proginv_h")] {
+            let bits = |s: Option<&String>| -> Vec<bool> { s.map_or(vec![false; 54], |s| s.bytes().rev().map(|c| c == b'1').collect()) };
+            let (got, base) = (bits(attr.get(&(uid.clone(), name.to_owned()))), bits(rows.iter().find(|(_, a, _)| a == name).map(|(_, _, v)| v)));
+            for k in 0..54 {
+                if got[k] == base[k] {
+                    continue;
+                }
+                match crate::dsp::proginv_pin(h, k) {
+                    Some(p) => {
+                        inv.insert(p, true);
+                    }
+                    None => bail!("{uid} {name} bit {k}: an inverter on an unknown pin differs from the mode's"),
+                }
+            }
+        }
+        // An operand pin through its inverter; unrouted, it reads 1 [inf].
+        let mac = |p: u16| {
+            let s = sig(g.node(&format!("MP_MAC_RE:X{x}Y{y}Z0I{p}"))).unwrap_or_else(|| "1'b1".into());
+            if p != crate::dsp::CLK && inv.get(&p) == Some(&true) { format!("~{s}") } else { s }
+        };
+        let w = m.width();
+        let mut a: Vec<String> = (0..w).rev().map(|i| mac(crate::dsp::a_pin(m, i))).collect();
+        let b: Vec<String> = (0..w).rev().map(|i| mac(crate::dsp::b_pin(m, i))).collect();
+        if m.signed && !m.wide {
+            a.insert(0, mac(crate::dsp::A_SIGN));
+        }
+        let n = format!("d{x}_{y}");
+        let (sa, sb) = if m.signed { ("$signed", "$signed") } else { ("", "") };
+        writeln!(d, "  wire [{}:0] {n}_a = {{{}}}; wire [{}:0] {n}_b = {{{}}}; reg [53:0] {n}_p = 54'b0;", a.len() - 1, a.join(", "), w - 1, b.join(", "))?;
+        writeln!(v, "  always @(posedge {}) {n}_p <= {sa}({n}_a) * {sb}({n}_b);", mac(crate::dsp::CLK))?;
+        for k in 0..54 {
+            writeln!(d, "  wire {n}_q{} = {n}_p[{k}];", crate::dsp::p_pin(k))?;
+        }
+    }
+    // I/O registers (README (z10)), each a flop of the pin's block: its
+    // controls are active-low block pins, a signal through an inverted RPI
+    // arriving inverted; an unused control is off.
+    // A5_RB_MUTATE (noinv, nopre, nosclr) breaks one rule of the model on
+    // purpose, to show the oracle catches it.
+    let mutate = std::env::var("A5_RB_MUTATE").unwrap_or_default();
+    let inv_blk: HashSet<u32> = if mutate == "noinv" { HashSet::default() } else { inverted_rpi.iter().filter_map(|&r| crate::ioreg::forward_block(g, &single, r)).collect() };
+    let mut used_io: HashSet<(String, String)> = HashSet::default();
+    let mut io_out: HashMap<String, (String, Option<String>)> = HashMap::default();
+    let hyp = |k: &str, d: &str| std::env::var(k).unwrap_or_else(|_| d.to_owned());
+    for (ball, p) in &io_pins {
+        let regs: Vec<&str> = [("i", "xio_gpio_ireg_4to1_mux1"), ("o", "xio_gpio_oreg_4to1_mux"), ("e", "xio_gpio_ereg_4to1_mux")].iter().filter(|(_, m)| io_has(ball, m)).map(|(r, _)| *r).collect();
+        if regs.is_empty() {
+            continue;
+        }
+        let port = port_of.get(ball).with_context(|| format!("I/O register on ball {ball}, which isn't in {pins}"))?.replace(['[', ']'], "_");
+        let mut get = |sub: &str| -> Option<String> {
+            let k = (p.uid.clone(), format!("{}/{sub}", p.path));
+            let r = io_attr.get(&k).cloned();
+            if r.is_some() {
+                used_io.insert(k);
+            }
+            r
+        };
+        let blk = |r: crate::ioreg::Role| -> String {
+            let Some(n) = p.block_pin(r).and_then(|n| g.node(&n)) else { return "1'bx".into() };
+            match sig(Some(n)) {
+                Some(s) if inv_blk.contains(&n) => format!("~{s}"),
+                Some(s) => s,
+                None => "1'bx".into(),
+            }
+        };
+        // The block's register clock: the one clock source reaching any of
+        // its pins [inf: Quartus' ct and iq use one clock pin per block].
+        let mut clks: Vec<String> = reach.iter().filter(|(n, s)| g.name(**n).starts_with(p.prefix()) && matches!(s, Src::Port(k) if balls.iter().any(|(b, u)| u == "clock_in" && port_of.get(b) == Some(&inputs[*k].0)))).map(|(n, _)| sig(Some(*n)).unwrap()).collect();
+        clks.sort();
+        clks.dedup();
+        let [clk] = clks.as_slice() else { bail!("{ball}: I/O register clock {clks:?}") };
+        for &r in &regs {
+            use crate::ioreg::Role;
+            let (sub, gen, tag) = match r {
+                "i" => ("xio_gpio_ireg", "xio_gpio_in_clk_rst_gen", "ireg"),
+                "o" => ("xio_gpio_oreg", "xio_gpio_out_clk_rst_gen", "oreg"),
+                _ => ("xio_gpio_ereg", "xio_gpio_oe_clk_rst_gen", "ereg"),
+            };
+            let on = |v: Option<String>| v.is_some_and(|v| v.ends_with("_ENA"));
+            let ck = if r == "i" { "in" } else { "out" };
+            if !on(get(&format!("{sub}/{gen}/a_rb_fr_{ck}_clk{}_ena", if r == "i" { String::new() } else { format!("_{tag}") }))) {
+                bail!("{ball}: {tag} without its clock enabled");
+            }
+            let ce_name = if r == "i" { "ncein_ireg_ena".to_owned() } else { format!("nceout_{tag}_ena") };
+            let nce = if on(get(&format!("{sub}/{gen}/a_rb_{ce_name}"))) { blk(if r == "i" { Role::InCe } else { Role::OutCe }) } else { "1'b0".into() };
+            let naclr = if on(get(&format!("{sub}/{gen}/a_rb_naclr_{tag}_ena"))) { blk(Role::Aclr) } else { "1'b1".into() };
+            let pre = get(&format!("{sub}/{gen}/a_rb_naclr_{tag}_sel")).is_some_and(|v| v.contains("NPRE")) && mutate != "nopre";
+            let nsclr = if r == "i" && on(get(&format!("{sub}/{gen}/a_rb_nsclr_ireg_ena"))) && mutate != "nosclr" { blk(Role::InSclr) } else { "1'b1".into() };
+            let dat = match r {
+                "i" => port.clone(),
+                "o" => blk(Role::Out),
+                _ => blk(Role::Oe),
+            };
+            // The input register's clock inverter: Quartus sets IN_INV on
+            // every input register (ct, iq: 11 of 11) [inf: back to the
+            // rising edge].
+            let edge = if r == "i" {
+                let inv = get(&format!("{sub}/xinv_fr_in_clk/a_rb_sel")).is_some_and(|v| v == "IN_INV");
+                if inv == (hyp("A5_RB_INCLK", "inv_pos") == "inv_pos") { "posedge" } else { "negedge" }
+            } else {
+                "posedge"
+            };
+            let q = format!("io_{port}_{r}");
+            writeln!(d, "  reg {q} = 1'b0; wire {q}_nclr = {naclr};")?;
+            writeln!(v, "  always @({edge} {clk} or negedge {q}_nclr) if (!{q}_nclr) {q} <= 1'b{}; else if (!({nce})) {q} <= !({nsclr}) ? 1'b0 : {dat};", pre as u8)?;
+        }
+        if regs.contains(&"i") && io96[ball] {
+            get("xio_gpio_ireg_4to1_mux0/a_rb_mux_sel");
+        }
+        for m in ["xio_gpio_ireg_4to1_mux1", "xio_gpio_oreg_4to1_mux", "xio_gpio_ereg_4to1_mux"] {
+            get(&format!("{m}/a_rb_mux_sel"));
+        }
+        let data = if regs.contains(&"o") { Some(format!("io_{port}_o")) } else { None };
+        // The OE register drives the buffer's enable [hypothesis A5_RB_OE].
+        let en = regs.contains(&"e").then(|| if hyp("A5_RB_OE", "low") == "low" { format!("~io_{port}_e") } else { format!("io_{port}_e") });
+        io_out.insert(port_of[ball].clone(), (data.unwrap_or_default(), en));
+    }
+    // An IO96 lane's input flyby muxes: GPIO for its registered inputs
+    // [obs, iq: lane 5, which has them; inf: that is what they select].
+    for (k, val) in &io_attr {
+        if k.1.contains("/xflyby/") && val == "GPIO" {
+            used_io.insert(k.clone());
+        }
+    }
+    for k in io_attr.keys() {
+        if !used_io.contains(k) {
+            bail!("{} {} = {}: I/O setting outside the model", k.0, k.1, io_attr[k]);
+        }
+    }
     for (name, n) in &outputs {
-        writeln!(v, "  assign {} = {};", name.replace(['[', ']'], "_"), sig(Some(*n)).unwrap_or_else(|| "1'bx".into()))?;
+        // An unrouted output pin reads 1, so through its RPI's inverter 0:
+        // Quartus' constant-0 output in dq3 is exactly that [obs]. Without the
+        // inverter an output nothing modelled reaches stays unknown (pl's PLL
+        // `locked` is routed from a source the readback doesn't model).
+        let plain = match (sig(Some(*n)), inverted_rpi.contains(n)) {
+            (Some(s), false) => s,
+            (Some(s), true) => format!("~{s}"),
+            (None, false) => "1'bx".into(),
+            (None, true) => "1'b0".into(),
+        };
+        let (data, en) = io_out.get(name).cloned().unwrap_or_default();
+        let data = if data.is_empty() { plain } else { data };
+        match en {
+            Some(e) => writeln!(v, "  assign {} = {e} ? {data} : 1'bz;", name.replace(['[', ']'], "_"))?,
+            None => writeln!(v, "  assign {} = {data};", name.replace(['[', ']'], "_"))?,
+        }
     }
     writeln!(v, "endmodule")?;
     let uu = used_unknown.into_inner();
@@ -553,7 +763,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         bail!("{} used pins are reached from more than one source, e.g. {}", uu.len(), uu[0]);
     }
     std::fs::write(out, head + &d + &v)?;
-    eprintln!("readback: {} M20Ks, {} LABs, {} ALMs, {} flops, {} active edges, {} inputs, {} outputs", m20ks.len(), labs.len(), nalms, nffs, active.len(), inputs.len(), outputs.len());
+    eprintln!("readback: {} DSPs, {} M20Ks, {} LABs, {} ALMs, {} flops, {} active edges, {} inputs, {} outputs", dsps.len(), m20ks.len(), labs.len(), nalms, nffs, active.len(), inputs.len(), outputs.len());
     Ok(())
 }
 
@@ -601,13 +811,16 @@ pub fn drivers(g: &Graph, db: &str, extract: &str, prefix: &str) -> Result<()> {
             sources.push((n.clone(), m));
         }
     }
+    // As the readback follows edges: a hop with no bits into a node with no
+    // other fanin conducts too (the spare row, the I/O blocks' REDMUXes).
+    let single = g.single_fanin();
     for (s, n0) in &sources {
         let mut q = VecDeque::from([*n0]);
         let mut seen = HashSet::from_iter([*n0]);
         while let Some(m) = q.pop_front() {
             for e in g.fanout(m) {
                 let d = g.dst[e];
-                if (g.class[e] == PASS || active.contains(&(m, d))) && seen.insert(d) {
+                if (g.class[e] == PASS || (g.class[e] == NO && single[d as usize]) || active.contains(&(m, d))) && seen.insert(d) {
                     if g.name(d).starts_with(prefix) {
                         println!("{}\t{s}", g.name(d));
                     }

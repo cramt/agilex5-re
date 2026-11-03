@@ -60,7 +60,9 @@ regs = []
 for l in open(ffmap):
     names, flop = l.split('\t')
     flop = flop.rstrip('\n')  # an escaped identifier keeps its closing space
-    for net in names.split('|'):
+    # The shallowest name first: a top-level register is also its
+    # submodule's port wire (picorv32's cpu.mem_ready), which isn't one.
+    for net in sorted(names.split('|'), key=lambda n: n.count('.')):
         # `!name`: the flop holds the register's inverse.
         inv = net.startswith('!')
         net = net.lstrip('!')
@@ -210,6 +212,10 @@ if run:
     for n in outs:
         tb.append(f'    last_{n} = od_{n};')
     tb.append(f'    for (cyc = 0; cyc < {run}; cyc = cyc + 1) begin')
+    # SIMCHECK_RUN_RANDOM=1: the inputs not held take a new random value
+    # every cycle (I/O registers' data and controls, README (z10)).
+    if os.environ.get('SIMCHECK_RUN_RANDOM'):
+        tb += [f'      i_{n} = $random(seed);' for n, d, w in ports if d == 'input' and n not in clocks and n not in hold]
     tb += clk + compare
     for n in outs:
         tb.append(f'      if (od_{n} !== last_{n}) begin changes = changes + 1; if (changes <= 4 || changes % 16 == 0) $display("run: cycle %0d: {n} %0d", cyc, od_{n}); last_{n} = od_{n}; end')

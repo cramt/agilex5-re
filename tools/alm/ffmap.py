@@ -31,9 +31,15 @@ for line in open(sys.argv[1]):
     if typ != 'FF' or not m or 'ERTM' in name:
         continue
     x, y, n = int(m[1]), int(m[2]), int(m[3])
+    # An I/O register (README (z10)) sits in the I/O block, outside the LAB
+    # grid; the pins it drives or reads show it.
+    if y in (0, 2, 53) or x in (82, 107, 108):
+        continue
     i, r = divmod(n, 3)
     if r == 0:
         sys.exit(f'{name} at {loc}: not a register position')
     k, h = divmod(i, 2)
-    reg = re.sub(r'~DUPLICATE(_\d+)?$', '', name).replace('|', '.')
+    # Quartus' copies: `~DUPLICATE`, and `~_Duplicate<n>` (dq2's operand
+    # registers, copied per DSP block), both maybe with a DUPLICATE on top.
+    reg = re.sub(r'~_?Duplicate\w*$', '', re.sub(r'~DUPLICATE(_\d+)?$', '', name), flags=re.I).replace('|', '.')
     print(f'{"!" if reg in ones else ""}{reg}\tl{x}_{y}_o{89 + 4 * k + 2 * h + r - 1}')

@@ -28,6 +28,9 @@ for l in open(sys.argv[3]):
     p = mod['ports'][port]
     b = p['bits'][int(bit.rstrip(']')) if bit else 0]
     kind = 'out' if p['direction'] == 'output' else 'clock_in' if b in clk else 'in'
+    # A fourth column is the pin's use as it is (an IO96 input register's
+    # in_reg, README (z10)).
+    kind = f[3] if len(f) > 3 else kind
     print(f'{ball}={kind}:{volt}')
 PY
 )

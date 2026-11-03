@@ -48,6 +48,19 @@ pub fn m20k_sites(db: &str) -> Result<Vec<(u32, u32)>> {
     Ok(out)
 }
 
+/// DSP block sites (`cw_dssm`), but the spare row's (Y 5).
+pub fn dsp_sites(db: &str) -> Result<Vec<(u32, u32)>> {
+    let text = std::fs::read_to_string(format!("{db}/floorplan.tsv")).context("floorplan.tsv")?;
+    let mut out = Vec::new();
+    for l in text.lines().skip(1) {
+        let f: Vec<&str> = l.split('\t').collect();
+        if f[1] == "cw_dssm" && f[4] != "5" {
+            out.push((f[3].parse()?, f[4].parse()?));
+        }
+    }
+    Ok(out)
+}
+
 /// A tiny deterministic generator (xorshift), so runs repeat.
 pub struct Rng(u64);
 impl Rng {
@@ -73,6 +86,7 @@ pub struct Placement {
     pub at: Vec<(usize, u8)>,
     /// Per M20K: its block's X, Y.
     pub m20k_at: Vec<(u32, u32)>,
+    pub dsp_at: Vec<(u32, u32)>,
 }
 
 /// Distinct nets a LAB's data pins may take. Each enters on one of the
@@ -83,6 +97,13 @@ pub struct Placement {
 /// takes at most 52 (48 from outside). 50 is under all of it [inf,
 /// README (z8)].
 pub const LAB_INPUTS: usize = 50;
+
+/// The budget, or A5PNR_LAB_INPUTS (a stricter one for a placement Quartus'
+/// legalizer has to take whole, README (z13)).
+fn lab_inputs() -> usize {
+    static N: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *N.get_or_init(|| std::env::var("A5PNR_LAB_INPUTS").ok().and_then(|v| v.parse().ok()).unwrap_or(LAB_INPUTS))
+}
 
 /// How many of each control line a LAB's ALMs ask for, and whether that
 /// fits: two clocks, two enables, one synchronous clear, two asynchronous
@@ -122,7 +143,7 @@ impl LabUse {
                 Ctl::Aclr(None) | Ctl::Wa(..) => {}
             }
         }
-        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.1.len() <= LAB_INPUTS
+        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.1.len() <= lab_inputs()
     }
 }
 
@@ -157,6 +178,7 @@ pub fn place(
     nl: &Netlist,
     labs: &[Lab],
     m20k_sites: &[(u32, u32)],
+    dsp_sites: &[(u32, u32)],
     port_xy: &HashMap<usize, (u32, u32)>,
     seed: u64,
     tc: Option<&TimingCost>,
@@ -199,6 +221,13 @@ pub fn place(
         bail!("{} M20Ks, {} sites", p.m20ks.len(), sites.len());
     }
     let m20k_at: Vec<(u32, u32)> = sites[..p.m20ks.len()].to_vec();
+    // DSP blocks likewise (README (z11)).
+    let mut dsites: Vec<(u32, u32)> = dsp_sites.to_vec();
+    dsites.sort_by_key(|&(x, y)| (x as i64 - cx as i64).abs() + (y as i64 - cy as i64).abs());
+    if p.dsps.len() > dsites.len() {
+        bail!("{} DSP blocks, {} sites", p.dsps.len(), dsites.len());
+    }
+    let dsp_at: Vec<(u32, u32)> = dsites[..p.dsps.len()].to_vec();
     let mut by_dist: Vec<usize> = (0..labs.len()).collect();
     by_dist.sort_by_key(|&i| (labs[i].x as i64 - cx as i64).abs() + (labs[i].y as i64 - cy as i64).abs());
     // MLAB RAMs (README (z9)) go to the MLABs nearest the ports' centre and
@@ -284,7 +313,7 @@ pub fn place(
     let alm_of = |e: &End| -> Option<usize> {
         match e {
             End::Out { alm, .. } | End::In { alm, .. } | End::Ctl { alm, .. } => Some(*alm),
-            End::Port(_) | End::M20k { .. } | End::Pll(_) => None,
+            End::Port(_) | End::M20k { .. } | End::Pll(_) | End::Io { .. } | End::Dsp { .. } => None,
         }
     };
     let mut alm_nets: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -302,8 +331,9 @@ pub fn place(
     let weight: Vec<f64> = nets.iter().map(|(_, s)| crossing(s.len() + 1)).collect();
     let fixed_xy = |e: &End| -> Option<(i64, i64)> {
         match e {
-            End::Port(p) => port_xy.get(p).map(|&(x, y)| (x as i64, y as i64)),
+            End::Port(p) | End::Io { port: p, .. } => port_xy.get(p).map(|&(x, y)| (x as i64, y as i64)),
             End::M20k { m, .. } => Some((m20k_at[*m].0 as i64, m20k_at[*m].1 as i64)),
+            End::Dsp { d, .. } => Some((dsp_at[*d].0 as i64, dsp_at[*d].1 as i64)),
             _ => None,
         }
     };
@@ -357,7 +387,7 @@ pub fn place(
     };
     let movable: Vec<usize> = (0..n).filter(|&a| chain_of[a] == usize::MAX && !in_ram[a]).collect();
     if n == 0 || nets.is_empty() {
-        return Ok(Placement { at, m20k_at });
+        return Ok(Placement { at, m20k_at, dsp_at });
     }
     // Wire length plus a cost per LAB in use: wire length alone doesn't
     // mind ALMs spread thinly between their nets' ends (the CPU's 2,127
@@ -556,5 +586,5 @@ pub fn place(
         labs_used.len(),
         (0..nets.len()).map(|i| net_cost(&at, i)).sum::<f64>()
     );
-    Ok(Placement { at, m20k_at })
+    Ok(Placement { at, m20k_at, dsp_at })
 }
