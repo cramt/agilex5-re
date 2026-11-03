@@ -20,7 +20,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use chipsmith_netlist::{attr, is_set, CellKind, Const, Design, Lut, Module, SigBit, State};
-use chipsmith_synth::lutmap::{self, LutSize};
+use chipsmith_synth::lutmap::{self, LutCost, LutSize, MapOptions};
 use chipsmith_synth::rewrite::{define_inits, Subst};
 use chipsmith_synth::{alumacc, clean, divmod, fsm, memory, opt, restructure, rom, techmap, tribuf, undef, wreduce};
 
@@ -120,13 +120,29 @@ fn run(m: &mut Module, mlab: bool) -> Result<Stats> {
     techmap::lower(m, |k| techmap::is_lowerable(k) || matches!(k, CellKind::Ff(_)))?;
     opt::opt_seq(m, REMOVABLE)?;
     let ffs = ff::map(m)?;
-    let lutmap = lutmap::map_module_k(m, LutSize::SIX)?;
+    let lutmap = lutmap::map_module_with(m, LutSize::SIX, MapOptions { cost: lut_cost()?, keep_best_cut: true })?;
     let luts = merge_luts(m);
     ff::fold_constants(m)?;
     // The RTL's wire names stay (no `purge_wires`): simcheck lines up the
     // image's flops with the RTL's registers by them.
     clean(m);
     Ok(Stats { lutmap, luts, ffs, arith, mlab_bits, dsps })
+}
+
+/// What a LUT costs by input count, in thirds of an ALM: a 6-input LUT the
+/// whole ALM; one of up to four inputs half of it, since any two pair; a
+/// 5-input one more, since two of them pair only when they share two inputs
+/// (README (z14): the best of eight tables on the bench's designs).
+/// A5_LUTCOST=c0,..,c6 overrides it (tools/a5synth/costbench.sh).
+const ALM_COST: [u32; 7] = [3, 3, 3, 3, 3, 4, 6];
+
+fn lut_cost() -> Result<LutCost> {
+    let Ok(v) = std::env::var("A5_LUTCOST") else {
+        return Ok(LutCost::by_inputs(ALM_COST).expect("no cost of 0"));
+    };
+    let c: Vec<u32> = v.split(',').map(str::parse).collect::<std::result::Result<_, _>>()?;
+    let c: [u32; 7] = c.try_into().map_err(|_| anyhow::anyhow!("A5_LUTCOST takes 7 costs"))?;
+    LutCost::by_inputs(c).ok_or_else(|| anyhow::anyhow!("A5_LUTCOST: a cost of 0"))
 }
 
 /// Constant and repeated LUT inputs folded out, constant LUTs replaced by

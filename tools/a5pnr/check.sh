@@ -19,11 +19,11 @@ r=$out/check.txt; : > "$r"
 # The three parts are independent: asm2 and pfg run while extract and the
 # simulation do (README (x)).
 [[ -n ${CHECK_NO_QUARTUS:-} ]] && : > "$out/check.asm2" && : > "$out/check.pfg" || (
-    "$repo/tools/readback.sh" "$out/$top.sof" "$out/asm2" 2>&1 | tail -3 | sed 's/^/asm2: /' > "$out/check.asm2"
+    "$repo/tools/cap.sh" 20G "$repo/tools/readback.sh" "$out/$top.sof" "$out/asm2" 2>&1 | tail -3 | sed 's/^/asm2: /' > "$out/check.asm2"
 ) &
 [[ -n ${CHECK_NO_QUARTUS:-} ]] || (
-    cd "$out" && "$repo/tools/quartus.sh" quartus_pfg -c "$top.sof" "${top}_pfg.rbf" > pfg.log 2>&1
-    "$repo/tools/quartus.sh" quartus_pfg --check_integrity "$top.rbf" > integrity.log 2>&1
+    cd "$out" && "$repo/tools/cap.sh" 20G "$repo/tools/quartus.sh" quartus_pfg -c "$top.sof" "${top}_pfg.rbf" > pfg.log 2>&1
+    "$repo/tools/cap.sh" 20G "$repo/tools/quartus.sh" quartus_pfg --check_integrity "$top.rbf" > integrity.log 2>&1
     {
         grep -h -E 'Integrity status|rror' "$out/integrity.log" | sed 's/^/integrity: /'
         cmp -s "$out/$top.rbf" "$out/${top}_pfg.rbf" && echo "rbf: a5db's equals quartus_pfg's" || echo "rbf: a5db's differs from quartus_pfg's"
