@@ -1,11 +1,13 @@
 # a5pnr against Quartus Prime Pro
 
-How a5pnr's open flow (yosys, a5pnr, a5db) compares with Quartus Prime Pro
-26.1.1 on the same Verilog for the DE25-Nano's A5EB013BB23BE4SCS: time to a
-bitstream, resources, and Fmax. It is the Agilex 5 counterpart of chipsmith's
-`docs/vs-quartus.md` for the Cyclone II. `tools/bench/vs-quartus-pro.sh`
-produces every number here (`specimens/p10/bench/runs.tsv`, not
-committed), `tools/bench/table.py` the tables.
+How a5pnr's open flow (chipsmith's synthesis, a5pnr, a5db) compares with
+Quartus Prime Pro 26.1.1 on the same Verilog for the DE25-Nano's
+A5EB013BB23BE4SCS: time to a bitstream, resources, and Fmax. It is the
+Agilex 5 counterpart of chipsmith's `docs/vs-quartus.md` for the Cyclone
+II. `tools/bench/vs-quartus-pro.sh` produces every number here
+(`specimens/p11/bench/runs.tsv`, not committed), `tools/bench/table.py` the
+tables. This is phase 11's flow (README (z14)); phase 10's, with yosys as
+the front end, is in the phase 10 column below and in git history.
 
 ## Setup
 
@@ -15,8 +17,11 @@ committed), `tools/bench/table.py` the tables.
   in the tables). Each build ran in a systemd unit of its own; wall time and
   CPU time (user + system of every process the build waited for, GNU time)
   are per build.
-- **Runs**: three reps, interleaved: per rep and design, Quartus then
-  a5pnr. Medians with [min-max].
+- **Runs**: three reps of a5pnr's flow per design. Quartus Pro's builds
+  are phase 10's (`specimens/p10/bench`: the same Quartus, RTL, settings
+  and machine, three reps interleaved with phase 10's a5pnr, load 8 to
+  34); its wall and CPU times saw that load, a5pnr's this one (8 to 21).
+  Medians with [min-max].
 - **Quartus Pro**: `quartus_syn`, `quartus_fit`, `quartus_asm` through
   `tools/quartus.sh` (chipsmith's sandbox, no network), 2 processors
   (`NUM_PARALLEL_PROCESSORS`, as every Quartus run of this repository),
@@ -25,133 +30,143 @@ committed), `tools/bench/table.py` the tables.
   inferred M20K for Quartus (`designs/p8/cql/cql.v`), and its register file,
   forced into MLAB (`ramstyle "MLAB"`) or flops (`"logic"`) for the two CPU
   rows.
-- **a5pnr**: `tools/a5pnr/flow.sh`: yosys from nixpkgs (synthesis), a5pnr
-  (packing, timing-driven placement, routing), `a5db build` (`.sof`) and
-  `a5db rbf` (`.rbf`), phase 10's code.
+- **a5pnr**: `tools/a5pnr/flow.sh`: chipsmith's synthesis
+  (`tools/a5synth`), a5pnr (packing, placement under Quartus' LAB-line rule,
+  global placement from 1,500 ALMs, timing-driven annealing, routing),
+  `a5db build` (`.sof`) and `a5db rbf` (`.rbf`), phase 11's code.
 - **Fmax**: one clock, over-constrained (2 ns), so both fitters work for
   speed; `quartus_sta` (slow 100 °C model) reports Fmax and the Fmax
   restricted by the clock's minimum pulse width. For Quartus' own fit, its
-  own routes. For a5pnr, its placement exported as locked WYSIWYG atoms
-  (`a5pnr --quartus`, README (z4)) and routed by Quartus, with each LAB
-  Quartus' legalizer rejects ("too many LAB line inputs", a rule a5pnr
-  doesn't know, README (z8)) left to Quartus, round by round
-  (`tools/bench/unlock_fit.sh`). The export doesn't take MLAB RAM, DSP
-  blocks or I/O registers yet; for those designs (the MLAB CPU, picorv32,
-  mul) only a5pnr's own model on its own routes is given ("model"); phase 9
-  found the model prices Quartus' routes about 4 % slower than quartus_sta
-  does, and a5pnr's routes 12 % slower than Quartus' on the same placement
-  (README (z8)). "model" is the longest path including the pins.
+  own routes. For a5pnr, its placement exported as locked atoms (`a5pnr
+  --quartus`: LUTs, flops, carry chains and MLAB RAM at a5pnr's sites;
+  M20Ks and DSP products as RTL Quartus places; I/O registers in their
+  pins) and routed by Quartus; a LAB Quartus' legalizer still refuses is
+  left to Quartus, round by round (`tools/bench/unlock_fit.sh`). "model" is
+  a5pnr's own timing model on its own routes (the longest path including
+  the pins); phase 9 found it reads Quartus' routes about 4 % slow.
 
 ## Verdict
 
-**a5pnr's flow reaches a bitstream 5x to 19x faster than Quartus Pro in
-wall time on every design but sha256 (2.1x), with 5x to 18x less CPU
-time.** Quartus Pro's floor is high: 19 to 46 minutes for a 13-ALM
-blinky on this loaded machine, nearly all of it in `quartus_fit` (whose
-periphery placement alone loads for 3 to 4 minutes), where a5pnr takes about
-two minutes (35 s of yosys, 35 s of a5pnr of which 18 s is loading the
-routing graph, 50 s of `a5db build`). On the CPUs, picorv32 and the DSP
-self-test a5pnr takes 3 to 10 minutes; sha256 is the exception, at 21 minutes against
-Quartus' 45, because a5pnr's annealer and router scale worse than Quartus'
-fitter (sha256's place and route alone take 18 minutes).
+**a5pnr is now 9x to 32x faster than Quartus Pro in wall time on seven of
+eight designs, but sha256 (1.4x).** sha256 got slower (1,891 s against
+phase 10's 1,258): its first placement doesn't route (one LAB's local line
+two nets want) and a5pnr places it again with the next seed.
 
-**Quartus Pro wins on area** where its synthesis does more: the MLAB CPU
-390 ALMs against 453, sha256 1,457 against 2,620, picorv32 378 against 805
-(it puts the register file in two M20Ks); a5pnr is level on the small
-designs and on the flop CPU (1,394 against 1,454, which Quartus inflates by
-duplicating registers for speed). chipsmith's synthesis as a5pnr's front
-end closes most of sha256's and picorv32's gap (2,111 and 506 ALMs, README
-(z12)), but isn't the bench's flow.
+**On area a5pnr is level or ahead on six designs** (the flop CPU 1,300
+against Quartus' 1,454, mul 311 against 329) and behind on three: sha256
+1,669 against 1,457 (phase 10: 2,620), picorv32 430 against 378 (805;
+Quartus puts the register file in two M20Ks), the MLAB CPU 413 against
+390 (453). chipsmith's synthesis with an ALM-aware LUT cost did most of
+it.
 
-**Quartus Pro wins on Fmax by 2x to 3x** wherever logic depth matters, on its
-own placement against a5pnr's: the flop CPU 319 against 161 MHz (a5pnr's
-placement, Quartus' routes), sha256 200 against 75. On the small designs
-both are at the clock's minimum-pulse-width limit (about 360 MHz
-restricted), and a5pnr's placement of blinky and leds routes as fast as
-Quartus' own; acc's carry chains reach 465 MHz on a5pnr's placement against
-616. Where only a5pnr's own model is available (its own routes), the MLAB
-CPU is at 109 MHz against Quartus' 300, picorv32 159 against 344
-(restricted) and the DSP self-test 222 against 243. Quartus' advantage is
-in its synthesis and placement (Hyper-Retiming on, register duplication,
-its own LUT mapping) as much as in its routing: the same Quartus router
-reaches about half its own speed on a5pnr's placement of yosys' netlist.
+**On Fmax Quartus still leads on the deep designs, by 1.3x to 1.7x where it
+was 2x to 3x**: the flop CPU 190 against 319 MHz (161), sha256 116 against
+200 (75), the MLAB CPU 178 against 300 (only the model's 109 before),
+picorv32 296 against 344 restricted / 479 (the model's 159). mul is at 236
+against 243 and the small designs at the clock's pulse-width limit on
+both. Every a5pnr number is now quartus_sta on a5pnr's own placement with
+Quartus' routes; Quartus took every LAB of blinky, leds, acc, the flop CPU
+and picorv32, and left one LAB of the MLAB CPU and mul and three of
+sha256's 220 to itself. Quartus' lead is what it does beyond placing
+(Hyper-Retiming, register duplication: the flop CPU's 1,229 registers
+become 2,960) and its placement; a5pnr's own routes are a further 12 %
+slower than Quartus' on the same placement (the flop CPU, median over 223
+endpoints, as phase 9 measured).
+
+## Phase 10 → phase 11 (a5pnr)
+
+| design | ALMs | Fmax, quartus_sta on a5pnr's placement (MHz) | model (MHz) |
+|---|---|---|---|
+| blinky | 13 → 13 | 830 → 830 | 528 → 528 |
+| leds | 19 → 19 | 805 → 805 | 344 → 358 |
+| acc | 37 → 37 | 465 → 462 | 245 → 263 |
+| cpu (MLAB) | 453 → 413 | – → 178 | 109 → 149 |
+| cpu_ff | 1,394 → 1,300 | 161 → 190 | 132 → 158 |
+| sha256 | 2,620 → 1,669 | 75 → 116 | 72 → 105 |
+| picorv32 | 805 → 430 | – → 296 | 159 → 271 |
+| mul | 407 → 311 | – → 236 | 222 → 243 |
 
 ## Full builds
 
-Medians over three interleaved reps with [min-max]; the load is the median
-1-minute load average before the build (the machine was shared; Quartus'
-times vary by up to 3x with it, a5pnr's by up to 2x). Resources are each
-tool's own count after fitting, from rep 1; Fmax from rep 1.
+Medians over three reps with [min-max]; the load is the median 1-minute
+load average before the build. Quartus Pro's rows are phase 10's builds
+(see Setup). Resources are each tool's own count after fitting, from rep
+1; Fmax from rep 1.
 
 | design | tool | wall s, median [min-max] | CPU s | load | ALMs | LABs | M20K | DSP | Fmax (MHz) |
 |---|---|---|---|---|---|---|---|---|---|
 | blinky | Quartus Pro | 2359 [1133-2784] | 1887 [1306-1923] | 25 | 13 | 3 | 0 | 0 | 820 (restricted 362) |
-| blinky | a5pnr | 124 [78-164] | 106 [85-111] | 38 | 13 | 2 | 0 | 0 | 830 (restricted 366), model 528 |
+| blinky | a5pnr | 74 [63-74] | 76 [70-76] | 17 | 13 | 2 | 0 | 0 | 830 (restricted 366), every LAB locked, model 528 |
 | leds | Quartus Pro | 2306 [1396-3842] | 1911 [1546-1980] | 34 | 19 | 3 | 0 | 0 | 805 (restricted 366) |
-| leds | a5pnr | 129 [114-195] | 116 [116-120] | 27 | 19 | 2 | 0 | 0 | 805 (restricted 366), model 344 |
+| leds | a5pnr | 75 [73-80] | 76 [73-76] | 18 | 19 | 3 | 0 | 0 | 805 (restricted 366), every LAB locked, model 358 |
 | acc | Quartus Pro | 1714 [1586-2829] | 1862 [1788-1933] | 22 | 36 | 6 | 0 | 0 | 616 (restricted 362) |
-| acc | a5pnr | 128 [126-233] | 117 [117-122] | 23 | 37 | 6 | 0 | 0 | 465 (restricted 353), model 245 |
-| cpu | Quartus Pro | 2205 [1779-3760] | 2140 [2043-2314] | 19 | 390 | 54 | 1 | 0 | 300 (restricted 300) |
-| cpu | a5pnr | 282 [222-397] | 250 [232-260] | 22 | 453 | 86 | 1 | 0 | model 109 |
+| acc | a5pnr | 84 [74-93] | 77 [76-78] | 20 | 37 | 6 | 0 | 0 | 462 (restricted 353), every LAB locked, model 263 |
 | cpu_ff | Quartus Pro | 2703 [1795-2996] | 2541 [2214-2544] | 15 | 1454 | 186 | 1 | 0 | 319 (restricted 319) |
-| cpu_ff | a5pnr | 500 [410-621] | 509 [356-555] | 21 | 1394 | 207 | 1 | 0 | 161 (restricted 161), 1 LAB left to Quartus, model 132 |
+| cpu_ff | a5pnr | 296 [290-304] | 287 [281-288] | 20 | 1300 | 199 | 1 | 0 | 190 (restricted 190), every LAB locked, model 158 |
 | sha256 | Quartus Pro | 2688 [2064-2700] | 2465 [2252-2484] | 17 | 1457 | 243 | 0 | 0 | 200 (restricted 200) |
-| sha256 | a5pnr | 1258 [887-1280] | 1023 [878-1032] | 25 | 2620 | 301 | 0 | 0 | 75 (restricted 75) (placed with a 44-net LAB budget), 12 LABs left to Quartus, model 72 |
-| picorv32 | Quartus Pro | 2239 [1564-2737] | 2103 [1768-2133] | 33 | 378 | 58 | 2 | 0 | 479 (restricted 344) |
-| picorv32 | a5pnr | 178 [169-391] | 202 [188-234] | 20 | 805 | 110 | 0 | 0 | model 159 |
+| sha256 | a5pnr | 1891 [1721-1961] | 1792 [1654-1842] | 14 | 1669 | 220 | 0 | 0 | 116 (restricted 116), 3 LABs left to Quartus, model 105 |
 | mul | Quartus Pro | 2332 [1649-3196] | 2220 [1921-2236] | 8 | 329 | 45 | 0 | 6 | 243 (restricted 243) |
-| mul | a5pnr | 170 [147-346] | 172 [164-186] | 14 | 407 | 89 | 0 | 8 | model 222 |
+| mul | a5pnr | 119 [118-132] | 118 [117-121] | 18 | 311 | 64 | 0 | 8 | 236 (restricted 236), 1 LAB left to Quartus, model 243 |
+| cpu | Quartus Pro | 2205 [1779-3760] | 2140 [2043-2314] | 19 | 390 | 54 | 1 | 0 | 300 (restricted 300) |
+| cpu | a5pnr | 126 [105-132] | 121 [107-130] | 18 | 413 | 67 | 1 | 0 | 178 (restricted 178), 1 LAB left to Quartus, model 149 |
+| picorv32 | Quartus Pro | 2239 [1564-2737] | 2103 [1768-2133] | 33 | 378 | 58 | 2 | 0 | 479 (restricted 344) |
+| picorv32 | a5pnr | 131 [113-133] | 128 [114-128] | 14 | 430 | 62 | 0 | 0 | 296 (restricted 296), every LAB locked, model 271 |
 
 | design | wall-time speed-up (Quartus / a5pnr) | CPU-time ratio |
 |---|---|---|
-| blinky | 19.0x | 17.8x |
-| leds | 17.9x | 16.4x |
-| acc | 13.4x | 15.9x |
-| cpu | 7.8x | 8.6x |
-| cpu_ff | 5.4x | 5.0x |
-| sha256 | 2.1x | 2.4x |
-| picorv32 | 12.6x | 10.4x |
-| mul | 13.7x | 12.9x |
+| blinky | 32.1x | 25.0x |
+| leds | 30.9x | 25.2x |
+| acc | 20.4x | 24.3x |
+| cpu_ff | 9.1x | 8.9x |
+| sha256 | 1.4x | 1.4x |
+| mul | 19.6x | 18.7x |
+| cpu | 17.5x | 17.7x |
+| picorv32 | 17.2x | 16.5x |
 
 ## Where the time goes
 
-Median seconds per step. a5pnr's `pnr` includes about 18 s of loading the
-routing graph; yosys runs from nixpkgs through `nix shell` (a few seconds of
-the 35). Quartus' `fit` includes 3–4 minutes of loading periphery placement
-data for any design.
+Median seconds per a5pnr step (`times.txt`; the a5pnr step includes about
+18 s of loading the routing graph). Quartus' steps are phase 10's:
+`quartus_syn` 120–202 s, `quartus_fit` 1,337–2,205 s (3–4 minutes of it
+loading periphery placement data for any design), `quartus_asm` 218–328 s.
 
-| design | yosys | a5pnr | a5db build | a5db rbf | | quartus_syn | quartus_fit | quartus_asm |
-|---|---|---|---|---|---|---|---|---|
-| blinky | 34 | 34 | 51 | 6 | | 120 | 1,828 | 328 |
-| leds | 35 | 42 | 45 | 6 | | 178 | 1,805 | 275 |
-| acc | 34 | 45 | 48 | 5 | | 149 | 1,337 | 230 |
-| cpu | 49 | 180 | 47 | 6 | | 191 | 1,720 | 297 |
-| cpu_ff | 42 | 419 | 48 | 7 | | 193 | 2,205 | 296 |
-| sha256 | 75 | 1,105 | 56 | 11 | | 202 | 2,048 | 308 |
-| picorv32 | 52 | 83 | 43 | 5 | | 199 | 1,745 | 230 |
-| mul | 46 | 81 | 38 | 6 | | 170 | 1,900 | 218 |
+| design | synthesis | a5pnr | a5db build | a5db rbf |
+|---|---|---|---|---|
+| blinky | 0 | 27 | 41 | 5 |
+| leds | 0 | 28 | 43 | 6 |
+| acc | 1 | 31 | 47 | 5 |
+| cpu | 1 | 73 | 41 | 5 |
+| cpu_ff | 4 | 243 | 41 | 7 |
+| sha256 | 13 | 1,829 | 41 | 7 |
+| picorv32 | 2 | 77 | 44 | 6 |
+| mul | 3 | 72 | 41 | 5 |
+
+chipsmith's synthesis takes under 15 s where yosys took 34–75.
 
 ## Caveats
 
-- **The machine was shared** with two other agents' builds, at a load of 4
-  to 47; the reps interleave the two tools, so both saw the same range, but
-  single numbers are noisy (blinky's Quartus run took 1,133 s at load 10
-  and 2,784 s at load 30).
-- **Quartus' LAB legalizer rejects some of a5pnr's LABs** ("too many LAB
-  line inputs") although a5pnr keeps every LAB to 50 distinct nets: one LAB
-  of the flop CPU's 207, and of sha256's 301 more than eight, one per
-  fitter run. sha256's row is a second a5pnr placement with a 44-net
-  budget, of whose 315 LABs Quartus still rejected 12, each left to Quartus
-  to place. No count a5pnr has (nets, nets from outside, nets per half-LAB,
-  LEIMs used) separates the rejected LABs from the rest; the rule is [unk]
-  (README (z13)).
+- **The machine was shared** with other agents' builds. Quartus Pro's times
+  are phase 10's (load 8 to 34), a5pnr's from this run (load 8 to 21), so
+  the speed-ups mix two load ranges; single numbers are noisy (blinky's
+  Quartus run took 1,133 s at load 10 and 2,784 s at load 30).
+- **Quartus' LAB legalizer**: its rule is decoded (README (z14): at most 55
+  LAB lines, a line per 5 sinks of a net and per 5 further LEIMs it takes
+  in an ALM) and a5pnr places by it, but Quartus' own greedy line count
+  runs a line or two above a5pnr's model (mul's refused LAB counts 54 by
+  the model, the MLAB CPU's one likewise), and in sha256's globally placed
+  LABs three were refused by Quartus' FLABS legalization pass at 49–51
+  lines by the model, a check other than the line counter [unk]. Each is
+  left to Quartus (`tools/bench/unlock_fit.sh`).
 - Quartus' resources come from a fit tuned for speed (a 2 ns clock,
   Hyper-Retiming on), as a5pnr's timing-driven run is; Quartus' smallest fit
   of the same RTL can be smaller (phase 8's flop CPU: 1,082 ALMs).
 - a5pnr's Fmax through Quartus' router measures a5pnr's placement, not its
-  routing; its own routes are timed only by its own model.
+  routing; its own routes are timed only by its own model. M20Ks and DSP
+  products are placed by Quartus in the export.
 
-Reproduce: `tools/bench/vs-quartus-pro.sh specimens/p10/bench 3`, then
-`tools/bench/unlock_fit.sh` on an export Quartus rejected (`CONTINUE=1` to
-go on), sha256's second placement with `A5PNR_LAB_INPUTS=44 … --quartus`,
-and `python3 -I tools/bench/table.py specimens/p10/bench`.
+Reproduce: `BENCH_A5PNR_ONLY=1 BENCH_NO_XFIT=1
+tools/bench/vs-quartus-pro.sh specimens/p11/bench 3`, each export through
+`tools/bench/unlock_fit.sh <bench>/runs/x_<design> <top>
+<bench>/runs/xf_<design> <bench>/sta/x_<design>`, Quartus Pro's rows and
+`sta/q_*` from `specimens/p10/bench`, then `python3 -I
+tools/bench/table.py specimens/p11/bench`.

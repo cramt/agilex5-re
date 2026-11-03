@@ -50,6 +50,9 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
     let mut prev = vec![u32::MAX; n];
     let mut stamp = vec![0u32; n];
     let mut stamp_now = 0u32;
+    // Per node in the net being routed, the delay from its source along the
+    // tree (by base cost).
+    let mut tdel = vec![0f32; n];
     let lab_re = g.type_id("LAB_RE");
     let mut trees: Vec<Vec<(u32, u32)>> = vec![Vec::new(); nets.len()];
     let mut reached: Vec<Vec<u32>> = nets.iter().map(|n| n.sinks.clone()).collect();
@@ -87,6 +90,7 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
             trees[ni].clear();
             occ[net.source as usize] += 1;
             let mut in_tree: Vec<u32> = vec![net.source];
+            tdel[net.source as usize] = 0.0;
             const MARGIN: i32 = 3;
             let pts = std::iter::once(net.source).chain(net.sinks.iter().copied());
             let bb = pts.fold((i32::MAX, i32::MIN, i32::MAX, i32::MIN), |b, m| {
@@ -122,11 +126,15 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
                     // thousands of nodes.
                     let dist = |m: u32| (g.x[m as usize] as i32 - tx).abs() + (g.y[m as usize] as i32 - ty).abs();
                     let dmin = in_tree.iter().map(|&m| dist(m)).min().unwrap_or(0);
+                    // A tree node starts at its delay from the source, weighed
+                    // by criticality (VPR's re-expansion): from 0 a critical
+                    // sink branched off wherever the tree came nearest,
+                    // however late that was.
                     for &m in in_tree.iter().filter(|&&m| !bounded || dist(m) <= dmin + 6) {
                         stamp[m as usize] = stamp_now;
-                        cost[m as usize] = 0.0;
+                        cost[m as usize] = cr * tdel[m as usize];
                         prev[m as usize] = u32::MAX;
-                        heap.push((Reverse(h(m).to_bits()), m));
+                        heap.push((Reverse((cost[m as usize] + h(m)).to_bits()), m));
                     }
                     expanded = 0;
                     while let Some((Reverse(fb), m)) = heap.pop() {
@@ -178,12 +186,17 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
                     bail!("net {}: no path to {} (iteration {iter}, {expanded} nodes expanded)", net.name, g.name(t));
                 }
                 let mut m = reached[ni][si];
+                let mut path = Vec::new();
                 while prev[m as usize] != u32::MAX {
                     let p = prev[m as usize];
                     trees[ni].push((p, m));
                     occ[m as usize] += 1;
                     in_tree.push(m);
+                    path.push((p, m));
                     m = p;
+                }
+                for &(p, m) in path.iter().rev() {
+                    tdel[m as usize] = tdel[p as usize] + base_by_type[g.ty[m as usize] as usize];
                 }
             }
         }

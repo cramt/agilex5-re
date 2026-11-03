@@ -89,31 +89,38 @@ pub struct Placement {
     pub dsp_at: Vec<(u32, u32)>,
 }
 
-/// Distinct nets a LAB's data pins may take. Each enters on one of the
-/// LAB's 80 local lines (LL, then a LEIM to the pin), and Quartus'
-/// legalizer rejects a LAB with too many ("too many LAB line inputs") by a
-/// rule that is [unk]: it rejected a5pnr LABs with 55, 59 and 61 nets (53,
-/// 58, 60 from outside the LAB) and took ones with 51; its own CPU fit
-/// takes at most 52 (48 from outside). 50 is under all of it [inf,
-/// README (z8)].
-pub const LAB_INPUTS: usize = 50;
+/// LAB lines a LAB may use, as Quartus' legalizer counts them ("too many
+/// LAB line inputs", README (z14)) [obs, its LBLK debug output: `num_ll =
+/// unique + heuristic -- num_ll_arch_limit = 55`]: a net takes a line per 5
+/// of its sinks in the LAB (`get_max_lab_line_fanout`), and a line per 5 of
+/// the further LEIMs it takes within one ALM (`Alm::line_sinks`).
+pub const LAB_LINES: u32 = 55;
 
-/// The budget, or A5PNR_LAB_INPUTS (a stricter one for a placement Quartus'
-/// legalizer has to take whole, README (z13)).
-fn lab_inputs() -> usize {
-    static N: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *N.get_or_init(|| std::env::var("A5PNR_LAB_INPUTS").ok().and_then(|v| v.parse().ok()).unwrap_or(LAB_INPUTS))
+/// ALMs from which placement starts from a global placement.
+const GLOBAL_FROM: usize = 1500;
+
+/// One LAB line carries a net to at most this many sinks.
+const LINE_FANOUT: u32 = 5;
+
+/// The budget, or A5PNR_LAB_LINES.
+fn lab_lines() -> u32 {
+    static N: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *N.get_or_init(|| std::env::var("A5PNR_LAB_LINES").ok().and_then(|v| v.parse().ok()).unwrap_or(LAB_LINES))
+}
+
+fn lines(sinks: u32, dups: u32) -> u32 {
+    sinks.div_ceil(LINE_FANOUT) + dups.div_ceil(LINE_FANOUT)
 }
 
 /// How many of each control line a LAB's ALMs ask for, and whether that
 /// fits: two clocks, two enables, one synchronous clear, two asynchronous
-/// clears (an ALM without one still takes a line, left inactive); and the
-/// nets on its ALMs' data pins.
+/// clears (an ALM without one still takes a line, left inactive); and per
+/// net its sinks and further LEIMs on LAB lines, with the lines they take.
 #[derive(Default, Clone)]
-struct LabUse(HashMap<Ctl, u32>, HashMap<u32, u32>);
+struct LabUse(HashMap<Ctl, u32>, HashMap<u32, (u32, u32)>, u32);
 
 impl LabUse {
-    fn add(&mut self, ctls: &[Ctl], ins: &[u32], d: i32) {
+    fn add(&mut self, ctls: &[Ctl], ins: &[(u32, u32, u32)], d: i32) {
         for c in ctls {
             let e = self.0.entry(*c).or_default();
             *e = (*e as i32 + d) as u32;
@@ -121,11 +128,14 @@ impl LabUse {
                 self.0.remove(c);
             }
         }
-        for n in ins {
-            let e = self.1.entry(*n).or_default();
-            *e = (*e as i32 + d) as u32;
-            if *e == 0 {
-                self.1.remove(n);
+        for &(n, sinks, dups) in ins {
+            let e = self.1.entry(n).or_default();
+            self.2 -= lines(e.0, e.1);
+            e.0 = (e.0 as i32 + d * sinks as i32) as u32;
+            e.1 = (e.1 as i32 + d * dups as i32) as u32;
+            self.2 += lines(e.0, e.1);
+            if e.0 == 0 {
+                self.1.remove(&n);
             }
         }
     }
@@ -143,7 +153,7 @@ impl LabUse {
                 Ctl::Aclr(None) | Ctl::Wa(..) => {}
             }
         }
-        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.1.len() <= lab_inputs()
+        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.2 <= lab_lines()
     }
 }
 
@@ -188,22 +198,13 @@ pub fn place(
     let lab_at: HashMap<(u32, u32), usize> = labs.iter().enumerate().map(|(i, l)| ((l.x, l.y), i)).collect();
     let n = p.alms.len();
     let ctls: Vec<Vec<Ctl>> = p.alms.iter().map(|a| a.ctls(nl)).collect();
-    // Per ALM, the nets on its data pins (clocks ride the clock network).
-    let mut ins: Vec<Vec<u32>> = vec![Vec::new(); n];
-    for (&net, (_, sinks)) in &p.nets {
-        if p.clocks.contains(&net) {
-            continue;
-        }
-        for e in sinks {
-            if let End::In { alm, .. } = e {
-                ins[*alm].push(net);
-            }
-        }
-    }
-    for v in &mut ins {
-        v.sort();
-        v.dedup();
-    }
+    // Per ALM, what it asks of its LAB's lines (clocks ride the clock
+    // network).
+    let ins: Vec<Vec<(u32, u32, u32)>> = p
+        .alms
+        .iter()
+        .map(|a| a.line_sinks(nl).into_iter().filter(|(n, ..)| !p.clocks.contains(n)).collect())
+        .collect();
     let mut occ: HashMap<(usize, u8), usize> = HashMap::default();
     let mut uses: Vec<LabUse> = vec![LabUse::default(); labs.len()];
     let mut at = vec![(usize::MAX, 0u8); n];
@@ -272,8 +273,34 @@ pub fn place(
         }
         trial.values().all(LabUse::ok).then_some(slots)
     };
+    // Big designs start from chipsmith's electrostatic global placer: the
+    // start fills LABs nearest each ALM's centre and the anneal only
+    // refines (README (z14): sha256 97 → 104 MHz, the flop CPU 138 → 136;
+    // A5PNR_GLOBAL=0/1 forces it off or on).
+    let global_on = match std::env::var("A5PNR_GLOBAL").as_deref() {
+        Ok("1") => true,
+        Ok("0") => false,
+        _ => n >= GLOBAL_FROM,
+    };
+    let centres = if global_on {
+        Some(global(p, labs, port_xy, &m20k_at, &dsp_at, &at, &in_ram)?)
+    } else {
+        None
+    };
+    let near = |c: (f32, f32)| -> Vec<usize> {
+        let mut v = by_dist.clone();
+        v.sort_by(|&a, &b| {
+            let d = |l: usize| (labs[l].x as f32 - c.0).abs() + (labs[l].y as f32 - c.1).abs();
+            d(a).total_cmp(&d(b))
+        });
+        v
+    };
     for (ci, c) in p.chains.iter().enumerate() {
-        let slots = by_dist
+        let order = match &centres {
+            Some(cs) => near(cs[c[0]]),
+            None => by_dist.clone(),
+        };
+        let slots = order
             .iter()
             .map(|&l| (l, 0))
             .find_map(|(l, k0)| chain_slots(&occ, &uses, c, labs[l].x, labs[l].y, k0))
@@ -290,8 +317,15 @@ pub fn place(
             if chain_of[a] != usize::MAX || in_ram[a] {
                 continue;
             }
+            let order = match &centres {
+                Some(cs) => {
+                    li = 0;
+                    near(cs[a])
+                }
+                None => by_dist.clone(),
+            };
             'find: loop {
-                let l = *by_dist.get(li).context("design doesn't fit")?;
+                let l = *order.get(li).context("design doesn't fit")?;
                 for k in 0..10u8 {
                     if !occ.contains_key(&(l, k)) {
                         let mut u = uses[l].clone();
@@ -534,6 +568,11 @@ pub fn place(
     let mean = deltas.iter().sum::<f64>() / deltas.len().max(1) as f64;
     let sd = (deltas.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / deltas.len().max(1) as f64).sqrt();
     let mut temp = 20.0 * sd.max(1e-6);
+    if centres.is_some() {
+        // From a global placement: refine, don't melt it.
+        temp *= std::env::var("A5PNR_GLOBAL_T").ok().and_then(|v| v.parse().ok()).unwrap_or(0.02);
+        rlim = 6.0;
+    }
     let inner = ((effort * (n as f64).powf(4.0 / 3.0)) as usize).max(200);
     let nets_n = nets.len().max(1) as f64;
     let mut rounds = 0;
@@ -587,4 +626,82 @@ pub fn place(
         (0..nets.len()).map(|i| net_cost(&at, i)).sum::<f64>()
     );
     Ok(Placement { at, m20k_at, dsp_at })
+}
+
+/// Each ALM's centre (LAB x, y) from chipsmith's electrostatic placer
+/// (chipsmith_place::electro, ePlace's density model): one bin per LAB
+/// site, an ALM a tenth of one, a carry chain a column of LABs one row per
+/// ten ALMs; ports, M20Ks, DSPs and MLAB RAM fixed.
+fn global(
+    p: &Packed,
+    labs: &[Lab],
+    port_xy: &HashMap<usize, (u32, u32)>,
+    m20k_at: &[(u32, u32)],
+    dsp_at: &[(u32, u32)],
+    at: &[(usize, u8)],
+    in_ram: &[bool],
+) -> Result<Vec<(f32, f32)>> {
+    use chipsmith_place::electro;
+    use chipsmith_place::{Pin, PinOf};
+    let (w, h) = (labs.iter().map(|l| l.x).max().unwrap() as usize + 1, labs.iter().map(|l| l.y).max().unwrap() as usize + 1);
+    let mut cap = vec![0f32; w * h];
+    for l in labs.iter().filter(|l| !l.mlab) {
+        cap[l.y as usize * w + l.x as usize] = 1.0;
+    }
+    let mut prob = electro::Problem::new(w, h, vec![cap]);
+    let n = p.alms.len();
+    // Per ALM: its object and its row offset from the object's centre.
+    let mut obj: Vec<Option<(u32, f32)>> = vec![None; n];
+    let mut chained = vec![false; n];
+    for c in &p.chains {
+        let rows = c.len().div_ceil(10);
+        let o = prob.add_object(rows as u32, &[(0, c.len() as f32 / 10.0)]);
+        for (k, &a) in c.iter().enumerate() {
+            // A chain runs on into the LAB one row down.
+            obj[a] = Some((o, (rows as f32 - 1.0) / 2.0 - (k / 10) as f32));
+            chained[a] = true;
+        }
+    }
+    let mut fixed: HashMap<(u32, u32), u32> = HashMap::default();
+    let mut fix = |prob: &mut electro::Problem, xy: (u32, u32)| *fixed.entry(xy).or_insert_with(|| prob.add_fixed((xy.0 as f32 + 0.5, xy.1 as f32 + 0.5)));
+    for a in 0..n {
+        if !chained[a] && !in_ram[a] {
+            obj[a] = Some((prob.add_object(1, &[(0, 0.1)]), 0.0));
+        }
+    }
+    for (_, (d, sinks)) in p.nets.iter().filter(|(k, _)| !p.clocks.contains(k)) {
+        let mut pins = Vec::new();
+        for e in std::iter::once(d).chain(sinks.iter()) {
+            let pin = match e {
+                End::Out { alm, .. } | End::In { alm, .. } | End::Ctl { alm, .. } => match obj[*alm] {
+                    Some((o, dy)) => Some(Pin { of: PinOf::Object(o), dx: 0.0, dy }),
+                    None => {
+                        let l = labs[at[*alm].0];
+                        Some(Pin { of: PinOf::Fixed(fix(&mut prob, (l.x, l.y))), dx: 0.0, dy: 0.0 })
+                    }
+                },
+                End::Port(q) | End::Io { port: q, .. } => port_xy.get(q).map(|&xy| Pin { of: PinOf::Fixed(fix(&mut prob, xy)), dx: 0.0, dy: 0.0 }),
+                End::M20k { m, .. } => Some(Pin { of: PinOf::Fixed(fix(&mut prob, m20k_at[*m])), dx: 0.0, dy: 0.0 }),
+                End::Dsp { d, .. } => Some(Pin { of: PinOf::Fixed(fix(&mut prob, dsp_at[*d])), dx: 0.0, dy: 0.0 }),
+                End::Pll(_) => None,
+            };
+            pins.extend(pin);
+        }
+        if pins.len() >= 2 {
+            prob.add_net(pins, 1.0);
+        }
+    }
+    let t0 = std::time::Instant::now();
+    let opts = electro::Options { accel: electro::Accel::Threads, ..Default::default() };
+    let out = electro::place(&prob, &mut electro::NoTiming, None, &opts).map_err(anyhow::Error::msg)?;
+    eprintln!("place: global placement in {} iterations, overflow {:.3}, {:.1} s", out.iterations, out.overflow[0], t0.elapsed().as_secs_f64());
+    Ok((0..n)
+        .map(|a| match obj[a] {
+            Some((o, dy)) => {
+                let (x, y) = out.centres[o as usize];
+                (x - 0.5, y - 0.5 + dy)
+            }
+            None => (labs[at[a].0].x as f32, labs[at[a].0].y as f32),
+        })
+        .collect())
 }

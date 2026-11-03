@@ -279,8 +279,10 @@ pub fn half_function(h: usize, mask: u64, pins: &[u8]) -> u32 {
 
 /// Put two LUTs (input nets l0, l1) in the halves of one ALM: the nets on A
 /// and B are read by both, every other input goes on its half's C, D, E.
-/// A and B carry as few nets as possible (they are the LEIM pins). Returns
-/// each LUT's pins.
+/// A net both read goes on A or B where it can: on C0 and C1 it would take
+/// two LEIMs and a second LAB line (README (z14)); otherwise A and B carry
+/// as few nets as possible (they are the LEIM pins). Returns each LUT's
+/// pins.
 pub fn fit_halves(l0: &[u32], l1: &[u32]) -> Option<(Vec<u8>, Vec<u8>)> {
     if l0.len() > 5 || l1.len() > 5 {
         return None;
@@ -302,6 +304,8 @@ pub fn fit_halves(l0: &[u32], l1: &[u32]) -> Option<(Vec<u8>, Vec<u8>)> {
             cands.push(vec![all[i], all[j]]);
         }
     }
+    let shared = |s: &Vec<u32>| s.iter().filter(|n| l0.contains(n) && l1.contains(n)).count();
+    cands.sort_by_key(|s| (std::cmp::Reverse(shared(s)), s.len()));
     for s in cands {
         let r0: Vec<u32> = l0.iter().copied().filter(|n| !s.contains(n)).collect();
         let r1: Vec<u32> = l1.iter().copied().filter(|n| !s.contains(n)).collect();
@@ -459,6 +463,63 @@ impl Alm {
             }
         }
         out
+    }
+
+    /// What the ALM asks of its LAB's lines, as Quartus' legalizer counts
+    /// it (README (z14)): per net, its sinks (atom inputs: a shared A or B
+    /// once per LUT reading it; flop enables and clears), and the LEIMs it
+    /// takes beyond the first (the same net on C0 and C1 takes two).
+    /// Clocks are not on LAB lines.
+    pub fn line_sinks(&self, nl: &Netlist) -> Vec<(u32, u32, u32)> {
+        let mut per: BTreeMap<u32, (u32, u8)> = BTreeMap::new();
+        let mut add = |n: u32, pin: Option<u8>| {
+            let e = per.entry(n).or_insert((0, 0));
+            e.0 += 1;
+            if let Some(p) = pin {
+                e.1 |= 1 << p;
+            }
+        };
+        match &self.logic {
+            // One atom: C and D reach C1 and D1 too, but as one input each.
+            Logic::Six { cell, pos } => {
+                let Cell::Lut { ins, .. } = &nl.cells[*cell] else { unreachable!() };
+                for (k, &p) in pos.iter().enumerate() {
+                    add(ins[k], Some(SIX_PIN[p as usize]));
+                }
+            }
+            Logic::Five { halves } => {
+                for half in halves.iter().flatten() {
+                    match half.lut {
+                        HalfLut::Cell(c) => {
+                            let Cell::Lut { ins, .. } = &nl.cells[c] else { unreachable!() };
+                            for (k, &p) in half.pins.iter().enumerate() {
+                                add(ins[k], Some(p));
+                            }
+                        }
+                        // The flop's own D input, in Quartus' atoms.
+                        HalfLut::Pass(n) => add(n, half.pins.first().copied()),
+                    }
+                }
+            }
+            Logic::Ram { .. } | Logic::Arith { .. } => {
+                for (p, n) in self.pin_nets(nl).iter().enumerate() {
+                    if let Some(n) = n {
+                        add(*n, Some(p as u8));
+                    }
+                }
+            }
+        }
+        for s in 0..4 {
+            let Some(Slot::Ff { ff, src }) = self.slots[s] else { continue };
+            let Cell::Ff(f) = &nl.cells[ff] else { unreachable!() };
+            if let (Src::Leim, Sig::Net(d)) = (src, f.d) {
+                add(d, Some(LEIM_PIN[s / 2]));
+            }
+            for n in [f.ce, f.sclr, f.aclr.map(|a| a.net)].into_iter().flatten() {
+                add(n, None);
+            }
+        }
+        per.into_iter().map(|(n, (sinks, pins))| (n, sinks, pins.count_ones().saturating_sub(1))).collect()
     }
 
     /// Put flop ff (D = net d) into a free slot: through LEIM when the
@@ -661,7 +722,9 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
     };
     // MLAB RAM (README (z9)): bits with the same clock, write enable and
     // write address share an MLAB's write side, ten ALMs to an MLAB; two
-    // bits with the same read address share an ALM.
+    // bits with the same read address share an ALM, and an MLAB holds one
+    // read address: Quartus takes no other ("two incompatible RAM
+    // assignments", README (z14)), though the image reads it per ALM.
     let mut mlabs: Vec<Vec<usize>> = Vec::new();
     {
         let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
@@ -686,8 +749,8 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
                 let Cell::Mlab(m) = &nl.cells[i] else { unreachable!() };
                 by_raddr.entry(format!("{:?}", m.raddr)).or_default().push(i);
             }
-            let mut group_alms = Vec::new();
             for bits in by_raddr.values() {
+                let mut group_alms = Vec::new();
                 for pair in bits.chunks(2) {
                     let mut alm = Alm { logic: Logic::Ram { halves: [pair.first().copied(), pair.get(1).copied()] }, slots: [None; 4] };
                     for (h, &c) in pair.iter().enumerate() {
@@ -699,8 +762,8 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
                     group_alms.push(alms.len());
                     alms.push(alm);
                 }
+                mlabs.extend(group_alms.chunks(10).map(<[usize]>::to_vec));
             }
-            mlabs.extend(group_alms.chunks(10).map(<[usize]>::to_vec));
         }
     }
     // Carry chains, from their heads.

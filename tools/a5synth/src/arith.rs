@@ -114,3 +114,100 @@ fn chain(g: &mut Gates, subst: &mut Subst, alu: &Alu, read: &std::collections::H
         }
     }
 }
+
+/// `(a + b) + c` or `(a + c) + b` for a single unsigned bit c, as
+/// chipsmith's `alumacc` leaves it (two adders): one adder of a and b
+/// with c as its carry-in, which the chain's start cell takes (yosys'
+/// `alumacc` does the same: README (z14), arith 24 → 23 ALMs). The first
+/// adder's sum must be read by the second alone, at the same width.
+/// Returns how many were folded.
+pub fn fold_carry_in(m: &mut Module) -> usize {
+    let mut reads: std::collections::HashMap<Net, usize> = Default::default();
+    for c in &m.cells {
+        c.kind.for_each_port(|p| {
+            if p.dir.is_none_or(|d| d.reads()) {
+                for n in p.bits.iter().filter_map(|b| b.net()) {
+                    *reads.entry(n).or_default() += 1;
+                }
+            }
+        });
+    }
+    for (_, w, d) in m.ports() {
+        if d.drives() {
+            for n in w.bits.iter().filter_map(|b| b.net()) {
+                *reads.entry(n).or_default() += 1;
+            }
+        }
+    }
+    let unread = |s: &SigSpec| s.iter().all(|b| b.net().is_none_or(|n| !reads.contains_key(&n)));
+    // An unsigned operand that is one bit, zero-extended.
+    let one_bit = |o: &chipsmith_netlist::Operand| (!o.signed && !o.sig.is_empty() && o.sig.iter().skip(1).all(|&b| b == SigBit::ZERO)).then(|| o.sig[0]);
+    let plain = |z: &Alu| z.ci == SigBit::ZERO && z.bi == SigBit::ZERO && unread(&z.x) && unread(&z.co);
+    let mut sum_of: std::collections::HashMap<SigSpec, usize> = Default::default();
+    for (i, c) in m.cells.iter().enumerate() {
+        if let CellKind::Alu(z) = &c.kind {
+            if plain(z) && z.y.iter().all(|b| b.net().is_none_or(|n| reads.get(&n) == Some(&1))) {
+                sum_of.insert(z.y.clone(), i);
+            }
+        }
+    }
+    // (outer, inner, the operand of outer to replace with inner's wide one,
+    // or None: inner takes outer's place; the carry-in)
+    let mut folds: Vec<(usize, usize, Option<(bool, chipsmith_netlist::Operand)>, SigBit)> = Vec::new();
+    let mut used = std::collections::HashSet::new();
+    for (i, c) in m.cells.iter().enumerate() {
+        let CellKind::Alu(o) = &c.kind else { continue };
+        if !plain(o) {
+            continue;
+        }
+        for (first, wide, other) in [(true, &o.a, &o.b), (false, &o.b, &o.a)] {
+            let Some(&z) = sum_of.get(&wide.sig) else { continue };
+            let CellKind::Alu(inner) = &m.cells[z].kind else { unreachable!() };
+            if z == i || inner.y.len() != o.y.len() || wide.sig.len() != o.y.len() || used.contains(&z) || used.contains(&i) {
+                continue;
+            }
+            let fold = if let Some(bit) = one_bit(other) {
+                Some((None, bit))
+            } else if let Some(bit) = one_bit(&inner.b) {
+                Some((Some((first, inner.a.clone())), bit))
+            } else {
+                one_bit(&inner.a).map(|bit| (Some((first, inner.b.clone())), bit))
+            };
+            if let Some((op, bit)) = fold {
+                used.insert(z);
+                used.insert(i);
+                folds.push((i, z, op, bit));
+                break;
+            }
+        }
+    }
+    let n = folds.len();
+    let mut gone = vec![false; m.cells.len()];
+    for (outer, inner, op, ci) in folds {
+        match op {
+            // outer = sum + bit: inner adds the bit as its carry and drives outer's sum.
+            None => {
+                let CellKind::Alu(o) = &m.cells[outer].kind else { unreachable!() };
+                let y = o.y.clone();
+                let CellKind::Alu(z) = &mut m.cells[inner].kind else { unreachable!() };
+                z.ci = ci;
+                z.y = y;
+                gone[outer] = true;
+            }
+            // inner = wide + bit: outer adds inner's wide operand and the bit.
+            Some((first, wide)) => {
+                let CellKind::Alu(o) = &mut m.cells[outer].kind else { unreachable!() };
+                if first {
+                    o.a = wide;
+                } else {
+                    o.b = wide;
+                }
+                o.ci = ci;
+                gone[inner] = true;
+            }
+        }
+    }
+    let mut k = gone.into_iter();
+    m.cells.retain(|_| !k.next().unwrap());
+    n
+}

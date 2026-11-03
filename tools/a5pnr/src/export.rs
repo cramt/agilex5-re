@@ -50,6 +50,7 @@ fn split(name: &str) -> (&str, Option<usize>) {
 
 /// Writes `<dir>/<top>.v`, `.qsf`, `.sdc` and `.qpf`. `pins`: port name →
 /// (ball, I/O standard as in the pins file).
+#[allow(clippy::too_many_arguments)]
 pub fn write(
     dir: &str,
     top: &str,
@@ -58,6 +59,7 @@ pub fn write(
     labs: &[Lab],
     pl: &Placement,
     pins: &HashMap<String, (String, String)>,
+    io: &[crate::ioreg::IoRegs],
 ) -> Result<()> {
     if !p.plls.is_empty() {
         bail!("quartus export: IOPLLs aren't exported yet");
@@ -85,28 +87,98 @@ pub fn write(
     for n in 0..nl.nets.len() {
         writeln!(v, "  wire n{n};")?;
     }
+    // An output an OE register drives is the tristate its $_TBUF_ makes.
+    let tbuf: HashMap<u32, (Sig, Sig)> = nl
+        .cells
+        .iter()
+        .filter_map(|c| match c {
+            Cell::Tbuf { a, e, y } => Some((*y, (*a, *e))),
+            _ => None,
+        })
+        .collect();
     for port in &nl.ports {
         let (b, i) = split(&port.name);
         let pn = i.map_or(b.to_owned(), |i| format!("{b}[{i}]"));
         match (port.input, port.net) {
             (true, Sig::Net(n)) => writeln!(v, "  assign n{n} = {pn};")?,
             (true, Sig::Const(_)) => {}
+            (false, Sig::Net(n)) if tbuf.contains_key(&n) => {
+                let (a, e) = tbuf[&n];
+                writeln!(v, "  assign {pn} = {} ? {} : 1'bz;", sig(e), sig(a))?
+            }
             (false, s) => writeln!(v, "  assign {pn} = {};", sig(s))?,
         }
     }
+    let write_ff = |v: &mut String, name: &str, f: &crate::netlist::Ff| -> Result<()> {
+        let mut conns = vec![format!(".d({})", sig(f.d)), format!(".clk(n{})", f.clk), format!(".q(n{})", f.q)];
+        // tennm_ff's synchronous clear acts only while enabled
+        // (sclr_over_ena = "false"); a clear that wins over the
+        // enable also enables.
+        match (f.ce, f.sclr) {
+            (Some(e), Some(c)) if f.sclr_first => conns.push(format!(".ena(n{e} | n{c})")),
+            (Some(e), _) => conns.push(format!(".ena(n{e})")),
+            _ => {}
+        }
+        if let Some(c) = f.sclr {
+            conns.push(format!(".sclr(n{c})"));
+        }
+        if let Some(c) = f.aclr {
+            conns.push(format!(".clrn({}n{})", if c.active_low { "" } else { "~" }, c.net));
+        }
+        writeln!(v, "  tennm_ff #(.power_up(\"low\")) {name} ({});", conns.join(", "))?;
+        Ok(())
+    };
     let lut = |v: &mut String, name: &str, mask: u64, ports: &[(char, u32)], out: u32| -> Result<()> {
         let mut conns: Vec<String> = ports.iter().map(|(c, n)| format!(".data{c}(n{n})")).collect();
         conns.push(format!(".combout(n{out})"));
         writeln!(v, "  tennm_lcell_comb #(.lut_mask(64'h{mask:016x})) {name} ({});", conns.join(", "))?;
         Ok(())
     };
+    // An MLAB's bits are one logical RAM to Quartus: bits of one MLAB
+    // named as different RAMs are "two incompatible RAM assignments".
+    let mut ram_bit: HashMap<(usize, usize), (usize, usize, usize)> = HashMap::default();
+    for (g, alms) in p.mlabs.iter().enumerate() {
+        let bits: Vec<(usize, usize)> = alms
+            .iter()
+            .flat_map(|&a| match &p.alms[a].logic {
+                Logic::Ram { halves } => (0..2).filter(|&h| halves[h].is_some()).map(|h| (a, h)).collect::<Vec<_>>(),
+                _ => vec![],
+            })
+            .collect();
+        for (i, &b) in bits.iter().enumerate() {
+            ram_bit.insert(b, (g, i, bits.len()));
+        }
+    }
     for (a, alm) in p.alms.iter().enumerate() {
         let (l, k) = pl.at[a];
         let (x, y) = (labs[l].x, labs[l].y);
         let k = k as u32;
         let site = |h: usize| format!("LABCELL_X{x}_Y{y}_N{}", 6 * k + 3 * h as u32);
         match &alm.logic {
-            Logic::Ram { .. } => bail!("MLAB RAM in the Quartus export: not done (README (z9))"),
+            // One RAM bit per half (README (z9)) as Quartus' own MLAB atom
+            // (eda/fv_lib/verilog/tennm/tennm_mlab_cell.v): a 32 x 1 RAM,
+            // write on clk0 while ena0, read unregistered.
+            Logic::Ram { halves } => {
+                for (h, c) in halves.iter().enumerate() {
+                    let Some(c) = c else { continue };
+                    let Cell::Mlab(m) = &nl.cells[*c] else { unreachable!() };
+                    let bus = |s: &[Sig]| format!("{{{}}}", s.iter().rev().map(|&b| sig(b)).collect::<Vec<_>>().join(", "));
+                    let name = format!("a{a}_r{h}");
+                    let (g, bit, width) = ram_bit[&(a, h)];
+                    let out = m.rdata.map_or(String::new(), |n| format!(", .portbdataout(n{n})"));
+                    writeln!(
+                        v,
+                        "  tennm_mlab_cell #(.logical_ram_name(\"mlab{g}\"), .logical_ram_depth(32), .logical_ram_width({width}), .first_address(0), .last_address(31), .first_bit_number({bit}), .data_width(1), .address_width(5), .port_b_data_out_clock(\"none\"), .mem_init0(\"{:08X}\")) {name} (.portadatain({}), .portaaddr({}), .portbaddr({}), .clk0(n{}), .ena0({}){out});",
+                        m.init,
+                        sig(m.wdata),
+                        bus(&m.waddr),
+                        bus(&m.raddr),
+                        m.clk,
+                        sig(m.we)
+                    )?;
+                    writeln!(loc, "set_location_assignment MLABCELL_X{x}_Y{y}_N{} -to {name}", 6 * k + 3 * h as u32)?;
+                }
+            }
             Logic::Six { cell, pos } => {
                 let Cell::Lut { ins, mask, out } = &nl.cells[*cell] else { unreachable!() };
                 let w = widen(*mask, pos);
@@ -158,22 +230,7 @@ pub fn write(
             let Some(Slot::Ff { ff, .. }) = alm.slots[s] else { continue };
             let Cell::Ff(f) = &nl.cells[ff] else { unreachable!() };
             let name = format!("a{a}_f{s}");
-            let mut conns = vec![format!(".d({})", sig(f.d)), format!(".clk(n{})", f.clk), format!(".q(n{})", f.q)];
-            // tennm_ff's synchronous clear acts only while enabled
-            // (sclr_over_ena = "false"); a clear that wins over the
-            // enable also enables.
-            match (f.ce, f.sclr) {
-                (Some(e), Some(c)) if f.sclr_first => conns.push(format!(".ena(n{e} | n{c})")),
-                (Some(e), _) => conns.push(format!(".ena(n{e})")),
-                _ => {}
-            }
-            if let Some(c) = f.sclr {
-                conns.push(format!(".sclr(n{c})"));
-            }
-            if let Some(c) = f.aclr {
-                conns.push(format!(".clrn({}n{})", if c.active_low { "" } else { "~" }, c.net));
-            }
-            writeln!(v, "  tennm_ff #(.power_up(\"low\")) {name} ({});", conns.join(", "))?;
+            write_ff(&mut v, &name, f)?;
             writeln!(loc, "set_location_assignment FF_X{x}_Y{y}_N{} -to {name}", 6 * k + 3 * (s as u32 / 2) + 1 + s as u32 % 2)?;
         }
     }
@@ -203,9 +260,59 @@ pub fn write(
             rdata.join(", ")
         )?;
     }
+    // I/O registers as flops Quartus puts in the pin's I/O cell itself
+    // (FAST_*_REGISTER below): no location of their own.
+    let mut fast = String::new();
+    for r in io {
+        let port = &nl.ports[r.port].name;
+        for (f, what) in [(r.input, "FAST_INPUT_REGISTER"), (r.output, "FAST_OUTPUT_REGISTER"), (r.oe, "FAST_OUTPUT_ENABLE_REGISTER")] {
+            let Some(f) = f else { continue };
+            let Cell::Ff(c) = &nl.cells[f] else { unreachable!() };
+            write_ff(&mut v, &format!("io{f}"), c)?;
+            writeln!(fast, "set_instance_assignment -name {what} ON -to {port}")?;
+        }
+    }
+    // DSP blocks as a5pnr's model (README (z11)), an operand product into
+    // the output register, which Quartus infers and places itself, as the
+    // M20Ks.
+    for (i, d) in p.dsps.iter().enumerate() {
+        let Cell::Mul { mode, a, b, p: prod } = &nl.cells[d.cell] else { unreachable!() };
+        let bus = |s: &[Sig]| format!("{{{}}}", s.iter().rev().map(|&b| sig(b)).collect::<Vec<_>>().join(", "));
+        let q: Vec<String> = (0..prod.len())
+            .rev()
+            .map(|k| match d.regs[k] {
+                Some(f) => match &nl.cells[f] {
+                    Cell::Ff(f) => format!("n{}", f.q),
+                    _ => unreachable!(),
+                },
+                None => {
+                    format!("q{i}_{k}")
+                }
+            })
+            .collect();
+        for k in 0..prod.len() {
+            if d.regs[k].is_none() {
+                writeln!(v, "  wire q{i}_{k};")?;
+            }
+        }
+        writeln!(
+            v,
+            "  a5_mul #(.W({}), .PW({}), .SIGNED({})) d{i} (.CLK(n{}), .A({}), .B({}), .P({{{}}}));",
+            mode.width(),
+            prod.len(),
+            mode.signed as u8,
+            d.clk,
+            bus(a),
+            bus(b),
+            q.join(", ")
+        )?;
+    }
     writeln!(v, "endmodule")?;
     if !p.m20ks.is_empty() {
         v.push_str(M20K_RTL);
+    }
+    if !p.dsps.is_empty() {
+        v.push_str(MUL_RTL);
     }
     std::fs::write(format!("{dir}/{top}.v"), v)?;
 
@@ -233,6 +340,7 @@ pub fn write(
         writeln!(q, "set_location_assignment PIN_{ball} -to {}", port.name)?;
         writeln!(q, "set_instance_assignment -name IO_STANDARD \"{std}\" -to {}", port.name)?;
     }
+    q.push_str(&fast);
     q.push_str(&loc);
     std::fs::write(format!("{dir}/{top}.qsf"), q)?;
     std::fs::write(format!("{dir}/{top}.qpf"), format!("PROJECT_REVISION = \"{top}\"\n"))?;
@@ -247,6 +355,16 @@ pub fn write(
     std::fs::write(format!("{dir}/{top}.sdc"), sdc)?;
     Ok(())
 }
+
+/// A registered multiply of two W-bit operands (yosys/cells_sim.v A5_MUL).
+const MUL_RTL: &str = r#"
+module a5_mul #(parameter W = 18, parameter PW = 36, parameter SIGNED = 0) (
+    input CLK, input [W-1:0] A, input [W-1:0] B, output reg [PW-1:0] P = 0
+);
+    wire [PW-1:0] prod = SIGNED ? $signed(A) * $signed(B) : A * B;
+    always @(posedge CLK) P <= prod;
+endmodule
+"#;
 
 /// yosys/cells_sim.v's A5_M20K, as RTL Quartus infers an M20K from (a
 /// registered read address, the data unregistered unless OUTREG).

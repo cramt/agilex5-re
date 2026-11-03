@@ -3045,6 +3045,244 @@ its own, on the shared machine (load 4 to 47). Full write-up:
 - Not measured: Fmax of a5pnr's placement where the export refuses MLAB
   RAM, DSPs or I/O registers (the MLAB CPU, picorv32, mul: model only).
 
+### (z14) Phase 11: closing the gap to Quartus Pro
+
+**An ALM-aware LUT cost in chipsmith's mapper** (chipsmith branch
+`a5-almcost` off `open` 80351e1, not merged into `open`; tools/a5synth pins
+it). `lutmap::MapOptions` carries two things the mapper didn't have, both
+off by default (`MapOptions::DEFAULT`, which `map_module_k` uses):
+
+- `LutCost`, an area per cut by input count (`LutCost::by_inputs`; no cost
+  may be 0). Area flow and exact area count it where they counted 1 per LUT.
+- `keep_best_cut`: in the area-flow passes a node's previous best cut stays
+  among its candidates, as ABC keeps it. Without it the fanins' new cut
+  lists may no longer produce that cut, and the node takes a cut over its
+  required depth: the mapping ends deeper than the depth pass's (sha256: 8
+  levels against 7, the CPU 6 against 5) [obs].
+
+a5synth maps with `keep_best_cut` and the cost 3 per LUT of up to four
+inputs, 4 per 5-input LUT and 6 per 6-input LUT (thirds of an ALM: a 6-LUT
+takes the ALM; any two LUTs of up to four inputs pair; two 5-LUTs pair only
+when they share A and B). `A5_LUTCOST=c0,..,c6` overrides it;
+`tools/a5synth/costbench.sh` measures a table [obs, `specimens/p11/cost*`,
+ALMs by a5pnr's packing / mapper depth]:
+
+| cost (≤4, 5, 6 inputs) | best cut kept | cpu | cpu_ff | sha256 | picorv32 | mul | fr |
+|---|---|---|---|---|---|---|---|
+| 1, 1, 1 (phase 10) | no | 450 / 6 | 1,343 / 6 | 2,111 / 8 | 506 / 5 | 364 / 4 | 209 / 4 |
+| 1, 1, 1 | yes | 451 / 5 | 1,344 / 5 | 2,096 / 7 | 506 / 5 | 364 / 4 | 209 / 4 |
+| 1, 1, 2 | yes | 426 / 5 | 1,456 / 5 | 1,722 / 6 | 429 / 4 | 305 / 4 | 197 / 4 |
+| 2, 3, 4 | yes | 435 / 5 | 1,322 / 5 | 1,701 / 7 | 432 / 4 | 319 / 4 | 202 / 4 |
+| 4, 5, 8 | no | 430 / 5 | 1,309 / 5 | 1,651 / 10 | 425 / 5 | 310 / 5 | 201 / 4 |
+| 4, 5, 8 | yes | 430 / 5 | 1,309 / 5 | 1,723 / 6 | 430 / 4 | 311 / 4 | 201 / 4 |
+| **3, 4, 6** | yes | **430 / 5** | **1,317 / 5** | **1,669 / 7** | **430 / 4** | **311 / 4** | **201 / 4** |
+| Quartus Pro (z13) | | 390 | 1,454 | 1,457 | 378 | 329 | 233 (phase 8) |
+
+- Charging a 6-LUT twice a 5-LUT (1, 1, 2) makes 5-LUTs that don't pair:
+  the flop CPU grows to 1,456 ALMs. A 5-LUT between the two (4/3) is best
+  overall; 4, 5, 8 is as good but for sha256 [obs].
+- Keeping the best cut costs no area at equal cost and keeps depth: without
+  it, 4, 5, 8 maps sha256 10 levels deep.
+- ALMs against phase 10's chipsmith mapping: sha256 2,111 → 1,669 (−21 %),
+  picorv32 506 → 430, mul 364 → 311, the MLAB CPU 450 → 430, the flop CPU
+  1,343 → 1,317 [obs]. Against yosys (phase 10's default): sha256 2,620 →
+  1,669, picorv32 805 → 430, the MLAB CPU 453 → 430, the flop CPU 1,394 →
+  1,317, mul 407 → 311, fr 505 → 201; equal on the small designs but arith
+  (24 against 23) and ctl (38 against 39).
+- The flop CPU keeps 727 6-LUTs at any cost: its register file's 32:1 read
+  muxes are 4:1 muxes (6 inputs) on the critical depth [inf].
+- **Default-neutral** [obs, `specimens/p11/neutral`]: chipsmith's 41
+  examples built by `open` 80351e1 and by the branch, cache off, fresh
+  copies: all 34 DE2 RBFs and all 7 Zybo bitstreams byte-identical; the
+  xc7 bitstream tests (`cargo test --release -p chipsmith --test
+  xc7_bitstream`) pass on the branch, 12 of 12.
+- A multiplier hook in chipsmith wasn't needed: a5synth maps `$mul` to
+  `A5_MUL` itself before `alumacc` (`tools/a5synth/src/mult.rs`, phase 10).
+
+**picorv32's register-level check** [obs]. Two simcheck fixes:
+
+- A name is a register only in the module that declares it (`reg` per
+  module, instances resolved down the path). The top's `reg mem_rdata` had
+  made `cpu.mem_rdata`, an input port, look like a register to set.
+- A register the RTL holds at x is not compared, only counted: picorv32
+  assigns `reg_out <= 'bx` (and more) every cycle it doesn't need them,
+  so the netlist may hold anything there. At power-up a register (or MLAB
+  word bit) the RTL leaves at x starts at the device's flop; picorv32
+  initialises none, so before this 75 % of all comparisons were at x.
+  Outputs get no such pass. simcheck now also says how many mapped
+  registers were ever compared.
+
+With chipsmith's synthesis, picorv32 from power-up for 20,000 cycles: all
+1,929 mapped registers compared and defined, 0 mismatches, 2 % of the
+comparisons skipped at the RTL's x. From random states it can't pass:
+chipsmith removes registers it proves constant from power-up, so a random
+state of them is one the netlist can't be in (README (z12)); the check runs
+picorv32 from power-up only (`SIMCHECK_CYCLES=0`). The Quartus oracle audits still
+pass with the new simcheck (`tools/alm/oracles_p9.sh` 18 of 18,
+`oracles_p10.sh` 9 of 9, 0 mismatches).
+
+**Quartus' LAB-input rule** [obs]. The check is
+`LBLK_LAB_CHECKER_PIN_COUNTER::check_only` (`liblegality_lblk.so`):
+`LBLK_LAB_CHECKER::check_only` sets illegality reason 14, "too many LAB
+line inputs" (the reason table of `liblegality_lab.so`), exactly when it
+fails. Its limit is `LUTIL_DEVICE::get_num_lab_lines_allowed()`
+(`liblegality_lutil_dev.so`): 51 by default, **55 for Falcon Mesa**, 60
+for Kinneloa Mesa, 66 for Liberty Mesa, or the INI `lblk_num_lab_lines`.
+Agilex 5's atoms are Falcon Mesa's `tennm_*`. A LAB line carries one
+driver to at most `get_max_lab_line_fanout()` = 5 sinks. Quartus prints the
+count with its LBLK debug messages, which the INIs
+`vpr_enable_skew_estimation=on` and `qic_preservation_priority=1` unlock
+(`MSG_D::have_debug_message_license`) and `debug_msg=on` turns on: on
+phase 10's sha256 placement, `num_ll = 48 + 9 = 57 -- num_ll_arch_limit =
+55 -- F` for the LAB it rejected, `Unique_inputs` and `Heuristic inputs`
+listing every line with its sinks (`specimens/p11/lab/v3`). So:
+
+- **lines = Σ over nets ⌈sinks / 5⌉ + Σ over nets ⌈further LEIMs / 5⌉ ≤
+  55**, where a net's sinks are its atom inputs in the LAB (LUT inputs, a
+  flop's D unless its own ALM drives it, and flop enables and clears: only
+  the clock rides a global), and its further LEIMs are, per ALM, the
+  LEIMs it uses beyond the first (A 0, B 1, C0 2, C1 3, D0 4, D1 5, E0 6,
+  E1/F 7: the same net on both halves' C pins takes two). The second term
+  is the duplicates' own line assignment ("heuristic inputs").
+- Checked on both placements Quartus rejected LABs of in phase 10
+  (`tools/bench/lablines.py`): sha256 at the 44-net budget, 315 LABs: all
+  12 rejected LABs count 56 to 66 lines, the 303 kept ones at most 56 (a
+  few kept at 55–56: Quartus' greedy line packing differs from the model by
+  a line or so); the flop CPU: the rejected LAB 61, all kept ones ≤ 55. The
+  rejected LABs' distinct nets (40–47) were no different from the kept
+  ones', which is why phase 10's net budget couldn't find the rule.
+- a5pnr now budgets LAB lines this way (`place::LAB_LINES` = 55,
+  `Alm::line_sinks`) instead of 50 distinct nets, and its pair packing puts
+  a net both halves read on A or B where it can (on C0 and C1 it takes a
+  second line). Quartus took every LAB of a5pnr's sha256 placement so
+  placed (phase 10's chipsmith netlist, 278 LABs, every one locked, none
+  left to Quartus; at phase 10's 44-net budget it had rejected 12):
+  quartus_sta 112.6 MHz against 75 [obs, `specimens/p11/lab/s256`].
+
+**The Quartus export takes MLAB RAM, DSP blocks and I/O registers** [obs]:
+an MLAB RAM bit is Quartus' own `tennm_mlab_cell` atom (its ports and
+parameters from `eda/fv_lib/verilog/tennm/tennm_mlab_cell.v`, the install's
+readable formal-verification models: a 32 x 1 RAM, write on `clk0` while
+`ena0`, read unregistered, `mem_init0` the 32 bits in hex) locked at the
+`MLABCELL` site a5pnr chose; a DSP block is a registered product Quartus
+infers and places (as the M20Ks); an I/O register is a `tennm_ff` with the
+pin's `FAST_INPUT_REGISTER`, `FAST_OUTPUT_REGISTER` or
+`FAST_OUTPUT_ENABLE_REGISTER`, an OE register's pin a tristate. Quartus
+fits and times all three: rf (MLAB) 756 MHz (restricted 362), mul (eight
+products) 231 MHz (Quartus' own fit 243), io 117 MHz (a path from one pin's
+input register to another pin's output register across the die, 7.2 ns of
+data delay, which a5pnr's model doesn't time) (`specimens/p11/exp`). An
+MLAB's bits are one logical RAM to Quartus (`logical_ram_name`, each bit
+its `first_bit_number`), and Quartus takes an MLAB with one read address
+only ("Cannot place RAM cell … location cannot support two incompatible RAM
+assignments": the MLAB CPU's register file had bits of both read ports in
+one MLAB). The image reads the address per ALM (z5), so this is Quartus'
+model [inf]; a5pnr now packs each read address into MLABs of its own (the
+CPU still takes four), and rf, the MLAB CPU and picorv32 pass all four
+checks so packed [obs, `specimens/p11/s3`].
+
+**Routing**: a sink's search now starts from each node of the net's tree at
+its delay from the source (by base cost) times the connection's
+criticality, as VPR's re-expansion does; from 0, a critical sink branched
+off wherever the tree came nearest, however late on the tree that was.
+[obs, `tools/bench/pnrbench.sh`, model register-to-register MHz on
+a5pnr's own routes, seeds 1–3, mean]: the flop CPU 124 → 138 (121, 122,
+129 → 136, 143, 136), picorv32 251 → 260, sha256 98 → 97; routing
+iterations fall (the flop CPU 22 → 7–17).
+
+**Timing-driven placement, rejected with data** (same bench, mean of three
+seeds, the flop CPU / picorv32 / sha256 MHz; baseline 124 / 251 / 98):
+
+| variant | MHz |
+|---|---|
+| criticalities refreshed every 4 temperatures from the STA on the current placement (VPR), keeping the faster of the wire-length and timing-driven placements | 124 / 240 / – |
+| timing weight λ 0.8 (0.5) | 114 / 228 / 97 |
+| criticality exponent 3 (8) | 123 / 235 / 87 (one seed) |
+
+**Global placement from chipsmith** [obs]: chipsmith-place's electrostatic
+placer (`chipsmith_place::electro`, ePlace's density model, a cargo git
+dependency pinned with a5synth's chipsmith) carries over as it is: one bin
+per LAB site, an ALM a tenth of one, a carry chain a column of LABs (one
+row per ten ALMs, its ALMs at their rows), ports, M20Ks, DSPs and MLAB RAM
+fixed. a5pnr fills each ALM into the free LAB nearest its centre (still
+under the LAB rules) and anneals from there at 0.02 of the starting
+temperature with a move range of 6. Same bench, mean of seeds 1–3:
+
+| | the flop CPU | picorv32 | sha256 |
+|---|---|---|---|
+| annealing from scratch: MHz / place and route s | 138 / 248 | 260 / 83 | 97 (94, 98, 99) / 568 |
+| from the global placement | 136 / 287 | 264 / 85 | **104** (101, 105, 105) / 780 |
+
+It helps the largest design only, and costs time there, so a5pnr starts
+from it from 1,500 ALMs (`place::GLOBAL_FROM`; `A5PNR_GLOBAL=0/1` forces
+it).
+
+**chipsmith's synthesis is the default front end** (`tools/a5pnr/synth.sh`;
+`A5_SYNTH=yosys` for yosys). It now folds a one-bit addend into the other
+adder's carry-in (`arith::fold_carry_in`: chipsmith's `alumacc` leaves
+`c + {SW2, SW1} + SW0` as two chains, yosys' as one; arith 24 → 23 ALMs,
+the MLAB CPU 430 → 413, the flop CPU 1,317 → 1,300). Against yosys on the
+same a5pnr (model register-to-register MHz, seeds 1–3, mean; ALMs) [obs,
+`specimens/p11/td`]:
+
+| design | yosys: MHz / ALMs | chipsmith: MHz / ALMs |
+|---|---|---|
+| acc | 273 / 37 | 281 / 37 |
+| arith | 503 / 23 | 503 / 23 |
+| ctl | 407 / 39 | 512 / 38 |
+| io | 513 / 24 | 501 / 19 (seeds 483–528 against 508–520) |
+| fr | 222 / 505 | 398 / 201 |
+| cpu (MLAB) | 107 / 453 | 133 / 413 |
+| cpu_ff | 127 / 1,394 | 138 / 1,300 |
+| mul | 228 / 407 | 251 / 311 |
+| picorv32 | 146 / 805 | 260 / 430 |
+| sha256 | 65 / 2,620 | 97 / 1,669 |
+
+Only io's mean is lower, by 2 %, inside the seeds' spread; every other
+design is level or ahead, the big ones by 9 % to 78 %.
+
+**Checks** [obs, `specimens/p11/s2`]: every phase 6–10 design through the
+final flow (chipsmith's synthesis, the LAB-line rule, the router and
+placement above) and all four checks: blinky, leds, acc, ram, ctl, arith,
+rom, ramx, pll, fr, rf, io and mul (2,000 + 2,000 cycles from random states
+and 3,000 from power-up with random inputs), the MLAB CPU (2,284 registers)
+and the flop CPU (1,260), 300 + 300 cycles and 20,000 from power-up, sha256
+(1,907) 300 + 300 and 5,000, picorv32 20,000 from power-up (1,929, every
+one compared): **extract = design, 0 mismatches, asm2 0 differ, pfg
+identical, integrity OK, everywhere**. sha256's first placement didn't
+route in 80 iterations (one local line two nets wanted), and a5pnr placed
+it again with the next seed, as it does (31 minutes on a loaded machine).
+
+**Against Quartus Pro** [obs, `specimens/p11/bench`, `docs/vs-quartus-pro.md`;
+Quartus Pro's builds are phase 10's]: every bench design now has a
+quartus_sta Fmax on a5pnr's placement (Quartus' routes):
+
+| design | ALMs, a5pnr / Quartus | Fmax MHz, a5pnr / Quartus | phase 10's a5pnr: ALMs, Fmax |
+|---|---|---|---|
+| blinky, leds | equal | 830, 805 / 820, 805 | equal |
+| acc | 37 / 36 | 462 / 616 | 37, 465 |
+| cpu (MLAB) | 413 / 390 | 178 (1 LAB left to Quartus) / 300 | 453, model 109 |
+| cpu_ff | **1,300 / 1,454** | 190 / 319 | 1,394, 161 |
+| sha256 | 1,669 / 1,457 | 116 (3 LABs left) / 200 | 2,620, 75 |
+| picorv32 | 430 / 378 | 296 / 479 (restricted 344) | 805, model 159 |
+| mul | **311 / 329** | 236 (1 LAB left) / 243 | 407, model 222 |
+
+- Wall time 9x to 32x below Quartus' but sha256 (1.4x: its first
+  placement doesn't route, one LAB's local line two nets want, and a5pnr
+  places it again).
+- **The routing gap**: on the flop CPU's placement, a5pnr's model on its
+  own routes against quartus_sta on Quartus' routes, per flop endpoint
+  (`tools/timing/compare.py`, 223 endpoints): median +0.595 ns, **+11.8 %**
+  (phase 9: +12.0 % on the CPU's placement; the model reads about 4 % of
+  that itself). The router change above is measured by the model across
+  seeds (the flop CPU +12 %), not against Quartus' routes on one placement.
+- Quartus' greedy LAB-line count runs a line or two above the model: mul's
+  and the MLAB CPU's refused LABs count 54 by it. sha256's three, at 49–51
+  lines, were refused by another pass (`FLABS: legalize_labs`, "Found an
+  illegal LAB after legalization of parcel 57"), with no failing line count
+  in the LBLK debug output [obs, `specimens/p11/lab/v4`]; what it checks is
+  [unk].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -3358,6 +3596,51 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 11 status** (branch `phase11`): closing the quality gap to Quartus
+Pro (README (z14)).
+
+- Step 1 (ALM-aware LUT cost): **done**. chipsmith branch `a5-almcost`
+  (35f73c5, off `open` 80351e1, pushed, not merged): `lutmap::MapOptions`
+  with a cost per input count and the best cut kept; default-neutral (41
+  chipsmith examples byte-identical, xc7 tests pass). a5synth on it:
+  sha256 2,111 → 1,669 ALMs, picorv32 506 → 430.
+- Step 2 (chipsmith's synthesis the default): **done**, level with or ahead
+  of yosys on every design (io's Fmax 2 % lower, inside the seed spread);
+  picorv32's register-level check passes from power-up.
+- Step 3 (placement): Quartus' LAB-input rule **decoded** (55 LAB lines, 5
+  sinks a line, a second line per further LEIM of a net in one ALM) and
+  a5pnr places by it: Quartus takes every sha256 LAB. Global placement from
+  chipsmith's electrostatic placer for designs from 1,500 ALMs (sha256 97
+  → 104 MHz). Rejected with data: VPR-style criticality updates, λ 0.8, a
+  criticality exponent of 3.
+- Step 4 (routing): a sink's search starts from the tree at its delay times
+  criticality: the flop CPU 124 → 138 MHz by the model, picorv32 251 →
+  260.
+- Step 5 (export): MLAB RAM, DSP blocks and I/O registers; every bench
+  design gets a quartus_sta number.
+- Step 6 (bench): **done**, docs/vs-quartus-pro.md: ALMs level or ahead on
+  six designs (flop CPU 1,300 against 1,454); Fmax by quartus_sta on
+  a5pnr's placement 1.3x to 1.7x below Quartus' on the deep designs, where
+  it was 2x to 3x (sha256 75 → 116 against 200, the flop CPU 161 → 190
+  against 319); 9x to 32x faster but sha256 (1.4x).
+
+Open after phase 11 [unk]:
+
+- Everything on silicon, still (the board test, steps 27–30).
+- Quartus' greedy LAB-line packing exactly: the model differs by a line or
+  two either way (kept LABs at 56, refused ones at 54); and what Quartus'
+  FLABS pass refused three globally placed sha256 LABs for (49–51 lines).
+- sha256's first placement not routing (a local line two nets want).
+- Why the flop CPU keeps 727 6-LUTs at any LUT cost (its register file's
+  read muxes, [inf]).
+- Fmax still behind Quartus on the deep designs (bench); Quartus retimes
+  and duplicates registers (Hyper-Retiming), a5pnr does neither.
+- The DSP and M20K placement in the export is Quartus' own, not a5pnr's.
+- picorv32 from random states under chipsmith's synthesis (registers proved
+  constant from power-up are gone).
+- What a5pnr's model leaves untimed: paths between I/O registers (io: 117
+  MHz in quartus_sta, a pin-to-pin path).
 
 **Phase 10 status** (branch `phase10`): I/O registers, DSP multipliers,
 chipsmith's synthesis as a front end, a bench against Quartus Pro.

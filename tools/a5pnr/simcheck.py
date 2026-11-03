@@ -51,6 +51,35 @@ for f in rtl:
     for m in re.finditer(r'\bwire\b\s*(?:\[[^\]]*\]\s*)?(\w+)\s*=\s*(\w+)\s*;', src):
         if m.group(2) in declared:
             alias[m.group(1)] = m.group(2)
+# Registers per module, and each module's instances: a name is a register
+# only in the module that declares it (picorv32's top has `reg mem_rdata`,
+# its `cpu.mem_rdata` is an input port).
+modules = {}
+for f in rtl:
+    src = re.sub(r'//.*', '', open(f).read())
+    for m in re.finditer(r'\bmodule\s+(\w+)(.*?)\bendmodule\b', src, re.S):
+        body = m.group(2)
+        regs_in = set()
+        for d in re.finditer(r'\breg\b\s*(?:signed\s*)?(?:\[[^\]]*\]\s*)?([^;]*);', body):
+            for part in d.group(1).split(','):
+                name = re.match(r'\s*([A-Za-z_]\w*)', part)
+                if name:
+                    regs_in.add(name.group(1))
+        insts = {i.group(2): i.group(1) for i in re.finditer(r'^\s*(\w+)\s*(?:#\s*\((?:[^()]|\([^()]*\))*\)\s*)?(\w+)\s*\(', body, re.M)}
+        modules[m.group(1)] = (regs_in, insts)
+
+
+def is_reg(path, leaf):
+    """Whether `leaf` in instance path `path` (a.b.leaf) is a register of
+    its module; the global set where the hierarchy isn't known."""
+    mod = top
+    for inst in path.split('.')[:-1]:
+        if mod not in modules or inst not in modules[mod][1]:
+            return leaf in declared
+        mod = modules[mod][1][inst]
+    return leaf in modules[mod][0] if mod in modules else leaf in declared
+
+
 memories = set()
 for f in rtl:
     src = re.sub(r'//.*', '', open(f).read())
@@ -78,11 +107,13 @@ for l in open(ffmap):
         if leaf in memories and re.fullmatch(r'.*\[\d+\]', base):
             regs.append((f'dut.{base}[{idx}]', f'~rb.{flop}' if inv else f'rb.{flop}'))
             break
-        if base.startswith('$') or net_base not in widths or base in mod['ports'] or leaf not in declared:
+        if base.startswith('$') or net_base not in widths or base in mod['ports'] or not is_reg(base, leaf):
             continue
         ref = f'dut.{base}' if widths[net_base] == 1 else f'dut.{base}[{idx}]'
+        # Every register the flop holds: chipsmith merges registers that are
+        # always equal (picorv32's mem_rdata bits its ROM sets alike), and
+        # each must start from the flop's state.
         regs.append((ref, f'~rb.{flop}' if inv else f'rb.{flop}'))
-        break
 
 def mem_word(ref):
     """(word, bit) when ref is one bit of an RTL memory word, else None."""
@@ -110,10 +141,19 @@ def assign_all(val):
     out, words = [], {}
     hot = {}
     # A register Quartus duplicated (`~DUPLICATE`) is in the map once per
-    # copy; every copy gets the value the RTL register gets.
+    # copy, a flop holding merged registers once per register: registers
+    # and flops linked by the map get one value.
     copies = {}
     for ref, flop in regs:
         copies.setdefault(ref, []).append(flop)
+    group = {}
+    def find(x):
+        while group.setdefault(x, x) != x:
+            x = group[x]
+        return x
+    for ref, flop in regs:
+        group[find(('f', flop.lstrip('~')))] = find(('r', ref))
+    plain = {}
     done = set()
     for ref, flop in regs:
         if ref in done:
@@ -127,7 +167,11 @@ def assign_all(val):
         if mw:
             words.setdefault(mw[0], []).append((mw[1], copies[ref]))
         else:
-            out.append(f'      v = {val}; {ref} = v; ' + ' '.join(put(f, "v") for f in copies[ref]))
+            g = plain.setdefault(find(('r', ref)), ([], []))
+            g[0].append(ref)
+            g[1].extend(f for f in copies[ref] if f not in g[1])
+    for refs, flops in plain.values():
+        out.append('      v = ' + val + '; ' + ' '.join(f'{r} = v;' for r in refs) + ' ' + ' '.join(put(f, "v") for f in flops))
     for base, bits in hot.items():
         # Every bit of the RTL register, also those yosys derives instead of
         # keeping a flop for (one of femtorv32's four state bits).
@@ -160,8 +204,9 @@ for n, d, w in ports:
         conn_r += [f'.{flat(i)}(or_{n}[{i}])' for i in range(w) if (n if w == 1 else f'{n}[{i}]') in used]
 tb.append(f'  {top} dut({", ".join(conn_d)});')
 tb.append(f'  {top}_readback rb({", ".join(conn_r)});')
-tb.append('  integer cyc, bad = 0, seed = 1, bias, bad_run = 0, changes = 0;')
+tb.append('  integer cyc, bad = 0, seed = 1, bias, bad_run = 0, changes = 0, xs = 0;')
 tb.append('  reg v; reg [1023:0] w;')
+tb.append(f'  reg [{max(len(regs), 1) - 1}:0] seen = 0;')
 for n, d, w in ports:
     if d == 'output':
         tb.append(f'  reg [{w - 1}:0] last_{n};')
@@ -171,8 +216,11 @@ for n, d, w in ports:
         for i in range(w):
             if (n if w == 1 else f'{n}[{i}]') in used:
                 compare.append(f'      if (od_{n}[{i}] !== or_{n}[{i}]) begin bad = bad + 1; if (bad < 10) $display("cycle %0d: {n}[{i}] rtl %b image %b", cyc, od_{n}[{i}], or_{n}[{i}]); end')
-for ref, flop in regs:
-    compare.append(f'      if ({ref} !== {flop}) begin bad = bad + 1; if (bad < 10) $display("cycle %0d: {ref} rtl %b image %b", cyc, {ref}, {flop}); end')
+# A register the RTL holds at x is not compared, only counted: x is the
+# RTL's don't-care (picorv32 assigns reg_out <= 'bx every cycle it doesn't
+# need it), so the netlist may hold anything there. Outputs get no such pass.
+for i, (ref, flop) in enumerate(regs):
+    compare.append(f'      if ({ref} === 1\'bx) xs = xs + 1; else begin seen[{i}] = 1; if ({ref} !== {flop}) begin bad = bad + 1; if (bad < 10) $display("cycle %0d: {ref} rtl %b image %b", cyc, {ref}, {flop}); end end')
 inputs = [f'      i_{n} = $random(seed);' for n, d, w in ports if d == 'input' and n not in clocks]
 # All clocks tick together: the check is of logic, not of clock-domain timing.
 up = ' '.join(f'i_{c} = 1;' for c in clocks)
@@ -205,6 +253,21 @@ if run:
     # at 1 its own way, README (z3)).
     if cycles:
         tb += assign_all("1'b0")
+    # A register the RTL leaves at x (picorv32 initialises none) starts at
+    # what the device's flop powers up to: x there means any value.
+    tb.append('    #1;')
+    xwords = {}
+    for ref, flop in regs:
+        src = f'~{flop[1:]}' if flop.startswith('~') else flop
+        mw = mem_word(ref)
+        if mw:
+            xwords.setdefault(mw[0], []).append((mw[1], src))
+        else:
+            tb.append(f'    if ({ref} === 1\'bx) {ref} = {src};')
+    for word, bits in xwords.items():
+        tb.append(f'    w = {word};')
+        tb += [f'    if (w[{b}] === 1\'bx) w[{b}] = {src};' for b, src in bits]
+        tb.append(f'    {word} = w;')
     for n, d, w in ports:
         if d == 'input' and n not in clocks:
             tb.append(f'    i_{n} = {hold.get(n, 0)};')
@@ -221,7 +284,7 @@ if run:
         tb.append(f'      if (od_{n} !== last_{n}) begin changes = changes + 1; if (changes <= 4 || changes % 16 == 0) $display("run: cycle %0d: {n} %0d", cyc, od_{n}); last_{n} = od_{n}; end')
     tb.append('    end')
     tb.append(f'    $display("simcheck run: {run} cycles from power-up with {hold}, outputs changed %0d times, last %0d, %0d mismatches", changes, ' + (f'od_{outs[0]}' if outs else '0') + ', bad - bad_run);')
-tb.append(f'    $display("simcheck: {cycles} cycles from random states and {cycles} free-running, {len(regs)} registers compared, %0d mismatches", bad);')
+tb.append(f'    $display("simcheck: {cycles} cycles from random states and {cycles} free-running, {len(regs)} registers compared, %0d mismatches (%0d of them ever defined in the RTL, %0d comparisons skipped: the RTL at x)", bad, $countones(seen), xs);')
 tb.append('    $finish;')
 tb.append('  end')
 tb.append('endmodule')
@@ -257,4 +320,5 @@ with tempfile.TemporaryDirectory() as d:
         sys.exit(1)
     out = r.stdout.strip().splitlines()
     print('\n'.join(out[:12] + (['...'] if len(out) > 24 else []) + out[max(12, len(out) - 12):]))
-    sys.exit(0 if 'mismatches' in r.stdout and ', 0 mismatches' in r.stdout else 1)
+    counts = [int(n) for n in re.findall(r'(\d+) mismatches', r.stdout)]
+    sys.exit(0 if counts and not any(counts) else 1)

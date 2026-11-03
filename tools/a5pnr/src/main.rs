@@ -388,9 +388,13 @@ fn main() -> Result<()> {
             let est = |pl: &place::Placement| -> Vec<f32> { sta.conns.iter().map(|(n, e)| t.conn(&packed, pl, &labs, &port_xy, packed.nets[n].0, *e)).collect() };
             let r0 = sta.analyse(&est(&pl));
             eprintln!("timing: wire-length placement, {:.3} ns estimated ({})", r0.worst, r0.at);
-            let conns: Vec<(End, End, f64)> = sta.conns.iter().enumerate().map(|(i, (n, e))| (packed.nets[n].0, *e, (r0.crit[i] as f64).powi(8))).collect();
+            // Bench knobs (tools/bench/pnrbench.sh): the timing term's weight
+            // and the criticality exponent.
+            let knob = |k: &str, d: f64| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
+            let (lambda, exp) = (knob("A5PNR_TD_LAMBDA", 0.5), knob("A5PNR_TD_EXP", 8.0));
+            let conns: Vec<(End, End, f64)> = sta.conns.iter().enumerate().map(|(i, (n, e))| (packed.nets[n].0, *e, (r0.crit[i] as f64).powf(exp))).collect();
             let delay_fn = |dx: i64, dy: i64| t.lab(dx, dy) as f64;
-            let tc = place::TimingCost { conns, delay: &delay_fn, lambda: 0.5 };
+            let tc = place::TimingCost { conns, delay: &delay_fn, lambda };
             pl = place::place(&packed, &nl, &labs, &sites, &dsites, &port_xy, seed, Some(&tc), effort)?;
             let r1 = sta.analyse(&est(&pl));
             eprintln!("timing: timing-driven placement, {:.3} ns estimated ({})", r1.worst, r1.at);
@@ -398,10 +402,7 @@ fn main() -> Result<()> {
         }
         let place_s = t1.elapsed().as_secs_f64();
         if let Some(dir) = &quartus {
-            if !io.is_empty() || !packed.dsps.is_empty() {
-                bail!("--quartus: I/O registers and DSP blocks aren't exported yet");
-            }
-            export::write(dir, top, &nl, &packed, &labs, &pl, &pin_of)?;
+            export::write(dir, top, &nl, &packed, &labs, &pl, &pin_of, &io)?;
             eprintln!("quartus: project in {dir}");
         }
         let lines = emit::lab_lines(&packed, &nl, &pl);

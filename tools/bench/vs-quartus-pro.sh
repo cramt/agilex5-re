@@ -37,31 +37,31 @@ for rep in $(seq 1 "$reps"); do
         top=$(field "$d" top); pins=$repo/$(field "$d" pins); env=$(field "$d" env); [[ $env == - ]] && env=""
         IFS=, read -ra srcs <<< "$(field "$d" sources | sed "s|\$C|/pool/dev/chipsmith/examples|g")"
         srcs=("${srcs[@]/#designs/$repo/designs}")
-        # Quartus.
+        # Quartus (BENCH_A5PNR_ONLY=1: a5pnr's side only, Quartus' own
+        # builds taken from an earlier bench of the same RTL).
         q=$out/q/$d; qr=$out/runs/q_${d}_r$rep
-        python3 -I "$here/qproj.py" "$repo" "$d" "$q"
-        rm -rf "$qr"; mkdir -p "$out/runs"; cp -r "$q" "$qr"
-        load=$(cut -d' ' -f1 /proc/loadavg)
-        read -r w c st <<< "$(unit "$qr.unit.log" bash -c "cd $qr && for s in quartus_syn quartus_fit quartus_asm; do $repo/tools/quartus.sh \$s $d > \$s.log 2>&1 || exit 1; done")"
-        printf '%s\t%s\tquartus\t%s\t%s\t%s\t%s\t%s\n' "$rep" "$d" "$w" "$c" "$load" "$st" "$qr" >> "$out/runs.tsv"
+        mkdir -p "$out/runs"
+        if [[ -z ${BENCH_A5PNR_ONLY:-} ]]; then
+            python3 -I "$here/qproj.py" "$repo" "$d" "$q"
+            rm -rf "$qr"; cp -r "$q" "$qr"
+            load=$(cut -d' ' -f1 /proc/loadavg)
+            read -r w c st <<< "$(unit "$qr.unit.log" bash -c "cd $qr && for s in quartus_syn quartus_fit quartus_asm; do $repo/tools/quartus.sh \$s $d > \$s.log 2>&1 || exit 1; done")"
+            printf '%s\t%s\tquartus\t%s\t%s\t%s\t%s\t%s\n' "$rep" "$d" "$w" "$c" "$load" "$st" "$qr" >> "$out/runs.tsv"
+        fi
         # a5pnr.
         ar=$out/runs/a_${d}_r$rep; rm -rf "$ar"
         opts=""
         if [[ $rep == 1 ]]; then opts="--quartus $out/runs/x_$d"; rm -rf "$out/runs/x_$d"; mkdir -p "$out/runs/x_$d"; fi
         load=$(cut -d' ' -f1 /proc/loadavg)
         read -r w c st <<< "$(unit ${env:+--setenv=A5_${env#A5_}} --setenv=A5PNR_OPTS="$opts" "$ar.unit.log" "$repo/tools/a5pnr/flow.sh" "$top" "$pins" "$ar" "${srcs[@]}")"
-        if [[ $st != 0 && -n $opts ]]; then
-            # The export refuses MLAB RAM, DSPs and I/O registers: time it without.
-            rm -rf "$out/runs/x_$d"
-            read -r w c st <<< "$(unit ${env:+--setenv=A5_${env#A5_}} "$ar.unit.log" "$repo/tools/a5pnr/flow.sh" "$top" "$pins" "$ar" "${srcs[@]}")"
-        fi
         printf '%s\t%s\ta5pnr\t%s\t%s\t%s\t%s\t%s\n' "$rep" "$d" "$w" "$c" "$load" "$st" "$ar" >> "$out/runs.tsv"
         if [[ $rep == 1 ]]; then
-            "$repo/tools/timing/sta.sh" "$qr" "$out/sta/q_$d" 1 > /dev/null 2>&1
-            if [[ -d $out/runs/x_$d && -s $out/runs/x_$d/$top.qsf ]]; then
-                x=$out/runs/x_$d
-                ( cd "$x" && for s in quartus_syn quartus_fit; do systemd-run --user --scope -q -p MemoryMax=20G -p MemorySwapMax=0 "$repo/tools/quartus.sh" $s "$top" > $s.log 2>&1 || exit 1; done )
-                "$repo/tools/timing/sta.sh" "$x" "$out/sta/x_$d" 1 > /dev/null 2>&1
+            [[ -n ${BENCH_A5PNR_ONLY:-} ]] || "$repo/tools/timing/sta.sh" "$qr" "$out/sta/q_$d" 1 > /dev/null 2>&1
+            # a5pnr's placement, every atom locked, routed by Quartus; a LAB
+            # its legalizer refuses is left to it (README (z13), (z14)).
+            # BENCH_NO_XFIT=1: the exports only (fit them later, one by one).
+            if [[ -z ${BENCH_NO_XFIT:-} && -s $out/runs/x_$d/$top.qsf ]]; then
+                systemd-run --user --scope -q -p MemoryMax=20G -p MemorySwapMax=0 "$here/unlock_fit.sh" "$out/runs/x_$d" "$top" "$out/runs/xf_$d" "$out/sta/x_$d" > "$out/runs/xf_$d.log" 2>&1
             fi
         fi
     done

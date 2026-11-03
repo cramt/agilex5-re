@@ -7,12 +7,15 @@ description = "chipsmith's synthesis for a5pnr: Verilog to 6-LUTs, carry chains,
 [dependencies]
 # chipsmith's front end and device-independent synthesis with its K-input
 # LUT mapper (chipsmith ADR-0013), pinned like cyclone2-re's cram pins
-# chipsmith-cyclone2.
-chipsmith-netlist = { git = "https://github.com/A-H-Technology/chipsmith", rev = "0fd59912625c4a8396c20c6bb6f6ba7fafe7bb38" }
-chipsmith-synth = { git = "https://github.com/A-H-Technology/chipsmith", rev = "0fd59912625c4a8396c20c6bb6f6ba7fafe7bb38" }
-chipsmith-verilog = { git = "https://github.com/A-H-Technology/chipsmith", rev = "0fd59912625c4a8396c20c6bb6f6ba7fafe7bb38" }
+# chipsmith-cyclone2. Branch a5-almcost (off open 80351e1, not merged into
+# open): the mapper's LUT cost by input count and kept best cut (README
+# (z14)); back to an open commit once open has them.
+chipsmith-netlist = { git = "https://github.com/A-H-Technology/chipsmith", rev = "35f73c564d733baa1472dbc18203ac69e693b187" }
+chipsmith-synth = { git = "https://github.com/A-H-Technology/chipsmith", rev = "35f73c564d733baa1472dbc18203ac69e693b187" }
+chipsmith-verilog = { git = "https://github.com/A-H-Technology/chipsmith", rev = "35f73c564d733baa1472dbc18203ac69e693b187" }
 anyhow = "1"
 rustc-hash = "2"
 
 [profile.release]
 debug = 1
+
