@@ -3253,6 +3253,36 @@ identical, integrity OK, everywhere**. sha256's first placement didn't
 route in 80 iterations (one local line two nets wanted), and a5pnr placed
 it again with the next seed, as it does (31 minutes on a loaded machine).
 
+**Against Quartus Pro** [obs, `specimens/p11/bench`, `docs/vs-quartus-pro.md`;
+Quartus Pro's builds are phase 10's]: every bench design now has a
+quartus_sta Fmax on a5pnr's placement (Quartus' routes):
+
+| design | ALMs, a5pnr / Quartus | Fmax MHz, a5pnr / Quartus | phase 10's a5pnr: ALMs, Fmax |
+|---|---|---|---|
+| blinky, leds | equal | 830, 805 / 820, 805 | equal |
+| acc | 37 / 36 | 462 / 616 | 37, 465 |
+| cpu (MLAB) | 413 / 390 | 178 (1 LAB left to Quartus) / 300 | 453, model 109 |
+| cpu_ff | **1,300 / 1,454** | 190 / 319 | 1,394, 161 |
+| sha256 | 1,669 / 1,457 | 116 (3 LABs left) / 200 | 2,620, 75 |
+| picorv32 | 430 / 378 | 296 / 479 (restricted 344) | 805, model 159 |
+| mul | **311 / 329** | 236 (1 LAB left) / 243 | 407, model 222 |
+
+- Wall time 9x to 32x below Quartus' but sha256 (1.4x: its first
+  placement doesn't route, one LAB's local line two nets want, and a5pnr
+  places it again).
+- **The routing gap**: on the flop CPU's placement, a5pnr's model on its
+  own routes against quartus_sta on Quartus' routes, per flop endpoint
+  (`tools/timing/compare.py`, 223 endpoints): median +0.595 ns, **+11.8 %**
+  (phase 9: +12.0 % on the CPU's placement; the model reads about 4 % of
+  that itself). The router change above is measured by the model across
+  seeds (the flop CPU +12 %), not against Quartus' routes on one placement.
+- Quartus' greedy LAB-line count runs a line or two above the model: mul's
+  and the MLAB CPU's refused LABs count 54 by it. sha256's three, at 49–51
+  lines, were refused by another pass (`FLABS: legalize_labs`, "Found an
+  illegal LAB after legalization of parcel 57"), with no failing line count
+  in the LBLK debug output [obs, `specimens/p11/lab/v4`]; what it checks is
+  [unk].
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -3589,13 +3619,19 @@ Pro (README (z14)).
   260.
 - Step 5 (export): MLAB RAM, DSP blocks and I/O registers; every bench
   design gets a quartus_sta number.
-- Step 6 (bench): docs/vs-quartus-pro.md.
+- Step 6 (bench): **done**, docs/vs-quartus-pro.md: ALMs level or ahead on
+  six designs (flop CPU 1,300 against 1,454); Fmax by quartus_sta on
+  a5pnr's placement 1.3x to 1.7x below Quartus' on the deep designs, where
+  it was 2x to 3x (sha256 75 → 116 against 200, the flop CPU 161 → 190
+  against 319); 9x to 32x faster but sha256 (1.4x).
 
 Open after phase 11 [unk]:
 
 - Everything on silicon, still (the board test, steps 27–30).
 - Quartus' greedy LAB-line packing exactly: the model differs by a line or
-  so (kept LABs at 56).
+  two either way (kept LABs at 56, refused ones at 54); and what Quartus'
+  FLABS pass refused three globally placed sha256 LABs for (49–51 lines).
+- sha256's first placement not routing (a local line two nets want).
 - Why the flop CPU keeps 727 6-LUTs at any LUT cost (its register file's
   read muxes, [inf]).
 - Fmax still behind Quartus on the deep designs (bench); Quartus retimes
