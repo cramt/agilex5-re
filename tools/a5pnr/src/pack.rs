@@ -722,7 +722,9 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
     };
     // MLAB RAM (README (z9)): bits with the same clock, write enable and
     // write address share an MLAB's write side, ten ALMs to an MLAB; two
-    // bits with the same read address share an ALM.
+    // bits with the same read address share an ALM, and an MLAB holds one
+    // read address: Quartus takes no other ("two incompatible RAM
+    // assignments", README (z14)), though the image reads it per ALM.
     let mut mlabs: Vec<Vec<usize>> = Vec::new();
     {
         let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
@@ -747,8 +749,8 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
                 let Cell::Mlab(m) = &nl.cells[i] else { unreachable!() };
                 by_raddr.entry(format!("{:?}", m.raddr)).or_default().push(i);
             }
-            let mut group_alms = Vec::new();
             for bits in by_raddr.values() {
+                let mut group_alms = Vec::new();
                 for pair in bits.chunks(2) {
                     let mut alm = Alm { logic: Logic::Ram { halves: [pair.first().copied(), pair.get(1).copied()] }, slots: [None; 4] };
                     for (h, &c) in pair.iter().enumerate() {
@@ -760,8 +762,8 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
                     group_alms.push(alms.len());
                     alms.push(alm);
                 }
+                mlabs.extend(group_alms.chunks(10).map(<[usize]>::to_vec));
             }
-            mlabs.extend(group_alms.chunks(10).map(<[usize]>::to_vec));
         }
     }
     // Carry chains, from their heads.

@@ -134,6 +134,21 @@ pub fn write(
         writeln!(v, "  tennm_lcell_comb #(.lut_mask(64'h{mask:016x})) {name} ({});", conns.join(", "))?;
         Ok(())
     };
+    // An MLAB's bits are one logical RAM to Quartus: bits of one MLAB
+    // named as different RAMs are "two incompatible RAM assignments".
+    let mut ram_bit: HashMap<(usize, usize), (usize, usize, usize)> = HashMap::default();
+    for (g, alms) in p.mlabs.iter().enumerate() {
+        let bits: Vec<(usize, usize)> = alms
+            .iter()
+            .flat_map(|&a| match &p.alms[a].logic {
+                Logic::Ram { halves } => (0..2).filter(|&h| halves[h].is_some()).map(|h| (a, h)).collect::<Vec<_>>(),
+                _ => vec![],
+            })
+            .collect();
+        for (i, &b) in bits.iter().enumerate() {
+            ram_bit.insert(b, (g, i, bits.len()));
+        }
+    }
     for (a, alm) in p.alms.iter().enumerate() {
         let (l, k) = pl.at[a];
         let (x, y) = (labs[l].x, labs[l].y);
@@ -149,10 +164,11 @@ pub fn write(
                     let Cell::Mlab(m) = &nl.cells[*c] else { unreachable!() };
                     let bus = |s: &[Sig]| format!("{{{}}}", s.iter().rev().map(|&b| sig(b)).collect::<Vec<_>>().join(", "));
                     let name = format!("a{a}_r{h}");
+                    let (g, bit, width) = ram_bit[&(a, h)];
                     let out = m.rdata.map_or(String::new(), |n| format!(", .portbdataout(n{n})"));
                     writeln!(
                         v,
-                        "  tennm_mlab_cell #(.logical_ram_name(\"{name}\"), .logical_ram_depth(32), .logical_ram_width(1), .first_address(0), .last_address(31), .first_bit_number(0), .data_width(1), .address_width(5), .port_b_data_out_clock(\"none\"), .mem_init0(\"{:08X}\")) {name} (.portadatain({}), .portaaddr({}), .portbaddr({}), .clk0(n{}), .ena0({}){out});",
+                        "  tennm_mlab_cell #(.logical_ram_name(\"mlab{g}\"), .logical_ram_depth(32), .logical_ram_width({width}), .first_address(0), .last_address(31), .first_bit_number({bit}), .data_width(1), .address_width(5), .port_b_data_out_clock(\"none\"), .mem_init0(\"{:08X}\")) {name} (.portadatain({}), .portaaddr({}), .portbaddr({}), .clk0(n{}), .ena0({}){out});",
                         m.init,
                         sig(m.wdata),
                         bus(&m.waddr),
