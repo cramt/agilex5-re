@@ -2960,22 +2960,25 @@ submodule's port wire).
 **LUTs and ALMs** (`tools/a5synth/compare.sh`; ALMs are a5pnr's packing,
 `--pack-only`; Quartus Pro's from its own fit of the same RTL):
 
-| design | yosys: LUTs / ALMs | chipsmith: LUTs / ALMs | Quartus Pro ALMs | synthesis time, yosys / chipsmith |
+| design | yosys: LUTs / ALMs | chipsmith: LUTs / ALMs | Quartus Pro: LUTs / ALMs (the bench's fit, (z13)) | synthesis time, yosys / chipsmith |
 |---|---|---|---|---|
 | blinky, leds, acc, ram, rom, ramx, ctl | equal within 1 LUT and 1 ALM | | | 30–70 s / ≤ 1 s |
 | arith | 4 / 23 | 4 / 24 | | 47 s / 0.4 s |
 | io | 19 / 24 | 11 / 19 | | 46 s / 0.3 s |
 | rf (MLAB RAM) | 1 / 23 (12 RAM bits) | 1 / 21 (8: the unread ones dropped) | | 34 s / 0.6 s |
-| fr (random 2–7-input functions) | 879 / 505 | **320 / 209** | 233 (phase 8) | 110 s / 4 s |
-| CPU, register file in MLAB | 587 / 453 | 442 / 450 | | 68 s / 1 s |
-| CPU, register file in flops | 1,392 / 1,393 | **1,174 / 1,343** | 1,082 (1,171 LUTs + 195 carry cells, phase 8) | 73 s / 4 s |
-| sha256 | 4,066 / 2,620 | **2,058 / 2,111** | (bench) | 102 s / 17 s |
-| picorv32 | 1,218 / 805 | **473 / 506** | (bench) | 98 s / 2 s |
+| fr (random 2–7-input functions) | 879 / 505 | **320 / 209** | — / 233 (phase 8) | 110 s / 4 s |
+| CPU, register file in MLAB | 587 / 453 | 442 / 450 | 542 / 390 | 68 s / 1 s |
+| CPU, register file in flops | 1,392 / 1,393 | **1,174 / 1,343** | 2,390 / 1,454 (2,960 registers: duplicated for speed); phase 8's cql 1,171 / 1,082 | 73 s / 4 s |
+| sha256 | 4,066 / 2,620 | **2,058 / 2,111** | 2,344 / 1,457 | 102 s / 17 s |
+| picorv32 | 1,218 / 805 | **473 / 506** | 687 / 378 (register file in 2 M20Ks) | 98 s / 2 s |
 
 - **chipsmith's mapper needs fewer LUTs everywhere it matters**: the CPU's
-  1,392 → 1,174 (Quartus' synthesis: about 1,170, so the LUT gap phase 8
-  put down to synthesis is closed), fr 879 → 320, sha256 4,066 → 2,058,
-  picorv32 1,218 → 473 [obs]. picorv32's flops also drop 381 → 345: chipsmith
+  1,392 → 1,174 (Quartus' synthesis for area, phase 8's cql: about 1,170,
+  so the LUT gap phase 8 put down to synthesis is closed), fr 879 → 320,
+  sha256 4,066 → 2,058 (Quartus 2,344), picorv32 1,218 → 473 (Quartus 687,
+  with its register file in M20K) [obs]. Quartus' bench fits trade area
+  for speed (Hyper-Retiming on, a 2 ns clock: the flop CPU's 1,229
+  registers become 2,960), so its ALMs there are not its smallest. picorv32's flops also drop 381 → 345: chipsmith
   removes the instruction-word register bits its five-word ROM can only
   ever load as constants [inf]; the random-state check (which leaves
   registers the netlist doesn't have at the RTL's own values) passes.
