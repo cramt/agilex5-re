@@ -59,6 +59,10 @@ for d in designs:
             fs = f'{f[0]:.0f} (restricted {f[1]:.0f})' if f else '?'
         else:
             res = a5pnr_res(r1['dir']); f = fmax(f'{out}/sta/x_{d}/fmax.txt'); note = ''
+            unl = f'{out}/runs/xf_{d}/unlocked.txt'
+            if f and os.path.exists(unl):
+                n = len(open(unl).read().split())
+                note = f', {n} LAB{"s" if n != 1 else ""} left to Quartus' if n else ', every LAB locked'
             # x2: the export with the LABs Quartus' legalizer rejected left
             # unlocked (README (z13)).
             # x44: placed again with a 44-net LAB budget (A5PNR_LAB_INPUTS) first.

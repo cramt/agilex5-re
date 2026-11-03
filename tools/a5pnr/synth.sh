@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Verilog → a5pnr's JSON netlist with yosys from nixpkgs (README (w)):
+# Verilog → a5pnr's JSON netlist (README (w)):
 #   tools/a5pnr/synth.sh <top> <out.json> <design.v>...
+# By default with chipsmith's synthesis (tools/a5synth, README (z12),
+# (z14)); A5_SYNTH=yosys with yosys from nixpkgs, as below.
 # Cells: $lut (≤ 6 inputs), A5_ARITH carry chains ($alu, yosys/arith_map.v),
 # flops with the LAB's controls (README (y): enable, synchronous clear that
 # the enable gates, asynchronous clear of either polarity; anything else
@@ -16,9 +18,9 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 top=$1; out=$2; shift 2
-# A5_SYNTH=chipsmith: chipsmith's synthesis instead (tools/a5synth, README
-# (z12)), the same cells in the same JSON.
-if [[ ${A5_SYNTH:-yosys} == chipsmith ]]; then
+# chipsmith's synthesis (tools/a5synth): the same cells in the same JSON,
+# fewer ALMs and a faster netlist on every bench design (README (z14)).
+if [[ ${A5_SYNTH:-chipsmith} == chipsmith ]]; then
     "$here/../cap.sh" 12G "$here/../a5synth/target/release/a5synth" "$top" "$out" "$@" 2> "${out%.json}.a5synth.log"
     cat "${out%.json}.a5synth.log"
     exit 0

@@ -22,7 +22,7 @@ Section letters refer to the README's findings. File formats are in
 | DSP multiplier modes | `db/sm4revb/dsp/modes.tsv` | the settings of a registered 18x18 or 27x27 multiply, signed or not, with each mode's baseline input-inverter masks (README (z11)) |
 | delays | `db/sm4revb/timing/delays.tsv` (`tools/timing`) | mean delay per routing node type and per cell arc, from quartus_sta paths (README (u)) |
 | IOPLL | `db/sm4revb/io/iopll.tsv`, `tools/pll/iopll.py` | an IOPLL's lines for any reference and output frequencies (README (v)) |
-| open flow | `tools/a5pnr` (yosys + Rust placer and router) | Verilog → design file → `.sof` → `.rbf` (README (w)); `tools/a5synth` (chipsmith's synthesis, `A5_SYNTH=chipsmith`) as an alternative front end (README (z12)) |
+| open flow | `tools/a5pnr` (`tools/a5synth`, chipsmith's synthesis, + Rust placer and router) | Verilog → design file → `.sof` → `.rbf` (README (w)); chipsmith's synthesis is the front end (README (z12), (z14)), yosys with `A5_SYNTH=yosys` |
 | writer | `tools/a5db` (Rust) | design file → `.sof` image → `.rbf` byte-identical to `quartus_pfg`'s |
 
 ## The interface: a design file
@@ -127,10 +127,14 @@ Verification kinds, strongest first:
   (`usable` class 4), and don't enter a non-LAB node with several
   pass-through fanins over one of them: neither shows in an image, and
   what such a node passes is unknown (README (y)).
-- **LAB inputs**: at most 50 distinct nets on a LAB's data pins (a5pnr's
-  budget): Quartus' legalizer rejected LABs with 55, 59 and 61 ("too many
-  LAB line inputs"), its own CPU uses at most 52; the rule is [unk]
-  (README (z8)).
+- **LAB inputs** (Quartus' legalizer, "too many LAB line inputs"): at most
+  55 LAB lines, where a net takes ⌈sinks / 5⌉ lines (its LUT inputs, flop
+  D inputs from outside their ALM, flop enables and clears in the LAB) plus
+  ⌈further LEIMs / 5⌉ (per ALM, the LEIMs it uses beyond the first: the
+  same net on C0 and C1 takes two). Decoded from Quartus' LBLK pin counter
+  and its debug output, checked on every LAB it rejected or kept (README
+  (z14)). This is Quartus' rule for a placement it takes as locked atoms;
+  the bitstream itself only needs a routing on the graph.
 - **LUT inputs** may be swapped by the router: a 6-LUT's A, B, E, F; a
   5-LUT half's own C, D, E; then rebuild the mask from the pins (README
   (z8)).
@@ -157,8 +161,11 @@ Verification kinds, strongest first:
   (README (u)); Quartus' own RC model (`DYGR_ROUTE_TIMING_INFO`, the
   `timing_routing_delays_*` databases) is not decoded. a5pnr's own STA
   uses the model (README (z)). quartus_sta times an a5pnr placement on
-  Quartus' routes (`a5pnr --quartus`, README (z4)); Quartus Pro takes no
-  routing constraints, so a5pnr's own routes are timed by the model only.
+  Quartus' routes (`a5pnr --quartus`, README (z4): LUTs, flops, carry
+  chains and MLAB RAM as locked atoms, M20Ks and DSP products as RTL
+  Quartus places, I/O registers as `FAST_*_REGISTER` flops, README (z14));
+  Quartus Pro takes no routing constraints, so a5pnr's own routes are timed
+  by the model only.
 - I/O registers: IO96 synchronous clear, IO96 lanes other than 4 and 5
   and HVIO blocks other than hvio_3_1 and hvio_0_1 (no clock entry seen),
   an output register's own synchronous clear, DDIO; logic beside MLAB RAM,

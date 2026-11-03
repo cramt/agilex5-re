@@ -8,6 +8,9 @@ description = "A small placer and router for the Agilex 5 A5EB013B: yosys JSON i
 anyhow = "1"
 rustc-hash = "2"
 serde_json = "1"
+# chipsmith's device-independent electrostatic global placer (README
+# (z14)), pinned with tools/a5synth's chipsmith.
+chipsmith-place = { git = "https://github.com/A-H-Technology/chipsmith", rev = "35f73c564d733baa1472dbc18203ac69e693b187" }
 
 [profile.release]
 debug = 1

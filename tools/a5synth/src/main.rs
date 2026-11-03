@@ -116,6 +116,7 @@ fn run(m: &mut Module, mlab: bool) -> Result<Stats> {
     opt::lower_bitwise(m)?;
     opt::opt_seq(m, REMOVABLE)?;
     restructure::restructure(m);
+    arith::fold_carry_in(m);
     let arith = arith::map(m);
     techmap::lower(m, |k| techmap::is_lowerable(k) || matches!(k, CellKind::Ff(_)))?;
     opt::opt_seq(m, REMOVABLE)?;
