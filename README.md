@@ -2999,6 +2999,52 @@ submodule's port wire).
 - Synthesis time drops from 30–110 s (yosys from nixpkgs, two `abc` runs)
   to under 20 s.
 
+### (z13) Phase 10: a5pnr against Quartus Prime Pro
+
+`tools/bench/vs-quartus-pro.sh` builds eight designs (blinky, leds, acc,
+the CPU with its register file in MLAB and in flops, chipsmith's sha256 and
+picorv32 examples on DE25-Nano tops, the DSP self-test) with Quartus Pro and
+with a5pnr's flow, three interleaved reps, each build in a systemd unit of
+its own, on the shared machine (load 4 to 47). Full write-up:
+[docs/vs-quartus-pro.md](docs/vs-quartus-pro.md). [obs] (`specimens/p10/bench`):
+
+| design | tool | wall s, median [min-max] | CPU s | load | ALMs | LABs | M20K | DSP | Fmax (MHz) |
+|---|---|---|---|---|---|---|---|---|---|
+| blinky | Quartus Pro | 2359 [1133-2784] | 1887 [1306-1923] | 25 | 13 | 3 | 0 | 0 | 820 (restricted 362) |
+| blinky | a5pnr | 124 [78-164] | 106 [85-111] | 38 | 13 | 2 | 0 | 0 | 830 (restricted 366), model 528 |
+| leds | Quartus Pro | 2306 [1396-3842] | 1911 [1546-1980] | 34 | 19 | 3 | 0 | 0 | 805 (restricted 366) |
+| leds | a5pnr | 129 [114-195] | 116 [116-120] | 27 | 19 | 2 | 0 | 0 | 805 (restricted 366), model 344 |
+| acc | Quartus Pro | 1714 [1586-2829] | 1862 [1788-1933] | 22 | 36 | 6 | 0 | 0 | 616 (restricted 362) |
+| acc | a5pnr | 128 [126-233] | 117 [117-122] | 23 | 37 | 6 | 0 | 0 | 465 (restricted 353), model 245 |
+| cpu | Quartus Pro | 2205 [1779-3760] | 2140 [2043-2314] | 19 | 390 | 54 | 1 | 0 | 300 (restricted 300) |
+| cpu | a5pnr | 282 [222-397] | 250 [232-260] | 22 | 453 | 86 | 1 | 0 | model 109 |
+| cpu_ff | Quartus Pro | 2703 [1795-2996] | 2541 [2214-2544] | 15 | 1454 | 186 | 1 | 0 | 319 (restricted 319) |
+| cpu_ff | a5pnr | 500 [410-621] | 509 [356-555] | 21 | 1394 | 207 | 1 | 0 | 161 (restricted 161), 1 LAB left to Quartus, model 132 |
+| sha256 | Quartus Pro | 2688 [2064-2700] | 2465 [2252-2484] | 17 | 1457 | 243 | 0 | 0 | 200 (restricted 200) |
+| sha256 | a5pnr | 1258 [887-1280] | 1023 [878-1032] | 25 | 2620 | 301 | 0 | 0 | 75 (restricted 75) (placed with a 44-net LAB budget), 12 LABs left to Quartus, model 72 |
+| picorv32 | Quartus Pro | 2239 [1564-2737] | 2103 [1768-2133] | 33 | 378 | 58 | 2 | 0 | 479 (restricted 344) |
+| picorv32 | a5pnr | 178 [169-391] | 202 [188-234] | 20 | 805 | 110 | 0 | 0 | model 159 |
+| mul | Quartus Pro | 2332 [1649-3196] | 2220 [1921-2236] | 8 | 329 | 45 | 0 | 6 | 243 (restricted 243) |
+| mul | a5pnr | 170 [147-346] | 172 [164-186] | 14 | 407 | 89 | 0 | 8 | model 222 |
+
+- **a5pnr is 5x to 19x faster in wall time** (blinky 2 minutes against
+  Quartus' 39), except sha256 (2.1x: a5pnr's place and route take 18
+  minutes there); 5x to 18x less CPU time.
+- **Quartus wins on area** where its synthesis does more (sha256 1,457
+  against 2,620 ALMs, picorv32 378 against 805, the MLAB CPU 390 against
+  453) and **on Fmax by 2x to 3x** on the deep designs: the flop CPU 319
+  against 161 MHz, sha256 200 against 75 (a5pnr's placement, Quartus'
+  routes); the small designs sit at the clock's pulse-width limit on both.
+- **Quartus' LAB legalizer rejects some of a5pnr's LABs** within a5pnr's
+  50-net budget: one LAB of the flop CPU, and of sha256 more than eight
+  (one per fitter run); a second sha256 placement with a 44-net budget still
+  had 12 of 315 rejected, which Quartus then placed itself. Nets per LAB,
+  nets from outside it, nets per half-LAB and LEIMs used rank the rejected
+  LABs mid-field: the rule is still [unk] (`tools/bench/unlock_fit.sh`
+  leaves them to Quartus one at a time).
+- Not measured: Fmax of a5pnr's placement where the export refuses MLAB
+  RAM, DSPs or I/O registers (the MLAB CPU, picorv32, mul: model only).
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -3337,7 +3383,10 @@ chipsmith's synthesis as a front end, a bench against Quartus Pro.
   sha256 4,066 → 2,058, fr 879 → 320; ALMs follow less (6-input LUTs don't
   pair). chipsmith would need an ALM-aware LUT cost and a multiplier hook
   (nothing changed in chipsmith).
-- Step 4 (bench): see (z13) and `docs/vs-quartus-pro.md`.
+- Step 4 (bench): **done** (z13), `docs/vs-quartus-pro.md`. a5pnr 5x to
+  19x faster in wall time on seven of eight designs (sha256 2.1x); Quartus
+  smaller where its synthesis does more and 2x to 3x faster in Fmax on the
+  deep designs; its LAB legalizer rejects some a5pnr LABs by a rule [unk].
 - Board: steps 27–30 of "Board test", files in `specimens/board/p10/`.
 
 Open after phase 10 [unk]:
@@ -3353,6 +3402,7 @@ Open after phase 10 [unk]:
   RTL simulation).
 - What an unrouted fabric pin passes (an unrouted I/O output reads 1
   through its inverter as 0, z11).
+- Quartus' LAB-input rule, still: LABs within 44 nets rejected (z13).
 
 **Phase 9 status** (branch `phase9`): every rule a5pnr writes checked
 against Quartus' own images; the router, the STA's carry arcs and MLAB RAM.
