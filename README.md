@@ -3404,6 +3404,12 @@ Open after phase 10 [unk]:
   through its inverter as 0, z11).
 - Quartus' LAB-input rule, still: LABs within 44 nets rejected (z13).
 
+Next: the board test (phase 10 files, steps 27–30, after phase 8's A/B
+pairs); an ALM-aware LUT cost in chipsmith's mapper (z12) and a5synth as
+the default front end once it is; MLAB, DSP and I/O-register atoms in the
+Quartus export, so every bench design gets a quartus_sta Fmax; a5pnr's
+placement and routing time on sha256-sized designs (z13).
+
 **Phase 9 status** (branch `phase9`): every rule a5pnr writes checked
 against Quartus' own images; the router, the STA's carry arcs and MLAB RAM.
 
