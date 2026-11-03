@@ -61,10 +61,12 @@ for d in designs:
             res = a5pnr_res(r1['dir']); f = fmax(f'{out}/sta/x_{d}/fmax.txt'); note = ''
             # x2: the export with the LABs Quartus' legalizer rejected left
             # unlocked (README (z13)).
-            if not f and fmax(f'{out}/sta/x2_{d}/fmax.txt'):
-                f = fmax(f'{out}/sta/x2_{d}/fmax.txt')
-                n = len(open(f'{out}/runs/x2_{d}/unlocked.txt').read().split())
-                note = f', {n} LAB{"s" if n > 1 else ""} left to Quartus'
+            # x44: placed again with a 44-net LAB budget (A5PNR_LAB_INPUTS) first.
+            for v, unl, extra in (('x2', f'{out}/runs/x2_{d}/unlocked.txt', ''), ('x44', f'{out}/runs/x44_{d}/fit/unlocked.txt', ' (placed with a 44-net LAB budget)')):
+                if not f and fmax(f'{out}/sta/{v}_{d}/fmax.txt'):
+                    f = fmax(f'{out}/sta/{v}_{d}/fmax.txt')
+                    n = len(open(unl).read().split())
+                    note = f'{extra}, {n} LAB{"s" if n > 1 else ""} left to Quartus'
             fs = f'{f[0]:.0f} (restricted {f[1]:.0f}){note}, model {res.get("model", "?")}' if f else f'model {res.get("model", "?")}'
         print(f'| {d} | {tool} | {w[0]:.0f} [{w[1]:.0f}-{w[2]:.0f}] | {c[0]:.0f} [{c[1]:.0f}-{c[2]:.0f}] | {ld:.0f} | {res.get("alms", "?")} | {res.get("labs", "?")} | {res.get("m20k", "?")} | {res.get("dsp", "?")} | {fs} |')
     if q and a:

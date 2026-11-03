@@ -98,6 +98,13 @@ pub struct Placement {
 /// README (z8)].
 pub const LAB_INPUTS: usize = 50;
 
+/// The budget, or A5PNR_LAB_INPUTS (a stricter one for a placement Quartus'
+/// legalizer has to take whole, README (z13)).
+fn lab_inputs() -> usize {
+    static N: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *N.get_or_init(|| std::env::var("A5PNR_LAB_INPUTS").ok().and_then(|v| v.parse().ok()).unwrap_or(LAB_INPUTS))
+}
+
 /// How many of each control line a LAB's ALMs ask for, and whether that
 /// fits: two clocks, two enables, one synchronous clear, two asynchronous
 /// clears (an ALM without one still takes a line, left inactive); and the
@@ -136,7 +143,7 @@ impl LabUse {
                 Ctl::Aclr(None) | Ctl::Wa(..) => {}
             }
         }
-        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.1.len() <= LAB_INPUTS
+        clk <= 1 && ce <= 2 && sclr <= 1 && aclr <= 1 && self.1.len() <= lab_inputs()
     }
 }
 
