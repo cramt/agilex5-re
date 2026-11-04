@@ -3283,6 +3283,61 @@ quartus_sta Fmax on a5pnr's placement (Quartus' routes):
   in the LBLK debug output [obs, `specimens/p11/lab/v4`]; what it checks is
   [unk].
 
+### (z15) Phase 12: sha256's first placement, I/O-register timing
+
+**Why sha256's first placement didn't route** [obs, `specimens/p12/qor`;
+the placement is deterministic, so one seed is a repeatable bench]: after
+80 iterations one LAB line (`LL:X77Y26Z0I73`) still carried two nets,
+one from a V1 and one from an H1 wire, each on its way to a different
+LEIM of LAB X77Y26. Each LEIM there takes eight of the LAB's lines, so
+neither net was forced onto that line. Three hypotheses, each measured on
+seed 1's placement:
+
+| change | result |
+|---|---|
+| unbounded search from iteration 10 (no bounding box) | still fails: the same LAB and net, another line (I75) |
+| LAB-line budget 53 instead of 55 | routes in 17 iterations, 240 LABs (233), model 104 MHz |
+| criticality decays 10 % an iteration from iteration 20 | routes in 42 iterations, the same 233 LABs, model 105 MHz |
+
+So it was the router's criticality: connections at criticality 0.98 pay
+2 % of the congestion cost, and two of them never left the line [inf:
+the decay fixing it says the two were critical; their paths weren't
+traced]. The decay is now
+the router's (`route.rs` `CRIT_DECAY_FROM`); the budget stays 55, as
+Quartus counts it (z14). It changes nothing that routes in under 20
+iterations, so the rest of the board suite routes as before (1 to 10
+iterations). Above that:
+
+| design | routing iterations, before → after | model Fmax | a5pnr wall |
+|---|---|---|---|
+| sha256 | 80 (failed), re-placed, 60 → **42 on the first placement** | 105 → 105 | 2,104 → 436–786 s |
+| cpu_ff | 44 → 28 | 158 → 158 | |
+| cpu (MLAB) | 24 → 23 | 149 → 149 | |
+| fr | 30 → 30 (one hop fewer) | 254 → 254 | |
+
+quartus_sta on sha256's first placement (Quartus' routes, `tools/bench/unlock_fit.sh`):
+**119.3 MHz, every LAB kept** (phase 11's second placement: 116 MHz with
+three LABs left to Quartus) [obs, one run, `specimens/p12/qor/sha256-p12q`].
+The other designs' placements don't change, so their quartus_sta numbers
+don't either.
+
+**I/O registers in the timing model**: io's quartus_sta Fmax was 117 MHz
+on a5pnr's placement (z14) [obs]. That path ran from one pin's input
+register to a LUT 32 rows away and back to another pin's output register,
+because the model timed an I/O register as a bare pin (no tco, no clock).
+quartus_sta's path gives an HVIO input register 2.091 ns uTco plus 1.793
+ns out of the register cell, and the output register a uTsu of −1.297 ns
+[obs, one path, `specimens/p11/exp/io/sta`]. The model now launches an
+input register at 3.884 ns on its clock and captures an output or OE
+register at −1.297 ns (`sta.rs` `IO_TCO`, `IO_TSU`). IO96 registers are
+assumed the same, and so are the I/O block's enables and synchronous clear
+[inf]. On io the model's register-to-register estimate falls from 528 to
+232 MHz, placement packs the logic into 4 LABs (6 before), and
+**quartus_sta on the new placement gives 144.3 MHz (117.2 before)**
+[obs, `specimens/p12/qor/io-p12io`]. The worst path is now io28 → io64,
+5.6 ns of data delay. Only io uses I/O registers among the board and bench
+designs.
+
 ### quartus_sta fails under chipsmith [obs]
 
 The full `--flow compile` dies in signoff timing analysis: `quartus_sta`
@@ -3340,7 +3395,8 @@ against the source from random states and from power-up, asm2 0 differ,
 and a5db's `.rbf` equal to pfg's with `--check_integrity` OK. Then come
 the readback's oracle audits (`tools/alm/oracles_p9.sh`, `oracles_p10.sh`).
 The files below were built on 2026-11-04 with master e0dad11's flow:
-a5pnr's router and timing model as on master, and a5synth on
+a5pnr before (z15)'s router and timing changes, which move io's and
+sha256's placements and cpu, cpu_ff and fr's routes, and a5synth on
 chipsmith 35f73c5, whose netlists equal a780413's. **Every check passed**
 [obs, `specimens/p12/board`]: all 18 a5pnr designs (13 suite designs, the
 three CPUs, picorv32, sha256), the scratch counter (asm2 0 of 25,516
@@ -3406,6 +3462,45 @@ the loaded machine, then a separate `quartus_asm` (6 min; the flow's
 critical warning, which a real design should follow.
 
 ## Plan
+
+**Phase 12 status** (branch `phase12`): the board test ready to run,
+every board file rebuilt, chipsmith's mapper from `open`, two QoR fixes.
+
+- Step 1 (runbook): **done**. `tools/board/run.sh` ("Board test"): the
+  IDCODE, Quartus' own blinky through openFPGALoader, SDM acceptance of
+  a5db's scratch counter, the hash variants, phase 8's A/B pairs, then
+  18 current designs; a failing gate stops the run with a diagnosis.
+  `--dry-run` checks every file against the README's checksums.
+  openFPGALoader gets the A5EB013B as a nix override
+  (`tools/board/openfpgaloader.nix`). The USB-Blaster III's udev rule is
+  in nixconf (needs a `nixos-rebuild switch`).
+- Step 2 (board files): **done**. All 25 rebuilt from master's flow with
+  `tools/board/build.sh`: every design passed the four checks, and both
+  oracle audits came out clean (18 + 9 holds).
+- Step 3 (a5synth on chipsmith `open` a780413): **done**. All 17 board
+  and bench netlists came out byte-identical to 35f73c5's
+  (`tools/a5synth/same.sh`).
+- Step 4 (quality): two of four (z15), both through the four checks on
+  every design they change (io, fr, cpu, cpu_ff, sha256) [obs,
+  `specimens/p12/qor/checks`]. Router criticality now decays from
+  iteration 20, so sha256 routes its first placement (quartus_sta 116 →
+  119 MHz, no LABs left to Quartus; place and route 2,104 → 436–786 s).
+  The model now times I/O registers (io 117 → 144 MHz by quartus_sta).
+
+Open after phase 12 [unk]:
+
+- Everything on silicon (`tools/board/run.sh`), including openFPGALoader's
+  Agilex sequence on this part and whether jtagd works inside
+  `tools/quartus.sh`'s network namespace (the runbook's fallback).
+- IO96 I/O-register timing and the I/O block's enable and clear setups (the
+  model assumes the HVIO path's values).
+- Register duplication or retiming for high fanout (Quartus' flop CPU:
+  1,229 registers → 2,960); not started.
+- Why the flop CPU keeps 727 6-LUTs at any LUT cost; not started.
+- Which paths sha256's two contested connections were on (the
+  criticality decay fixes it without that trace).
+- The full-build wall time against Quartus after (z15) (only a5pnr's
+  place and route was re-timed).
 
 **Phase 11 status** (branch `phase11`): closing the quality gap to Quartus
 Pro (README (z14)).

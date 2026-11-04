@@ -42,6 +42,9 @@ pub fn base_costs(g: &Graph, delays: &HashMap<String, f32>) -> Vec<f32> {
         .collect()
 }
 
+/// The routing iteration from which criticality decays.
+const CRIT_DECAY_FROM: usize = 20;
+
 pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], max_iter: usize) -> Result<Routed> {
     let n = g.len();
     let mut occ = vec![0u16; n];
@@ -71,7 +74,10 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
     // Criticality squared: only the most critical connections ignore
     // congestion (README (z8): the CPU 136 → 141 MHz register to register,
     // fr 52 → 7 routing iterations; the 4th power and a second pass with
-    // criticalities from the routes did worse).
+    // criticalities from the routes did worse). From CRIT_DECAY_FROM on,
+    // criticality decays 10 % an iteration: two critical connections paying
+    // 2 % of the congestion cost never parted on one LAB line, and sha256's
+    // first placement failed in 80 iterations (README (z15)).
     for iter in 1..=max_iter {
         let t_iter = std::time::Instant::now();
         let mut routed_n = 0;
@@ -102,7 +108,7 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
             let (sx, sy) = (g.x[net.source as usize] as i32, g.y[net.source as usize] as i32);
             sinks.sort_by_key(|&(_, s, c)| (std::cmp::Reverse((c * 10.0) as i32), (g.x[s as usize] as i32 - sx).abs() + (g.y[s as usize] as i32 - sy).abs()));
             for &(si, t, cr) in &sinks {
-                let cr = (cr * cr).min(0.98);
+                let cr = (cr * cr).min(0.98) * if iter >= CRIT_DECAY_FROM { 0.9f32.powi((iter - CRIT_DECAY_FROM) as i32 + 1) } else { 1.0 };
                 let alts = net.alts.get(si).map(Vec::as_slice).unwrap_or(&[]);
                 let target = |m: u32| m == t || alts.contains(&m);
                 if let Some(&m) = in_tree.iter().find(|&&m| target(m)) {
@@ -215,6 +221,12 @@ pub fn route(g: &Graph, nets: &[Net], base_by_type: &[f32], crit: &[Vec<f32>], m
                     .collect();
                 let sink = nets.iter().filter(|net| net.sinks.contains(&(k as u32))).count();
                 eprintln!("route: overused {} ({sink} nets end there): {}", g.name(k as u32), users.join(", "));
+                for (ni, net) in nets.iter().enumerate() {
+                    for &(p, d) in trees[ni].iter().filter(|&&(_, d)| d == k as u32) {
+                        let next: Vec<String> = trees[ni].iter().filter(|&&(q, _)| q == d).map(|&(_, x)| g.name(x)).collect();
+                        eprintln!("route:   {}: from {} (source {}) to {}", net.name, g.name(p), g.name(net.source), next.join(" "));
+                    }
+                }
             }
         }
         for &k in &over {
