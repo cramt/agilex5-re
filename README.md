@@ -3296,278 +3296,88 @@ list. Fitter and assembler are unaffected, so blinky was assembled with a
 separate `quartus_asm blinky`. With `brotli.lib` on `LD_LIBRARY_PATH`
 quartus_sta runs (u) [obs].
 
-### Board test (prepared, not run: the board is off)
+### Board test (tools/board/run.sh; not run: the board is off)
 
-The open writer's container and `CORE` output is now byte-identical to
-pfg's (o), so a5db's `.rbf` of Quartus' blinky *is* `blinky_pfg.rbf`. The
-open question is the from-scratch design (n): does an image built only from
-the database configure, and does its counter blink LED0 at about 1.5 Hz
-(2^25 cycles of CLOCK1_50 per period; KEY0 does nothing)? Then come the
-hash questions: whether the SDM checks the IO and design hashes. The files
-are in `specimens/board/` (git-ignored); to regenerate them:
+`tools/board/run.sh` is the board test: it loads one file at a time into
+the DE25-Nano's SRAM over the on-board USB-Blaster III (JTAG, MSEL as
+shipped), prints what the LEDs should do, asks y/n plus a note, logs the
+answer, and stops with a diagnosis when a gating step fails. Phase 4–11's
+hand-written steps 1–30 (cited by the phase statuses below) are in
+[docs/board-history.md](docs/board-history.md); the runbook supersedes
+them, with the files phase 12 rebuilt from master.
 
 ```
-B=specimens/board; Q=/pool/dev/altera_pro/quartus-pro/26.1.1; A=tools/a5db/target/release/a5db
-cp <blinky run>/output_files/blinky.sof $B/blinky.sof
-tools/quartus.sh quartus_pfg -c $B/blinky.sof $B/blinky_pfg.rbf          # control, pfg's own
-tools/cap.sh 12G python3 -I designs/blinky_a5db/build.py specimens/b5/r5  # 10 min
-cp specimens/b5/r5/blinky_a5db.sof $B/scratch.sof
-$A rbf db/sm4revb $B/scratch.sof $B/scratch_a5db.rbf $Q specimens/rbf_keyed_hash.key
-tools/quartus.sh quartus_pfg -c $B/scratch.sof $B/scratch_pfg.rbf        # equals scratch_a5db.rbf
-for v in zero-io-hash zero-design-hash corrupt-core; do
-    python3 -I tools/rbf_patch.py $v $B/scratch_a5db.rbf $B/scratch_a5db_$v.rbf; done
-for f in $B/*.rbf; do python3 -I tools/bitstream.py check $f; done      # all pass but corrupt-core
+sudo nixos-rebuild switch                 # once: nixconf's udev rule for 09fb:6022
+tools/board/run.sh --dry-run              # checksums against the block below; every step, no JTAG
+tools/board/run.sh                        # on the board
+tools/board/run.sh --from <step>          # resume after a stop
 ```
 
-SHA-256 of the files as built here (phase 5, `specimens/b5/r5`):
-`blinky_pfg.rbf` 8b490e78…, `scratch_a5db.rbf` = `scratch_pfg.rbf`
-27642610…, `scratch_a5db_zero-io-hash.rbf` 8fb79437…,
-`scratch_a5db_zero-design-hash.rbf` 0a8364c3…,
-`scratch_a5db_corrupt-core.rbf` e2446c93…. `quartus_pfg --check_integrity`
-says OK for all but corrupt-core (`Section hash mismatch`), asm2 reads the
-scratch image back with 0 of 25,516 attributes differing, and the `.rbf`
-from a5db equals pfg's. **Phase 5 changed the scratch image** in exactly
-122 bits: `flop_mode = FAST_WIRE` on the 122 routing muxes it uses, which
-every Quartus image sets and phase 4's left at DIS (q). The phase-4 files
-are kept in `specimens/board/old_r4/` and the phase-3 ones (the all-literal
-`CORE` of blinky) in `specimens/board/old/`; if step 4 fails with the
-phase-5 file, the phase-4 one tells whether DIS was the reason.
+The log is `specimens/board/runs/<time>.tsv` (step, file, SHA-256, loader
+exit, its first error line, answer, note), with each step's full loader
+output beside it. The loader is nixpkgs' openFPGALoader 1.2.0 with one
+line added to its part table (`tools/board/openfpgaloader.nix`): IDCODE
+`0xC362C0DD`, the A5EB013B (n), next to the A5EC008B it already knows; its
+Agilex programming sequence is the A5EC008B's and Agilex 3's, untried on
+this part [unk].
 
-On the board (DE25-Nano, on-board USB-Blaster III, JTAG; MSEL as shipped):
+| order | step | file | stops the run if |
+|---|---|---|---|
+| 1 | idcode | (chain) | the IDCODE isn't `0xC362C0DD` |
+| 2 | control | `blinky_pfg.rbf` (Quartus' blinky through pfg) | it doesn't load or LED0 doesn't blink |
+| 3 | scratch | `scratch.rbf` (hand-placed counter, a5db only) | the SDM refuses it |
+| 4 | zero-io-hash, zero-design-hash, corrupt-core | `scratch_*.rbf` | (recorded: which hashes the SDM checks) |
+| 5 | scratch-p5, ctl, ctl-p7 | phase 8's A/B pairs | (recorded: the LUT rule, (z3)) |
+| 6 | blinky | `blinky.rbf` | it doesn't load or doesn't blink |
+| 6 | leds … fr | 17 open-flow designs | (recorded, with the diagnosis per design) |
 
-1. `quartus_pgm -l` and `quartus_pgm -c 1 -a` (through `tools/quartus.sh`
-   with USB passed through) to see the cable and read the IDCODE. It
-   should be `0xC362C0DD` (n). Add it for `A5EB013B` to openFPGALoader's
-   `src/part.hpp` next to `0x4369c0dd` (A5EC008B), as an Agilex 5 entry.
-2. Control: `quartus_pgm -c 1 -m jtag -o "p;blinky.sof"` → LED0 blinks.
-3. Loader check: `openFPGALoader -c usb-blasterIII blinky_pfg.rbf` → LED0
-   blinks. If it doesn't, the loader is the problem, not the bitstream, so
-   stop here.
-4. **`openFPGALoader -c usb-blasterIII scratch_a5db.rbf`**, and
-   `quartus_pgm … -o "p;scratch.sof"` to rule out the loader. Blinks: the
-   database's idle state, pin tables, clock path and hand-placed logic
-   work on silicon, with no Quartus image anywhere. Doesn't blink but
-   configures (`CONF_DONE`, no SDM error): suspect the idle state (n) or
-   the design. Fails to configure: compare the SDM status with step 3's.
-5. `scratch_a5db_zero-io-hash.rbf` and `scratch_a5db_zero-design-hash.rbf`:
-   if it blinks, the SDM ignores that hash.
-6. Negative control: `scratch_a5db_corrupt-core.rbf` must fail (one bit in
-   a hashed `CORE` page, hashes left stale). If it configures, the SDM
-   isn't checking section hashes, and steps 4–5 prove less.
+`tools/board/build.sh` rebuilds every file into `specimens/board/p12/`
+(git-ignored) from this tree: Quartus' blinky through pfg as the control
+(a5db's `.rbf` of it equals pfg's), the scratch counter and its three hash
+variants (`tools/rbf_patch.py`), and every design through a5pnr's flow.
+Each design gets the four checks of (z14): extract = design, simulation
+against the source from random states and from power-up, asm2 0 differ,
+and a5db's `.rbf` equal to pfg's with `--check_integrity` OK. Then come
+the readback's oracle audits (`tools/alm/oracles_p9.sh`, `oracles_p10.sh`).
+The files below were built on 2026-11-04 with master e0dad11's flow:
+a5pnr's router and timing model as on master, and a5synth on
+chipsmith 35f73c5, whose netlists equal a780413's. **Every check passed**
+[obs, `specimens/p12/board`]: all 18 a5pnr designs (13 suite designs, the
+three CPUs, picorv32, sha256), the scratch counter (asm2 0 of 25,516
+differ, `.rbf` equal to pfg's), integrity OK on all but corrupt-core
+(`FAIL`, as meant), and 18 of 18 phase-9 holds plus 9 of 9 phase-10 ones
+with 0 mismatches. sha256 took its second placement, as in phase 11. The
+checksums, which `run.sh` checks before anything else:
 
-Record for each: LED behaviour, openFPGALoader's exit status, and the SDM
-status it prints (`ISC_SR`).
-
-**Phase 6: designs from the open flow** (w), in `specimens/board/p6/`
-(git-ignored). Each `<d>.rbf` is a5db's and equals `quartus_pfg`'s
-(`<d>_pfg.rbf`); `<d>.sof` is a5db's container. Rebuild them with
-`tools/a5pnr/flow.sh <d> designs/p6/<d>.pins specimens/p6/flow/<d>
-designs/p6/<d>.v` and check them with `tools/a5pnr/check.sh` (same
-arguments). After step 4 above works, load each with
-`openFPGALoader -c usb-blasterIII <d>.rbf`:
-
-7. `blinky.rbf`: LED0 blinks at about 1.5 Hz. This is the first image whose
-   placement and routing are entirely a5pnr's: if step 4 worked and this
-   doesn't, suspect the carry chain (it is the counter) or a5pnr's clock
-   route (DCM input 1, not Quartus' 2).
-8. `leds.rbf`: LED7 toggles every 1.3 s (counter bit 26), LED6 twice as
-   fast, the lower LEDs too fast to see. Holding KEY0 turns them all off
-   (the counter is held at 0); holding KEY1 inverts them; SW0 up reverses
-   their order. Tests HVIO inputs (KEY0, KEY1), an IO96 input (SW0) and
-   eight IO96 outputs.
-9. `acc.rbf`: LED7 changes about every 0.3 s and the lower LEDs faster, an
-   irregular pattern (the top byte of a 56-bit accumulator adding an LFSR);
-   KEY0 held clears them. Tests a carry chain over three LABs.
-10. `ram.rbf`: LED[7:0] counts up in binary at about 6 Hz (the M20K's copy
-    of the slowly stepping read address); all off or frozen means the M20K
-    isn't being written or read.
-
-SHA-256 of the files as built here (each equal to its `_pfg.rbf`): `blinky.rbf` ab5e1d19…, `leds.rbf` d9a3618e…, `acc.rbf` aa25d7f5…, `ram.rbf` 03f8d88f…
-
-Phase 6's acc and ram images lack `secmux_bto = DISABLE_BTO` in a LAB
-where their counter's carry runs from ALM 4 into ALM 5 (README (y)): if
-step 9 or 10 shows a counter that misbehaves above some bit, that is why;
-phase 7's rebuilds below have it.
-
-**Phase 7** (y)–(z2), in `specimens/board/p7/` (git-ignored): each `<d>.rbf`
-is a5db's and equals `quartus_pfg`'s `<d>_pfg.rbf`; `<d>.sof` is a5db's
-container. Rebuild with `tools/a5pnr/suite.sh specimens/p7/s2
-designs/p6/<d> …` (or `designs/p7/<d>`), the CPU with
-`designs/p7/cpu/go.sh run3`. Load each with
-`openFPGALoader -c usb-blasterIII <d>.rbf`:
-
-11. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`: as steps 7–10 (phase
-    7's placement; leds clears through the LAB's synchronous clear now).
-12. `ctl.rbf` (LAB control lines, two clocks): LED[1:0] count up every
-    0.67 s while SW0 is up and hold while it is down; LED[3:2] count every
-    0.67 s, and holding KEY1 sets them to 0 at the next 0.67 s tick;
-    LED[5:4] count every 0.67 s on CLOCK2_50, and holding KEY0 clears them
-    at once; LED6 toggles every 0.67 s and is off while SW1 is up; LED7
-    follows LED6 one 20 ns cycle later (it looks the same) and is off while
-    KEY1 is held.
-13. `arith.rbf` (carry chains): LED[3:0] count in binary, LED0 toggling
-    every 1.34 s; with SW3 down LED[7:4] = LED[3:0] + 2·SW2 + SW1 + SW0
-    (switches down: the same as LED[3:0]; SW0 up: one more); with SW3 up
-    LED[7:4] = LED[3:0] − 3 (mod 16). Both LED groups update together.
-14. `rom.rbf` (M20K contents): one LED lit, running LED0 → LED7 → LED0 back
-    and forth, 84 ms per step (a full sweep 0.67 s). All dark or all lit
-    means the contents didn't load.
-15. `ramx.rbf` (M20K enables and output register): with SW0 up, LED[3:0]
-    count in binary at about 3 Hz (LED0 toggles every 0.34 s); LED[7:4]
-    show the same with SW3 up, and with SW3 down whatever byte 3 held.
-    With SW0 down the LEDs replay what was written on the address
-    counter's previous pass (every 87 s; 0 after power-up). Holding KEY1
-    freezes them.
-16. `pll.rbf` (IOPLL): LED3 and LED7 toggle together every 0.67 s, and
-    LED[3:0] and LED[7:4] count at the same rate (the PLL at 100 MHz
-    against CLOCK2_50). LED[3:0] at half LED[7:4]'s rate means the PLL
-    runs at 50 MHz; LED[3:0] dark means it doesn't run or isn't locked.
-17. **`cpu.rbf` (FemtoRV32 running its program from M20K)**: with SW0 down,
-    LED[7:0] count up in binary, LED0 toggling every 0.25 s (LED7 every
-    32 s); with SW0 up the count runs at 1.1 MHz (the LEDs look half lit).
-    Holding KEY0 holds the CPU in reset (the LEDs keep their value);
-    releasing it starts the count again (the first store shows 1).
-    All dark: the CPU isn't fetching (suspect the M20K contents or its read
-    enable); stuck at one value: the delay loop or the branch.
-
-SHA-256 (phase 7, each equal to its `_pfg.rbf`): `blinky.rbf` 0bb02a06…,
-`leds.rbf` 613d1468…, `acc.rbf` b3b45318…, `ram.rbf` 389a48ed…, `ctl.rbf`
-bd4d0148…, `arith.rbf` 963e69dc…, `rom.rbf` 16b9d4ba…, `ramx.rbf`
-19e17400…, `pll.rbf` f4d1724b…, `cpu.rbf` 285321e8….
-
-**Phase 8** (z3)–(z5), in `specimens/board/p8/` (git-ignored). Phase 8
-found that every phase 4–7 image with a LUT in it computes each LUT on
-inverted inputs (z3): **steps 4, 8, 9, 12, 14–17 are expected to fail with
-the earlier files** (blinky in steps 7 and 11 is pure carry chain and
-should work). The steps below test the fix directly; run them first. Each
-`<d>.rbf` is a5db's and equals `quartus_pfg`'s `<d>_pfg.rbf`.
-
-18. **`scratch_p8.rbf` against `scratch_a5db.rbf`** (phase 5's, step 4): the
-    hand-placed 25-bit counter of `designs/blinky_a5db`, rebuilt with the
-    corrected LUT rule. `scratch_p8.rbf`: LED0 blinks at about 1.5 Hz.
-    `scratch_a5db.rbf`: LED0 stays dark (its first counter bit can't
-    toggle). Both configure. The reverse (old blinks, new dark) means the
-    phase 8 rule is wrong; both dark, look at the idle state (step 4).
-19. **`ctl_p7.rbf` against `ctl.rbf`**: phase 7's and phase 8's builds of
-    the LAB-controls design, behaviour as step 12. Phase 8's should do what
-    step 12 says; phase 7's shouldn't (its LUTs, e.g. the XOR reductions
-    and the enable logic, are on inverted inputs).
-20. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `arith.rbf`, `rom.rbf`,
-    `ramx.rbf`, `pll.rbf`: as steps 11–16, now with two LUTs per ALM.
-21. **`cpu.rbf`** (FemtoRV32, 1,393 ALMs): as step 17.
-22. If step 18 passes but 20 or 21 fail: suspect what only phase 8 added,
-    in this order: a 5-LUT's output (`LUTOUT_5LUT`, which no earlier image
-    used), two flops sharing a half's enable (the CPU's register file),
-    the C1/D1 copies of a 6-LUT's inputs.
-
-Rebuild: `designs/blinky_a5db/build.py specimens/p8/scratch` (checked
-against a 25-bit counter in `specimens/p8/scratch/check`: 1,000 cycles from
-random states and 3,000 from power-up, 0 mismatches), `tools/a5pnr/suite.sh
-specimens/p8/s4 designs/p6/<d> …`, `designs/p7/cpu/go.sh r6` with
-`OUT=specimens/p8/cpu`; `ctl_p7.rbf` is `specimens/board/p7/ctl.rbf`.
-SHA-256 (phase 8, each a5db `.rbf` equal to its `_pfg.rbf`): `scratch_p8.rbf`
-55d574d2…, `scratch_a5db.rbf` 27642610… (phase 5's), `ctl_p7.rbf` bd4d0148…
-(phase 7's), `blinky.rbf` 18e90707…, `leds.rbf` bc7ce2aa…, `acc.rbf`
-1f7771d7…, `ram.rbf` e40b3676…, `ctl.rbf` 9a5d9a58…, `arith.rbf` 2fc8e316…,
-`rom.rbf` 6870707f…, `ramx.rbf` c44717e9…, `pll.rbf` f4e2caf7…, `cpu.rbf`
-3e3dd91c….
-
-**Phase 9** (z6)–(z9), in `specimens/board/p9/` (git-ignored). **These are
-the current files**; with them, phase 8's A/B pairs (steps 18 and 19) still
-come first. The oracle audit (z6) found no rule a5pnr writes wrong, so
-**phase 8's files stay valid** (same RTL, behaviour as written); phase 9's
-differ in placement and routing (the LAB-input budget, swapped LUT inputs),
-except `blinky.rbf`, which is byte-identical to phase 8's. Phase 4–7 files
-with LUTs stay wrong (z3). Each `<d>.rbf` is a5db's and equals
-`quartus_pfg`'s `<d>_pfg.rbf`; every one passed all four checks
-(`specimens/p9/s1/summary.tsv`, `specimens/p9/cpu/*.check.log`).
-
-23. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `ctl.rbf`, `arith.rbf`,
-    `rom.rbf`, `ramx.rbf`, `pll.rbf`: as steps 11–16 and 12. ramx with
-    KEY1 held: frozen, as before (the M20K's read enable holds its data
-    (z6), and the write address has moved on anyway).
-24. **`rf.rbf` (MLAB RAM)**: LED[3:0] show the low four bits of word a of a
-    32 x 8 RAM, a stepping every 0.17 s: (7a + 1) mod 16, i.e. 1, 8, F,
-    6, D, 4, B, 2, 9, 0, 7, E, 5, C, 3, A, then again. LED[7:4] show word
-    a mod 16 of a 16 x 4 RAM, 15 − a: counting down F → 0 every 2.7 s.
-    SW0 up writes the counter's top byte at the address being read: LED[3:0]
-    then count up in binary, one step every 0.34 s, and keep doing so after
-    SW0 goes down (the words were overwritten); reconfiguring brings the
-    first pattern back. Holding KEY1 writes the counter's top four bits
-    into the 16 x 4 RAM: LED[7:4] then show one value that changes every
-    5.4 s. Diagnosis: LED[3:0] dark or stuck, contents not loaded or the
-    read broken; the pattern but SW0 does nothing, the write side (CLKEN0,
-    the write address lines); LED[7:4] dark, the unrouted address bit of a
-    16-word RAM doesn't read 1 (z6).
-25. **`cpu.rbf`** (FemtoRV32 with its register file in MLAB RAM, 453 ALMs):
-    as step 17. **`cpu_ff.rbf`**: the same CPU with its register file in
-    flops (phase 9's code, `A5_MLAB=0`), as step 17. If `cpu_ff.rbf` works
-    and `cpu.rbf` doesn't, suspect the MLAB RAM (step 24 first); if
-    neither does but phase 8's `cpu.rbf` (step 21) works, suspect phase 9's
-    routing (swapped LUT inputs).
-26. `fr.rbf`: random logic between registers (designs/fr), LEDs flicker
-    too fast to read; only "configures, no SDM error" is checkable.
-
-Rebuild: `tools/a5pnr/suite.sh specimens/p9/s1 designs/p6/<d> designs/p7/<d>
-designs/fr/fr designs/p9/rf`, `OUT=specimens/p9/cpu designs/p7/cpu/go.sh r1`
-and, with `A5_MLAB=0`, `… go.sh ff1`. SHA-256 (phase 9, each a5db `.rbf`
-equal to its `_pfg.rbf`): `blinky.rbf` 18e90707… (= phase 8's), `leds.rbf`
-06ae3d5b…, `acc.rbf` ddd12ace…, `ram.rbf` fe6b2b2c…, `ctl.rbf` aa26db1b…,
-`arith.rbf` 40ba5b24…, `rom.rbf` cd577dcf…, `ramx.rbf` c8d6cd36…, `pll.rbf`
-c67946ab…, `rf.rbf` 9125aab9…, `fr.rbf` 8fcf2750…, `cpu.rbf` 910c213b…,
-`cpu_ff.rbf` 031446c8….
-
-**Phase 10** (z10)–(z12), in `specimens/board/p10/` (git-ignored). **These
-are the current files**; phase 8's A/B pairs (steps 18 and 19) still come
-first, then the new pair (step 27). Each `<d>.rbf` is a5db's and equals
-`quartus_pfg`'s `<d>_pfg.rbf`; every one passed all four checks
-(`specimens/p10/s1/summary.tsv`, `specimens/p10/cpu/*.check.log`,
-`specimens/p10/synth/v2/cpu`). blinky, acc, ram, rom, ramx, pll and rf are
-byte-identical to phase 9's; leds, ctl, arith and fr differ in placement
-and routing only (a5pnr now numbers nets no name covers, so its constant
-LUTs' nets move), not in what they compute.
-
-27. **`cpu_cs.rbf` against `cpu.rbf`**: the same FemtoRV32 (register file
-    in MLAB RAM), synthesized by chipsmith (`A5_SYNTH=chipsmith`, 450 ALMs)
-    and by yosys (453 ALMs): both as step 17. One working and the other not
-    points at that synthesis (or, for `cpu_cs.rbf` alone, at a5synth's
-    `A5_ARITH` and flop mapping).
-28. **`io.rbf` (I/O registers)**: KEY0, KEY1 and SW[3:0] are sampled in
-    their pins' input registers, LED[7:0] come from output registers.
-    LED[3:0] follow SW[3:0] at once, except LED2, which takes SW2 once per
-    1.34 s, and LED3, which stays dark while KEY0 is held. LED4 blinks with
-    a 1.34 s period, LED5 with 0.67 s and freezes while KEY1 is held, LED6
-    (0.34 s) and LED7 (0.17 s) go dark while KEY0 is held. Diagnosis: no
-    LED reacts at all, the IO96 output registers or their clock (VIO X106,
-    X107 `GLOBAL_LOCAL_SEL` I3); LED[3:0] stuck while LED4 blinks, the
-    input registers (HVIO clock row 49, IO96 lane 5 flyby); LED5 doesn't
-    freeze, an output register's clock enable (through an RPI inverter);
-    LED6 not dark under KEY0, an inverted asynchronous clear (RPI), LED7 not
-    dark, the straight active-low one; LED3 not dark, an input register's
-    clear. The GPIO pins (H16, Y1 in; C2, P1 out, P1 with an OE register)
-    need a probe; C2 toggles at 25 MHz XOR the inputs.
-29. **`mul.rbf` (DSP blocks)**: eight products, 9x9 to 27x27, signed and
-    unsigned, each checked against a shift-and-add reference. LED0 dark
-    and LED1 toggling every 0.17 s (LED2 0.34 s, LED3 0.67 s): every
-    product right. LED0 lit: a wrong product; LED[7:4] count them in
-    binary up to 15, so all four lit means wrong products keep coming (one
-    mode wrong every pass fills it within a millisecond), a lower count a
-    rare error. LED1 not toggling: the DSP clock or the fabric.
-30. `blinky.rbf`, `leds.rbf`, `acc.rbf`, `ram.rbf`, `ctl.rbf`, `arith.rbf`,
-    `rom.rbf`, `ramx.rbf`, `pll.rbf`, `rf.rbf`, `fr.rbf`: as steps 23, 24
-    and 26. **`cpu.rbf`**, **`cpu_ff.rbf`**: as step 25.
-
-Rebuild: `tools/a5pnr/suite.sh specimens/p10/s1 designs/p6/<d> designs/p7/<d>
-designs/fr/fr designs/p9/rf designs/p10/io/io designs/p10/mul/mul`,
-`OUT=specimens/p10/cpu designs/p7/cpu/go.sh r1`, with `A5_MLAB=0` `… go.sh
-ff1`, and with `A5_SYNTH=chipsmith` `OUT=specimens/p10/synth/v2 … go.sh cpu`.
-SHA-256 (phase 10, each a5db `.rbf` equal to its `_pfg.rbf`): `io.rbf`
-a4869e91…, `mul.rbf` 2ec946ab…, `cpu.rbf` 0ef29cb3…, `cpu_ff.rbf`
-955d6bf8…, `cpu_cs.rbf` 877930f8…, `leds.rbf` 40eb7666…, `ctl.rbf`
-cfce635e…, `arith.rbf` dd830f2a…, `fr.rbf` 99f66baa…; `blinky.rbf`
-18e90707…, `acc.rbf` ddd12ace…, `ram.rbf` fe6b2b2c…, `rom.rbf` cd577dcf…,
-`ramx.rbf` c8d6cd36…, `pll.rbf` c67946ab…, `rf.rbf` 9125aab9… (= phase
-9's).
+<!-- board-sha256 begin -->
+```
+fb97de9b1ed256da89ab4db8af6ca2c7883fb73121ba820c7f0df2a551f22ec1  acc.rbf
+fde7b9cc4f8dede27593ac8f5f0392e3722a2f930016dafa2770c8d205b92410  arith.rbf
+8b490e7823c3823e386d1fd6c3a699f61e32175e30e007a1bcb758a06c80d597  blinky_pfg.rbf
+18e90707c9365e0a35cf3069c827c492c30bc175cd64585461ecc078dd8dbae6  blinky.rbf
+d65934b6227de991066fc02318f8316e78bda4f821a759f3202a6c77e821fc5a  cpu_ff.rbf
+81772d2644496fd87e702bff34871142f77e23a86ab1f9a71be93f7abd7b71d6  cpu.rbf
+fb914fc3bf2f2b4ae248a5f00e7f9d2af34ed2d62078ca5a862c30c0af9249bc  cpu_ys.rbf
+bd4d0148209c0fd0e47345e84e50519ca7d802fe037e1ff4ed5d19dad043f30a  ctl_p7.rbf
+7e5e14122e820bdd4f9d36b28530cecd76cad1d3babb610cf790391b4baef2f1  ctl.rbf
+993fa42ddfe19e79d4dd75e7a90cb29fd7dab07c3fcdd88a608ac86858c377f3  fr.rbf
+f5a5bfe067f26bb22c7e5b9935e89ffe09e492f5c4ea33db6ac4ec973ad9ff1b  io.rbf
+08fb40c71a6426eb8b22eced3f50d63cea882f6bcf95671dc7d7eca41fa7fa3d  leds.rbf
+cbce12b67a0c5111770c110474f29f17171ec6a80ccf504d40b254c44f590d3d  mul.rbf
+f5f6d3b3f25603736050980079c466db81172e10b121ff038a74c3b577887531  picorv32.rbf
+3f16a01219ad4ae468aca6f66e4c1298f6fc6e739d8113f8cfabd376b6af7705  pll.rbf
+3f473da43641149c83d0f0bc68cc4ca9ee627f903238517410a09f9f0aaa5e2e  ram.rbf
+b22f7525b035bd20c84b1fc1ae0ed0b51b9c05cc1fe55dc4570cf82d4c570543  ramx.rbf
+5d91e9b41a188c34919dc0d6b95c0c70860659f9ab94ac6cae6c5852f74a59ea  rf.rbf
+cd577dcf50b522c96f28fdb1ea80b23c92c924cdd9e62d77924680c62247cced  rom.rbf
+627f1bc0ffef0a1723dae8aca9c42972aba5ce993c26b4f5cd1277b8e37679d6  scratch_corrupt-core.rbf
+276426105eb6e4fb8ee1e4b7e2b4b94d73a343c19ba6c292df1cc9bb5f1c007e  scratch_p5.rbf
+55d574d246da19ce341195e3b18641a74c307a59d7813ba09e3efb23afb891ed  scratch.rbf
+2a1f4a67d7acfd79b6137cf7d91671a005df516a6db30f894ca048a6f476795a  scratch_zero-design-hash.rbf
+3acc1a46e9f5f04a39a171d434fdc651e77a91ae169314dbce59660010b34a3e  scratch_zero-io-hash.rbf
+e11c109691e99a7bb5ff93ffcd57005afe2024084b929d715d58d9438c0d0063  sha256.rbf
+```
+<!-- board-sha256 end -->
 
 ## Oracle
 
