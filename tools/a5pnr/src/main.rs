@@ -55,6 +55,26 @@ fn main() -> Result<()> {
             let g = graph::Graph::load(std::path::Path::new(gdir))?;
             return readback::run(&g, db, extract, pins, top, out);
         }
+        if cmd == "node" {
+            // Debugging aid: a5pnr node <graph> <node>...: each node's fanin
+            // and fanout with their edge classes.
+            let g = graph::Graph::load(std::path::Path::new(gdir))?;
+            let want: Vec<u32> = nodes.iter().map(|n| g.node(n).with_context(|| format!("no node {n}"))).collect::<Result<_>>()?;
+            for (k, &w) in want.iter().enumerate() {
+                println!("{}", nodes[k]);
+                for m in 0..g.len() as u32 {
+                    for e in g.fanout(m) {
+                        if g.dst[e] == w {
+                            println!("  in  {} class {}", g.name(m), g.class[e]);
+                        }
+                    }
+                }
+                for e in g.fanout(w) {
+                    println!("  out {} class {}", g.name(g.dst[e]), g.class[e]);
+                }
+            }
+            return Ok(());
+        }
         if cmd == "drivers" {
             // Debugging aid: for a decoded design (a5db extract), the source
             // of every reached node whose name starts with the prefix.
@@ -371,7 +391,7 @@ fn main() -> Result<()> {
         }
     }
     let base = route::base_costs(&g, &delay);
-    let sta = sta::Sta::new(&nl, &packed, &delay);
+    let sta = sta::Sta::new(&nl, &packed, &delay, &io);
 
     // Placement: wire length first; then, timing-driven, again with the
     // connections' criticalities from that placement (README (z)). A
@@ -572,7 +592,7 @@ fn main() -> Result<()> {
     };
     // Timing of the routed design (README (u), (z)): each routed hop costs
     // its node type's mean, cells their arcs' means; on the swapped pins.
-    let sta = sta::Sta::new(&nl, &packed, &delay);
+    let sta = sta::Sta::new(&nl, &packed, &delay, &io);
     let net_index: HashMap<u32, usize> = packed.nets.keys().map(|k| (*k, rnets.iter().position(|r| r.name == nl.nets[*k as usize]).unwrap_or(usize::MAX))).collect();
     let mut conn_delay = vec![0f32; sta.conns.len()];
     let parents: Vec<HashMap<u32, u32>> = routed.trees.iter().map(|tree| tree.iter().map(|&(a, b)| (b, a)).collect()).collect();

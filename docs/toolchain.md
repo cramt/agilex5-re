@@ -24,6 +24,7 @@ Section letters refer to the README's findings. File formats are in
 | IOPLL | `db/sm4revb/io/iopll.tsv`, `tools/pll/iopll.py` | an IOPLL's lines for any reference and output frequencies (README (v)) |
 | open flow | `tools/a5pnr` (`tools/a5synth`, chipsmith's synthesis, + Rust placer and router) | Verilog → design file → `.sof` → `.rbf` (README (w)); chipsmith's synthesis is the front end (README (z12), (z14)), yosys with `A5_SYNTH=yosys` |
 | writer | `tools/a5db` (Rust) | design file → `.sof` image → `.rbf` byte-identical to `quartus_pfg`'s |
+| board | `tools/board` (openFPGALoader with the A5EB013B, `build.sh`, `run.sh`) | every board file rebuilt and checked; loaded over JTAG in a gated order (README, "Board test") |
 
 ## The interface: a design file
 
@@ -176,5 +177,5 @@ Verification kinds, strongest first:
   an M20K) (README (z11)).
 - Hyper-registers used as registers (`flop_mode` FLOP), clock gating in the
   clock network, LAB `lut_mode`/`latch_mode` (no bits in asm2).
-- Any check on silicon: the DE25-Nano was off for all of phase 5; see the
-  README's "Board test".
+- Any check on silicon: the DE25-Nano was off through phase 12; the board
+  test is `tools/board/run.sh` (README, "Board test").

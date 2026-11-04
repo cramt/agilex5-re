@@ -50,7 +50,10 @@ the front end, is in the phase 10 column below and in git history.
 **a5pnr is now 9x to 32x faster than Quartus Pro in wall time on seven of
 eight designs, but sha256 (1.4x).** sha256 got slower (1,891 s against
 phase 10's 1,258): its first placement doesn't route (one LAB's local line
-two nets want) and a5pnr places it again with the next seed.
+two nets want) and a5pnr places it again with the next seed. Phase 12 found
+why (two critical connections never yielding one LAB line) and routes it
+first time: its place and route takes 436–786 s where it took 2,104
+(below).
 
 **On area a5pnr is level or ahead on six designs** (the flop CPU 1,300
 against Quartus' 1,454, mul 311 against 329) and behind on three: sha256
@@ -85,6 +88,26 @@ endpoints, as phase 9 measured).
 | sha256 | 2,620 → 1,669 | 75 → 116 | 72 → 105 |
 | picorv32 | 805 → 430 | – → 296 | 159 → 271 |
 | mul | 407 → 311 | – → 236 | 222 → 243 |
+
+## Phase 11 → phase 12 (a5pnr)
+
+Two changes (README (z15)), measured with the same netlists (a5synth on
+chipsmith `open` a780413 writes phase 11's netlists byte for byte):
+criticality in the router decays from iteration 20, and the model times
+I/O registers (input tco, output setup). Router changes leave quartus_sta's
+numbers alone where the placement doesn't move (it times Quartus' routes),
+so only sha256, now routed on its first placement, and io moved. Single
+runs [obs, `specimens/p12/qor`]; Full builds below are still phase 11's.
+
+| design | LABs | Fmax, quartus_sta on a5pnr's placement (MHz) | LABs left to Quartus | model (MHz) | a5pnr place and route (s) |
+|---|---|---|---|---|---|
+| sha256 | 220 → 233 | 116 → **119** | 3 → **0** | 105 → 105 | 2,104 → 436–786 |
+| io | 6 → 4 | 117 → **144** | 0 → 0 | 326 → 169 (register to register 528 → 232) | 36 → 35 |
+| cpu_ff, cpu, fr | same | same (same placement) | same | same | routing iterations 44 → 28, 24 → 23, 30 → 30 |
+
+sha256's speed-up over Quartus on the full build, 1.4x in phase 11, isn't
+re-measured; its place-and-route step alone is now 2.7x to 4.8x shorter
+on the loaded machine.
 
 ## Full builds
 

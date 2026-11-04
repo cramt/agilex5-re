@@ -10,6 +10,7 @@
 
 use crate::det::HashMap;
 
+use crate::ioreg::{IoRegs, Role};
 use crate::netlist::{Cell, Netlist};
 use crate::pack::{pin_letter, six_pins, Alm, End, HalfLut, Logic, Packed, Slot, Src, ARITH_IN, LEIM_PIN};
 
@@ -18,6 +19,14 @@ pub const M20K_TCO: f32 = 1.429;
 /// An M20K input's setup time [inf: not fitted; a LAB flop's tsu plus a
 /// margin until an M20K path is in the fit].
 pub const M20K_TSU: f32 = 0.25;
+/// An HVIO input register's clock to its fabric output: uTco 2.091 plus
+/// 1.793 out of the register cell [obs, one quartus_sta path, io (README
+/// (z15)); IO96 assumed the same].
+pub const IO_TCO: f32 = 3.884;
+/// An HVIO output register's setup from its fabric input, the same path's
+/// uTsu (negative: its clock arrives late) [obs, one path]; also used for
+/// the I/O block's enables and synchronous clear [inf].
+pub const IO_TSU: f32 = -1.297;
 
 #[derive(Clone, Copy)]
 enum Arc {
@@ -65,7 +74,8 @@ fn ff_clock(nl: &Netlist, ff: usize) -> u32 {
 }
 
 impl Sta {
-    pub fn new(nl: &Netlist, p: &Packed, d: &HashMap<String, f32>) -> Sta {
+    pub fn new(nl: &Netlist, p: &Packed, d: &HashMap<String, f32>, io: &[IoRegs]) -> Sta {
+        let io_clk: HashMap<usize, u32> = io.iter().map(|r| (r.port, r.clk)).collect();
         let get = |k: &str| d.get(k).copied().unwrap_or(0.0);
         // A class with a fallback (a delay table from before README (z7)).
         let get2 = |k: &str, alt: &str| d.get(k).or_else(|| d.get(alt)).copied().unwrap_or(0.0);
@@ -109,8 +119,7 @@ impl Sta {
                     Some(Slot::Wire { src: Src::Sum }) => edges.push((id((3, alm, slot as u32 / 2)), src, Arc::Fixed(0.0))),
                     _ => {}
                 },
-                // An I/O register is timed as the pin it sits in (the model
-                // has no I/O register arcs).
+                End::Io { port, role: Role::Q } => starts.push((src, IO_TCO, io_clk[&port])),
                 End::Port(_) | End::Pll(_) | End::Io { .. } => starts.push((src, 0.0, u32::MAX)),
                 End::M20k { m, .. } => {
                     let Cell::M20k(c) = &nl.cells[p.m20ks[m]] else { unreachable!() };
@@ -144,6 +153,11 @@ impl Sta {
                     End::Dsp { d, .. } => {
                         let x = id((5, conns.len(), 0));
                         ends.push((x, M20K_TSU, Some(p.dsps[d].clk), format!("DSP {d}")));
+                        x
+                    }
+                    End::Io { port, role: role @ (Role::Out | Role::Oe | Role::InCe | Role::OutCe | Role::InSclr) } => {
+                        let x = id((5, conns.len(), 0));
+                        ends.push((x, IO_TSU, Some(io_clk[&port]), format!("{role:?} register of {}", nl.ports[port].name)));
                         x
                     }
                     End::Port(pi) | End::Io { port: pi, .. } => {
