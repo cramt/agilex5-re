@@ -3048,8 +3048,8 @@ its own, on the shared machine (load 4 to 47). Full write-up:
 ### (z14) Phase 11: closing the gap to Quartus Pro
 
 **An ALM-aware LUT cost in chipsmith's mapper** (chipsmith branch
-`a5-almcost` off `open` 80351e1, not merged into `open`; tools/a5synth pins
-it). `lutmap::MapOptions` carries two things the mapper didn't have, both
+`a5-almcost` off `open` 80351e1, since merged into `open` a780413, which
+tools/a5synth pins from phase 12 with every netlist unchanged). `lutmap::MapOptions` carries two things the mapper didn't have, both
 off by default (`MapOptions::DEFAULT`, which `map_module_k` uses):
 
 - `LutCost`, an area per cut by input count (`LutCost::by_inputs`; no cost

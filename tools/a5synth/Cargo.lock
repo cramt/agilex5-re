@@ -22,7 +22,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 [[package]]
 name = "chipsmith-netlist"
 version = "0.1.0"
-source = "git+https://github.com/A-H-Technology/chipsmith?rev=35f73c564d733baa1472dbc18203ac69e693b187#35f73c564d733baa1472dbc18203ac69e693b187"
+source = "git+https://github.com/A-H-Technology/chipsmith?rev=a7804138832d219ee087bb0cc26c8a981588565a#a7804138832d219ee087bb0cc26c8a981588565a"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -33,7 +33,7 @@ dependencies = [
 [[package]]
 name = "chipsmith-synth"
 version = "0.1.0"
-source = "git+https://github.com/A-H-Technology/chipsmith?rev=35f73c564d733baa1472dbc18203ac69e693b187#35f73c564d733baa1472dbc18203ac69e693b187"
+source = "git+https://github.com/A-H-Technology/chipsmith?rev=a7804138832d219ee087bb0cc26c8a981588565a#a7804138832d219ee087bb0cc26c8a981588565a"
 dependencies = [
  "anyhow",
  "chipsmith-netlist",
@@ -45,7 +45,7 @@ dependencies = [
 [[package]]
 name = "chipsmith-verilog"
 version = "0.1.0"
-source = "git+https://github.com/A-H-Technology/chipsmith?rev=35f73c564d733baa1472dbc18203ac69e693b187#35f73c564d733baa1472dbc18203ac69e693b187"
+source = "git+https://github.com/A-H-Technology/chipsmith?rev=a7804138832d219ee087bb0cc26c8a981588565a#a7804138832d219ee087bb0cc26c8a981588565a"
 dependencies = [
  "chipsmith-netlist",
  "rustc-hash",
