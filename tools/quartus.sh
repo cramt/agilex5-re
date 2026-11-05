@@ -42,4 +42,4 @@ while read -r name; do
     exit 1
 done < <(ip -o link show | awk -F': ' '{ sub(/@.*/, "", $2); print $2 }')
 
-exec "${CHIPSMITH:-chipsmith}" run --backend quartus-pro --version 26.1.1 "$1" -- "${@:2}"
+exec "${CHIPSMITH_VENDOR:-chipsmith-vendor}" run --backend quartus-pro --version 26.1.1 "$1" -- "${@:2}"
