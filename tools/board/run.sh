@@ -36,13 +36,18 @@ ofl=$(nix build --no-link --print-out-paths --impure --expr \
 "$ofl" --list-fpga | grep -q '0xc362c0dd' || { echo "$ofl lacks the A5EB013B" >&2; exit 1; }
 
 # The cable and its permission, before the first JTAG step. udev rule:
-# nixconf modules/bundles/nixos-general.nix (09fb:6022, plugdev).
+# nixconf modules/bundles/nixos-general.nix (09fb:6022|6026, plugdev).
+# openFPGALoader's usb-blasterIII is 09fb:6022, the standalone cable; the
+# DE25-Nano's onboard one enumerates as 09fb:6026 (an FT4232H, "TERASIC
+# DE25-Nano"), so the PID found is passed explicitly.
+pid=6022
 if ! ((dry)); then
-    usb=$(grep -lx 6022 /sys/bus/usb/devices/*/idProduct 2>/dev/null | while read -r f; do
-        d=${f%/idProduct}; [[ $(cat "$d/idVendor") == 09fb ]] && printf '/dev/bus/usb/%03d/%03d\n' "$(cat "$d/busnum")" "$(cat "$d/devnum")"; done | head -1)
-    [[ -n $usb ]] || { echo "no USB-Blaster III (09fb:6022) on USB: board powered and its USB-C (JTAG) port plugged in?" >&2; exit 1; }
-    [[ -w $usb ]] || { echo "$usb isn't writable: the 09fb:6022 udev rule is in nixconf; run sudo nixos-rebuild switch and replug" >&2; exit 1; }
-    echo "== cable: $usb"
+    usb=$(grep -lxE '6022|6026' /sys/bus/usb/devices/*/idProduct 2>/dev/null | while read -r f; do
+        d=${f%/idProduct}; [[ $(cat "$d/idVendor") == 09fb ]] && printf '/dev/bus/usb/%03d/%03d %s\n' "$(cat "$d/busnum")" "$(cat "$d/devnum")" "$(cat "$f")"; done | head -1)
+    pid=${usb#* }; usb=${usb% *}
+    [[ -n $usb ]] || { echo "no USB-Blaster III (09fb:6022 or 6026) on USB: board powered and its JTAG micro-USB plugged in with a data cable (a charge-only one shows nothing)?" >&2; exit 1; }
+    [[ -w $usb ]] || { echo "$usb isn't writable: the 09fb:6022|6026 udev rule is in nixconf; run sudo nixos-rebuild switch and replug" >&2; exit 1; }
+    echo "== cable: $usb (09fb:$pid)"
 fi
 
 mkdir -p specimens/board/runs
@@ -66,10 +71,10 @@ step() {
     echo; echo "== step $id: ${file/#-/IDCODE}"
     local rc=0 out="" sr="" sha="-"
     if [[ $gate == idcode ]]; then
-        local cmd=("$ofl" -c usb-blasterIII --detect)
+        local cmd=("$ofl" -c usb-blasterIII --vid 0x09fb --pid 0x$pid --detect)
     else
         sha=$(sha256sum "$B/$file" | cut -c1-16)
-        local cmd=("$ofl" -c usb-blasterIII "$B/$file")
+        local cmd=("$ofl" -c usb-blasterIII --vid 0x09fb --pid 0x$pid "$B/$file")
     fi
     echo "   \$ ${cmd[*]}"
     if ((dry)); then

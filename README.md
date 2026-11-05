@@ -3362,7 +3362,7 @@ hand-written steps 1–30 (cited by the phase statuses below) are in
 them, with the files phase 12 rebuilt from master.
 
 ```
-sudo nixos-rebuild switch                 # once: nixconf's udev rule for 09fb:6022
+sudo nixos-rebuild switch                 # once: nixconf's udev rule for 09fb:6022|6026
 tools/board/run.sh --dry-run              # checksums against the block below; every step, no JTAG
 tools/board/run.sh                        # on the board
 tools/board/run.sh --from <step>          # resume after a stop
