@@ -7,7 +7,7 @@
 #   tools/pdbdump.sh /tmp/agilex5-re/blinky-run /pool/dev/agilex5-scratch/asmdump \
 #       specimens/pdbdump quartus_asm blinky
 #
-# Needs the same environment as tools/quartus.sh (CHIPSMITH, licence vars).
+# Needs the same environment as tools/quartus.sh (CHIPSMITH_VENDOR, licence vars).
 set -euo pipefail
 src=$1 work=$2 out=$3; shift 3
 here=$(cd "$(dirname "$0")" && pwd)

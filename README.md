@@ -3442,8 +3442,9 @@ chipsmith inside a fresh user+network namespace. It refuses to run if any
 interface besides `lo` (and the optional unaddressed `dummy` licence
 interface) is visible. It reads the namespace's own link list; note that
 `/sys/class/net` inside the namespace still shows the host's NICs. It needs
-`CHIPSMITH_INSTALL_ROOT=/pool/dev/altera_pro`, and `CHIPSMITH` if the
-`quartus-pro` chipsmith isn't on `PATH`.
+`CHIPSMITH_INSTALL_ROOT=/pool/dev/altera_pro`, and `CHIPSMITH_VENDOR` if
+`chipsmith-vendor` (chipsmith's vendor-tool runner, `nix build
+github:A-H-Technology/chipsmith#chipsmith-vendor`) isn't on `PATH`.
 
 The machine is shared and has no swap. Anything that can grow past about
 1 GB (Quartus, `a5db` over whole images or the graph, Python over tables)
