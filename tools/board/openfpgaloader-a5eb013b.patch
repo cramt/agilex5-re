@@ -4,7 +4,20 @@
  
  	/* Altera Agilex 5 */
  	{0x4369c0dd, {"altera", "agilex 5", "A5EC008B",  10}},
-+	{0xc362c0dd, {"altera", "agilex 5", "A5EB013B",  10}},
++	{0x4362c0dd, {"altera", "agilex 5", "A5EB013B",  10}},
  
  	/**************************************************************************/
  	/*                             Efinix                                     */
+--- a/src/cable.hpp
++++ b/src/cable.hpp
+@@ -140,6 +140,10 @@
+ 	{"usb-blasterII",      CABLE_DEF(MODE_USBBLASTER, 0x09Fb, 0x6810                   )},
+ 	{"usb-blasterII_1",    CABLE_DEF(MODE_USBBLASTER, 0x09Fb, 0x6010                   )},
+ 	{"usb-blasterIII",     FTDI_SER(0x09fb, 0x6022, FTDI_INTF_A, 0x08, 0x3B, 0x58, 0xb0)},
++	/* DE25-Nano onboard USB-Blaster III: an FT4232H, channel A, ADBUS4 high
++	 * enables the JTAG buffer (found by probing ADBUS4-7, agilex5-re
++	 * tools/board); the FT4232H has no high GPIO byte. */
++	{"de25-nano",          FTDI_SER(0x09fb, 0x6026, FTDI_INTF_A, 0x18, 0x1B, 0x00, 0x00)},
+ 	{"xilinxPlatformCableUsb",     CABLE_DEF(MODE_XPCU, 0x03fd, 0x0013                 )},
+ 	{"xilinxPlatformCableUsb_alt", CABLE_DEF(MODE_XPCU, 0x03fd, 0x000D                 )},
+ 	{"xvc-client",         CABLE_DEF(MODE_XVC_CLIENT, 0x0000, 0x0000                   )},

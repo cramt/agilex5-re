@@ -33,13 +33,13 @@ echo "   $(wc -l <<< "$sums") files OK"
 
 ofl=$(nix build --no-link --print-out-paths --impure --expr \
     '(builtins.getFlake "nixpkgs").legacyPackages.x86_64-linux.callPackage ./tools/board/openfpgaloader.nix {}' | tail -1)/bin/openFPGALoader
-"$ofl" --list-fpga | grep -q '0xc362c0dd' || { echo "$ofl lacks the A5EB013B" >&2; exit 1; }
+"$ofl" --list-fpga | grep -q '0x4362c0dd' || { echo "$ofl lacks the A5EB013B" >&2; exit 1; }
 
 # The cable and its permission, before the first JTAG step. udev rule:
 # nixconf modules/bundles/nixos-general.nix (09fb:6022|6026, plugdev).
 # openFPGALoader's usb-blasterIII is 09fb:6022, the standalone cable; the
 # DE25-Nano's onboard one enumerates as 09fb:6026 (an FT4232H, "TERASIC
-# DE25-Nano"), so the PID found is passed explicitly.
+# DE25-Nano") and needs ADBUS4 high, the patch's de25-nano cable.
 pid=6022
 if ! ((dry)); then
     usb=$(grep -lxE '6022|6026' /sys/bus/usb/devices/*/idProduct 2>/dev/null | while read -r f; do
@@ -49,6 +49,7 @@ if ! ((dry)); then
     [[ -w $usb ]] || { echo "$usb isn't writable: the 09fb:6022|6026 udev rule is in nixconf; run sudo nixos-rebuild switch and replug" >&2; exit 1; }
     echo "== cable: $usb (09fb:$pid)"
 fi
+case $pid in 6026) cable=de25-nano ;; *) cable=usb-blasterIII ;; esac
 
 mkdir -p specimens/board/runs
 log=specimens/board/runs/$(date +%Y%m%d-%H%M%S)$( ((dry)) && echo -dry).tsv
@@ -71,14 +72,14 @@ step() {
     echo; echo "== step $id: ${file/#-/IDCODE}"
     local rc=0 out="" sr="" sha="-"
     if [[ $gate == idcode ]]; then
-        local cmd=("$ofl" -c usb-blasterIII --vid 0x09fb --pid 0x$pid --detect)
+        local cmd=("$ofl" -c "$cable" --detect)
     else
         sha=$(sha256sum "$B/$file" | cut -c1-16)
-        local cmd=("$ofl" -c usb-blasterIII --vid 0x09fb --pid 0x$pid "$B/$file")
+        local cmd=("$ofl" -c "$cable" "$B/$file")
     fi
     echo "   \$ ${cmd[*]}"
     if ((dry)); then
-        [[ $gate == idcode ]] && out=$'\tidcode 0xc362c0dd (dry run)'
+        [[ $gate == idcode ]] && out=$'\tidcode 0x4362c0dd (dry run)'
     else
         out=$("${cmd[@]}" 2>&1); rc=$?
         echo "$out" > "$outs/$id.txt"
@@ -92,10 +93,10 @@ step() {
         local id_read; id_read=$(grep -oiE 'idcode +0x[0-9a-f]+' <<< "$out" | head -1 | grep -oiE '0x[0-9a-f]+')
         printf '%s\t-\t-\t%s\t-\t%s\t\n' "$id" "$rc" "${id_read:-none}" >> "$log"
         summary+=("$id: IDCODE ${id_read:-none}")
-        if [[ ${id_read,,} != 0xc362c0dd ]]; then
+        if [[ ${id_read,,} != 0x4362c0dd ]]; then
             echo; echo "STOP: $diag" | fold -s -w 78; echo "   (read: ${id_read:-nothing})"; finish 1
         fi
-        echo "   IDCODE 0xc362c0dd, the A5EB013B"
+        echo "   IDCODE 0x4362c0dd, the A5EB013B"
         return 0
     fi
     echo "   expect: $expect" | fold -s -w 78 | sed '2,$s/^/           /'
