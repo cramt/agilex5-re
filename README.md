@@ -3516,6 +3516,101 @@ e11c109691e99a7bb5ff93ffcd57005afe2024084b929d715d58d9438c0d0063  sha256.rbf
 ```
 <!-- board-sha256 end -->
 
+### Self-tests (designs/p14; on the board 2026-11-06)
+
+The board runs above needed a person to read eight LEDs. The self-tests
+check their own results on the chip, and the verdict is the whole LED row
+driven as one signal (`designs/p14/verdict.v`; the LEDs are active low), so
+the webcam can read it as one blob: **PASS: the row blinks at 1 Hz, 50%
+duty. FAIL: the row stays lit.** FAIL latches on any bad round, and on half a
+second without a good round, so a hung test can't keep blinking. Each test
+has a mutant (`<name>_mut`, `localparam MUTATE = 1`) that changes one
+expected value and must show FAIL on the board.
+
+| design | what it checks each round | ALMs |
+|---|---|---|
+| `row` | nothing (every round good; the mutant: every round bad): the detector's reference | 18 |
+| `ramx_st` | M20K: 512 words written, one byte lane rewritten through its byte enable, read back through the output register | 83 |
+| `mlab_st` | MLAB: a 32 x 32 RAM shaped like FemtoRV32's register file; first its power-up zeros, then write and read on both ports | 136 |
+| `cpu_st` | FemtoRV32 Quark (register file in MLAB) running `cpu_prog.vh` from an M20K: a checksum over ALU, branch and load/store results, compared with `cpu_asm.py`'s RV32I model (0x34f0643f) | 451 |
+| `sha_st` | secworks' sha256 core hashing "abc" and "" in turn, each digest compared with the known one | 1375 |
+| `keys` | the KEYs and SWs in the same language (KEY0 lit, KEY1 4 Hz, SW0–SW3 0.5/1/2/3 Hz, idle dark): needs a person | 60 |
+
+```
+designs/p14/rtl.sh <name>[_mut]            # RTL simulation (tb.v): good rounds, or the cycle of the FAIL
+designs/p14/build.sh <name>[_mut]...       # open flow + every check, one line each to specimens/p14/summary.tsv
+designs/p14/simcheck_all.sh                # simcheck again, plus each image against its mutant's RTL
+tools/board/selftest.sh <file.rbf> [label] # load, record 10 s, print BLINK <Hz>/LIT/DARK
+```
+
+`tools/board/selftest.sh` loads with quartus_pgm (as `run.sh` does), sets the
+camera to manual exposure, records a 10 s clip and traces the mean of the
+row's box (`tools/board/cam.py`). The box moves when the camera does: load
+`row.rbf` and find the row again with `cam.py lockin <clip> 1.0 <out.pgm>`
+(the per-pixel 1 Hz amplitude), then set `BOX`, `LIT` and `DARK` from
+`cam.py trace` on row's clip. On 2026-11-06 the box was `830 0 890 86`
+(full-resolution pixels), lit 88, dark 13. A steady orange LED sits just
+right of the row, so keep the box tight. `selftest.sh --restore` puts the
+camera back on auto exposure.
+
+**Results, 2026-11-06** [obs; the board booting NixOS on its HPS from an SD
+card (host mercury) and nobody at the bench; every load succeeded, so the
+HPS doesn't get in the way of JTAG loads or the LED bank]. Every self-test
+passed and every mutant failed, on the board and in RTL simulation (cpu's
+checksum 0x34f0643f; sha against the "abc" and "" digests). Every file passed
+the board-file checks: extract = design, asm2 0 differ, `.rbf` identical to
+pfg's, integrity OK, and simcheck 0 mismatches with the fixed simcheck below.
+Rate and duty come from 10 s clips at 30.5 fps. Swing is the box's p95 − p5
+(the row's own lit−dark gap is about 75); a steady row swings under 1.
+
+| design | board verdict | rate, duty | swing | mutant | mutant swing (mean) |
+|---|---|---|---|---|---|
+| row | BLINK (PASS) | 1.00 Hz, 0.50 | 75.4 | LIT (FAIL) | 0.6 (87.7) |
+| ramx_st | BLINK (PASS) | 1.00 Hz, 0.50 | 75.5 | LIT (FAIL) | 0.6 (88.1) |
+| mlab_st | BLINK (PASS) | 1.00 Hz, 0.50 | 75.6 | LIT (FAIL) | 0.8 (87.4) |
+| cpu_st | BLINK (PASS) | 1.00 Hz, 0.50 | 75.7 | LIT (FAIL) | 0.7 (87.2) |
+| sha_st | BLINK (PASS) | 1.00 Hz, 0.50 | 74.4 | LIT (FAIL) | 0.6 (84.8) |
+| keys (idle) | DARK, as meant | – | 0.2 (mean 11.6) | – | – |
+
+**simcheck fixes** (`tools/a5pnr/simcheck.py`, found on these tests). The
+first build of sha_st reported 3,518 mismatches from random states, with its
+power-up run clean. The image was right; simcheck's seeding was not:
+
+- chipsmith merges RTL memory bits that are always equal (sha_st's
+  `block_reg[0]` bits, all written from one constant, are one flop).
+  simcheck seeded only the first alias of a memory bit, so the others kept
+  stale values in random states. Memory bits now join the same union-find
+  groups as plain registers and get one value per group.
+- vvp carries every bit write straight through the logic. Writing
+  `rst_cnt` bit by bit from 1000 to 0111 passed through 1111 and pulsed
+  `reset_n = &rst_cnt`, which cleared the RTL's async-reset registers and not
+  the image's (its clear comes from a LUT on its own copies). simcheck now
+  draws the whole state first, writes it, settles (`#0.1`), and writes it
+  again. The second write changes no net, so both sides hold exactly the
+  drawn state.
+- **A blind spot**: cpu_st's image against cpu_st_mut's RTL showed 0
+  mismatches. The random cycles write garbage into the M20K on both sides
+  alike, so the power-up run restarted a CPU whose program was gone, and no
+  checksum was ever compared. The power-up run now restarts every M20K from
+  its INIT too (`cells_sim.v` under `-DSIMCHECK`, on the testbench's
+  `m20k_reload` event). The same pair now shows 36,770 mismatches.
+  `simcheck_all.sh` keeps this negative control for every self-test.
+
+With the fixes, every self-test image checks 0 mismatches against its own
+RTL, and each against its mutant's RTL mismatches (`simcheck_all.sh`): row
+2,832, ramx_st 41,813, mlab_st 46,516, cpu_st 36,770, sha_st 20,707. row and
+row_mut were rebuilt from the current `row.v` (an instance renamed after
+their first build). The rebuilt `.rbf` files are bit-identical to the ones
+measured, and they check 0/0. Regression: the 18 board designs above
+(phase 12's images, with phase 13's io, pll, cpu and cpu_ys), with
+`tools/board/build.sh`'s settings, give the same 0 / 0 under the new
+simcheck as under the old one.
+
+**Needs a person [unk]**: `keys` (left loaded on the board). Hold KEY0 (row
+lit), hold KEY1 (row blinks 4 Hz), and flip SW0–SW3 up one at a time (0.5,
+1, 2, 3 Hz). Either read it by eye, or run `cam.py record` and `cam.py
+trace` with the box above while doing it.
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
