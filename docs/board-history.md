@@ -425,3 +425,28 @@ the same way:
 | cpu-ys | the same, LED0 1.94 Hz, LED1 0.99, LED2 0.50 |
 
 Causes and fixes are in the README ("Board test", (v), (z9), (z10)).
+
+## Self-tests, the afternoon of 2026-11-06 (`tools/board/selftest.sh`)
+
+The board had been power-cycled after an earlier hang (the SDM refused
+loads). After that, Quartus' blinky loaded again, and so did every
+self-test file. The HPS now boots NixOS from an SD card (host mercury), with
+no effect seen on JTAG loads or the LEDs. Camera box `830 0 890 86`, lit 88,
+dark 13 (the camera had moved since the morning's box `900 120 980 210`).
+Clips in `specimens/p14/cam/`.
+
+| file | verdict | rate, duty | swing (p95 − p5) | mean |
+|---|---|---|---|---|
+| row (calibration) | BLINK | 1.00 Hz, 0.50 | 75.4 | 50.3 |
+| row_mut | LIT | – | 0.6 | 87.7 |
+| ramx_st | BLINK | 1.00 Hz, 0.50 | 75.5 | 50.4 |
+| ramx_st_mut | LIT | – | 0.6 | 88.1 |
+| mlab_st | BLINK | 1.00 Hz, 0.50 | 75.6 | 50.4 |
+| mlab_st_mut | LIT | – | 0.8 | 87.4 |
+| cpu_st | BLINK | 1.00 Hz, 0.50 | 75.7 | 50.0 |
+| cpu_st_mut | LIT | – | 0.7 | 87.2 |
+| sha_st | BLINK | 1.00 Hz, 0.50 | 74.4 | 47.9 |
+| sha_st_mut | LIT | – | 0.6 | 84.8 |
+| keys (idle) | DARK | – | 0.2 | 11.6 |
+
+keys was left loaded for a person to test (README, "Self-tests").

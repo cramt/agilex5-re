@@ -21,6 +21,11 @@ module A5_M20K #(parameter [16383:0] INIT = 16384'h0, parameter OUTREG = 0) (
     reg [31:0] r = 0, q = 0;
     integer i;
     initial for (i = 0; i < 512; i = i + 1) mem[i] = INIT[32 * i +: 32];
+`ifdef SIMCHECK
+    // simcheck's power-up run after its random cycles restarts every M20K
+    // from INIT, as the device powers up.
+    always @(tb.m20k_reload) begin for (i = 0; i < 512; i = i + 1) mem[i] = INIT[32 * i +: 32]; r = 0; q = 0; end
+`endif
     always @(posedge CLK) begin
         if (WE) begin
             if (BE[0]) mem[WADDR][7:0] <= WDATA[7:0];
@@ -56,6 +61,11 @@ module A5_M20K40 #(parameter [20479:0] INIT = 20480'h0, parameter OUTREG = 0) (
     reg [39:0] r = 0, q = 0;
     integer i;
     initial for (i = 0; i < 512; i = i + 1) mem[i] = INIT[40 * i +: 40];
+`ifdef SIMCHECK
+    // simcheck's power-up run after its random cycles restarts every M20K
+    // from INIT, as the device powers up.
+    always @(tb.m20k_reload) begin for (i = 0; i < 512; i = i + 1) mem[i] = INIT[40 * i +: 40]; r = 0; q = 0; end
+`endif
     always @(posedge CLK) if (CE) begin
         if (WE) for (i = 0; i < 4; i = i + 1) if (BE[i]) mem[WADDR][10 * i +: 10] <= WDATA[10 * i +: 10];
         if (RE) r <= mem[RADDR];

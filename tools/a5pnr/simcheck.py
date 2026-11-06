@@ -103,10 +103,13 @@ for l in open(ffmap):
             base = base[:len(base) - len(leaf)] + alias[leaf]
             leaf = alias[leaf]
         # A word bit of an RTL memory held in MLAB RAM (README (z9)):
-        # `mem[word][bit]`, the memory being no net of the netlist.
+        # `mem[word][bit]`, the memory being no net of the netlist. Every
+        # alias counts: chipsmith merges memory bits that are always equal
+        # (sha_st's block_reg[0] bits all written from one constant), and
+        # seeding only the first left the rest stale in random states.
         if leaf in memories and re.fullmatch(r'.*\[\d+\]', base):
             regs.append((f'dut.{base}[{idx}]', f'~rb.{flop}' if inv else f'rb.{flop}'))
-            break
+            continue
         if base.startswith('$') or net_base not in widths or base in mod['ports'] or not is_reg(base, leaf):
             continue
         ref = f'dut.{base}' if widths[net_base] == 1 else f'dut.{base}[{idx}]'
@@ -163,15 +166,24 @@ def assign_all(val):
         if base in onehot and 'random' in val:
             hot.setdefault(base, []).append((ref, flop))
             continue
+        # A memory bit joins its flop's group like any register, but is
+        # written through its word below, from the group's value in gv.
+        g = plain.setdefault(find(('r', ref)), ([], []))
+        g[1].extend(f for f in copies[ref] if f not in g[1])
         mw = mem_word(ref)
         if mw:
-            words.setdefault(mw[0], []).append((mw[1], copies[ref]))
+            words.setdefault(mw[0], []).append((mw[1], find(('r', ref))))
         else:
-            g = plain.setdefault(find(('r', ref)), ([], []))
             g[0].append(ref)
-            g[1].extend(f for f in copies[ref] if f not in g[1])
-    for refs, flops in plain.values():
-        out.append('      v = ' + val + '; ' + ' '.join(f'{r} = v;' for r in refs) + ' ' + ' '.join(put(f, "v") for f in flops))
+    # Draw every value into gv first, then write the state twice with a
+    # settle between. vvp carries each bit write straight through the logic,
+    # so writing a counter bit by bit can pulse an async reset derived from
+    # it (sha_st's reset_n = &rst_cnt went 1000 -> 1111 -> 0111 and cleared
+    # the RTL's w_mem but not the image's): the second write changes no net,
+    # so both sides end in exactly the drawn state.
+    gv = {root: k for k, root in enumerate(plain)}
+    for root in plain:
+        out.append(f'      gv[{gv[root]}] = {val};')
     for base, bits in hot.items():
         # Every bit of the RTL register, also those yosys derives instead of
         # keeping a flop for (one of femtorv32's four state bits).
@@ -180,13 +192,23 @@ def assign_all(val):
         flop_of = {ref.rsplit('[', 1)[1].rstrip(']'): flop for ref, flop in bits}
         for i in range(widths[base]):
             k = str(off + i)
-            out.append(f'      v = (bias == {i}); dut.{base}[{k}] = v;' + (f' {put(flop_of[k], "v")}' if k in flop_of else ''))
+            gv[('h', base, k)] = len(gv)
+            out.append(f'      gv[{gv[("h", base, k)]}] = (bias == {i});')
+    write = []
+    for root, (refs, flops) in plain.items():
+        write.append(f'      v = gv[{gv[root]}]; ' + ' '.join(f'{r} = v;' for r in refs) + ' ' + ' '.join(put(f, "v") for f in flops))
+    for base, bits in hot.items():
+        off = mod['netnames'][base].get('offset', 0)
+        flop_of = {ref.rsplit('[', 1)[1].rstrip(']'): flop for ref, flop in bits}
+        for i in range(widths[base]):
+            k = str(off + i)
+            write.append(f'      v = gv[{gv[("h", base, k)]}]; dut.{base}[{k}] = v;' + (f' {put(flop_of[k], "v")}' if k in flop_of else ''))
     for word, bits in words.items():
-        out.append(f'      w = {word};')
-        for b, flops in bits:
-            out.append(f'      v = {val}; w[{b}] = v; ' + ' '.join(put(f, "v") for f in flops))
-        out.append(f'      {word} = w;')
-    return out
+        write.append(f'      w = {word};')
+        for b, root in bits:
+            write.append(f'      w[{b}] = gv[{gv[root]}];')
+        write.append(f'      {word} = w;')
+    return out + write + ['      #0.1;'] + write
 
 
 rnd = random.Random(1)
@@ -205,7 +227,8 @@ for n, d, w in ports:
 tb.append(f'  {top} dut({", ".join(conn_d)});')
 tb.append(f'  {top}_readback rb({", ".join(conn_r)});')
 tb.append('  integer cyc, bad = 0, seed = 1, bias, bad_run = 0, changes = 0, xs = 0;')
-tb.append('  reg v; reg [1023:0] w;')
+tb.append(f'  reg v; reg [1023:0] w; reg [{len(regs) + sum(widths.get(b, 0) for b in onehot)}:0] gv;')
+tb.append('  event m20k_reload;')
 # RTL memory words and the image's MLAB bits as they power up, kept so the
 # power-up run can restart from them after the random cycles: an MLAB starts
 # at its configured contents, not 0 (README "Board test": a5pnr left an
@@ -271,6 +294,10 @@ if run:
         for i, word in enumerate(mem_words):
             tb.append(f'    w = pr{i}; {word} = w;')
         tb += ['    ' + put(flop, f'pf[{j}]') for j, (_, flop) in enumerate(mem_regs)]
+        # And every M20K from its INIT (cells_sim.v): the random cycles
+        # write garbage into it on both sides alike, which left cpu_st's
+        # program dead in the power-up run and a wrong checksum unseen.
+        tb.append('    -> m20k_reload;')
     # A register the RTL leaves at x (picorv32 initialises none) starts at
     # what the device's flop powers up to: x there means any value.
     tb.append('    #1;')
@@ -325,7 +352,7 @@ with tempfile.TemporaryDirectory() as d:
     # cycle bound of its own: a combinational loop in a rebuilt netlist
     # never lets simulated time advance, so it gets a wall-clock bound too.
     cap = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cap.sh'), os.environ.get('SIMCHECK_MEM', '8G')]
-    c = subprocess.run([*cap, 'nix', 'shell', iv, '-c', 'iverilog', '-g2012', *[f'-I{i}' for i in inc], '-o', sim, os.path.join(d, 'tb.v'), rb, cells, *rtl], capture_output=True, text=True)
+    c = subprocess.run([*cap, 'nix', 'shell', iv, '-c', 'iverilog', '-g2012', '-DSIMCHECK', *[f'-I{i}' for i in inc], '-o', sim, os.path.join(d, 'tb.v'), rb, cells, *rtl], capture_output=True, text=True)
     if c.returncode != 0:
         # The old nixpkgs' evaluation warnings come first; iverilog's errors after.
         print('\n'.join(l for l in c.stderr.splitlines() if 'error' in l.lower())[-4000:])
