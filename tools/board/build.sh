@@ -71,6 +71,8 @@ SIMCHECK_CYCLES=300 SIMCHECK_RUN=5000 SIMCHECK_HOLD=KEY0=1 tools/a5pnr/check.sh 
 log "oracles"
 bash tools/alm/oracles_p9.sh > "$W/oracles_p9.txt" 2>&1
 bash tools/alm/oracles_p10.sh > "$W/oracles_p10.txt" 2>&1
+# IO96 lane clocks against Quartus' own compile of io (board fixes, 2026-11-06).
+tools/alm/ioclk_oracle.sh specimens/runs/qio0/output_files/io.sof $S/suite/io/io.design.txt 2>&1 | tail -1 | tee -a "$W/build.log"
 
 log "collect"
 cp "$W/blinky_pfg.rbf" "$W/scratch.rbf" "$W"/scratch_{zero-io-hash,zero-design-hash,corrupt-core}.rbf "$B/"

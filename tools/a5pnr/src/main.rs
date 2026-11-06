@@ -199,6 +199,7 @@ fn main() -> Result<()> {
     }
     let reg_idx: Vec<usize> = reg_ports.iter().map(|n| nl.ports.iter().position(|p| &p.name == n).with_context(|| format!("pins.txt: no port {n}"))).collect::<Result<_>>()?;
     let io = ioreg::choose(&mut nl, &reg_idx)?;
+    netlist::tie_pll_resets(&mut nl);
     let nl = nl;
     let mut packed = pack::pack(&nl, pack_mode, &io)?;
     let [n6, n55, n5, n_arith, n_ff, n_ram] = sta::alm_kinds(&packed);
@@ -267,6 +268,7 @@ fn main() -> Result<()> {
     // of V16's PLL enters the DCM from HVIOWR_RE I16 (pl) [obs]; the other
     // reference pins' PLLs aren't wired up yet.
     let mut pll_node: Vec<u32> = Vec::new();
+    let mut pll_rst_node: Vec<u32> = Vec::new();
     let mut pll_text = String::new();
     for &ci in &packed.plls {
         let netlist::Cell::Pll { refclk, ref_khz, out_khz, .. } = nl.cells[ci] else { unreachable!() };
@@ -277,6 +279,9 @@ fn main() -> Result<()> {
             b => bail!("a PLL on reference pin {b}: only V16's is modelled"),
         };
         pll_node.push(g.node(node).with_context(|| format!("no node {node}"))?);
+        // Its reset enters the block at HVIOWR_RE I2715 from this RPI (pl).
+        let rst = "RPI:X121Y46Z0I38";
+        pll_rst_node.push(g.node(rst).with_context(|| format!("no node {rst}"))?);
         let repo = std::path::Path::new(db).parent().and_then(|p| p.parent()).context("db path")?;
         let mhz = |k: u64| format!("{}", k as f64 / 1000.0);
         let o = std::process::Command::new("python3")
@@ -307,7 +312,10 @@ fn main() -> Result<()> {
                 let b = p.block_pin(role).and_then(|n| g.node(&n)).with_context(|| format!("{ball}: no {role:?} pin"))?;
                 rpi_blk.get(&b).copied().with_context(|| format!("{ball}: no RPI feeds {}", g.name(b)))
             };
-            let clk = ioreg::clock_node(p)?;
+            if p.io96 && r.input.is_some() && (r.output.is_some() || r.oe.is_some()) {
+                anyhow::bail!("{pname}: an IO96 pin's input and output registers take different lane clocks, one port can't have both");
+            }
+            let clk = ioreg::clock_node(&g, p, r.input.is_some())?;
             io_node.insert((r.port, Role::Clk), g.node(&clk).with_context(|| format!("no node {clk}"))?);
             let mut inv: Vec<u32> = Vec::new();
             let mut set = |sub: &str, v: &str| io_attrs.push((p.uid.clone(), format!("{}/{sub}", p.path), v.to_owned()));
@@ -445,6 +453,7 @@ fn main() -> Result<()> {
                     g.node(&name).with_context(|| format!("no node {name}"))
                 }
                 End::Pll(k) => Ok(pll_node[k]),
+                End::PllRst(k) => Ok(pll_rst_node[k]),
                 End::Io { port, role } => io_node.get(&(port, role)).copied().with_context(|| format!("{}: no I/O node for {role:?}", nl.ports[port].name)),
                 End::Dsp { d, pin } => {
                     let (x, y) = pl.dsp_at[d];
@@ -587,6 +596,7 @@ fn main() -> Result<()> {
                 let (x, y) = pl.dsp_at[d];
                 g.node(&format!("MP_MAC_RE:X{x}Y{y}Z0I{pin}"))
             }
+            End::PllRst(k) => Some(pll_rst_node[k]),
             End::Out { .. } | End::Pll(_) => None,
         }
     };

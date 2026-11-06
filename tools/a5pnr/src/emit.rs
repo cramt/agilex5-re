@@ -195,8 +195,11 @@ pub fn blocks(nl: &Netlist, p: &Packed, labs: &[Lab], pl: &Placement, lines: &BT
                         w |= (ram_stored(m) as u64) << (32 * h);
                     }
                 }
+                // The idle stored mask is all ones, so an empty RAM needs its
+                // zeros written, as Quartus' ml does [obs, board 2026-11-06:
+                // left idle, the cpu's register file powered up all ones].
                 let stored = five_stored(w);
-                if stored.contains('1') {
+                if stored.contains('0') {
                     directs.push((uid.clone(), format!("{pa}/xcw_ml_le_lut/lut_mask"), stored));
                 }
             }

@@ -281,6 +281,7 @@ impl DelayTable {
                 End::M20k { m, .. } => Some((pl.m20k_at[m].0 as i64, pl.m20k_at[m].1 as i64)),
                 End::Dsp { d, .. } => Some((pl.dsp_at[d].0 as i64, pl.dsp_at[d].1 as i64)),
                 End::Pll(_) => None,
+                End::PllRst(_) => Some((crate::place::PLL_RST_XY.0 as i64, crate::place::PLL_RST_XY.1 as i64)),
             }
         };
         let _ = p;

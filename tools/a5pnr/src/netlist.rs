@@ -24,7 +24,8 @@ pub enum Cell {
     /// One bit of an MLAB RAM (yosys/mlab.txt).
     Mlab(Mlab),
     /// An IOPLL: output 0 of the reference pin's PLL (yosys/cells.v).
-    Pll { refclk: u32, out: u32, ref_khz: u64, out_khz: u64 },
+    /// `rst` is its reset, a constant-0 LUT's net (`tie_pll_resets`).
+    Pll { refclk: u32, out: u32, rst: u32, ref_khz: u64, out_khz: u64 },
     /// A DSP block's multiplier (yosys/cells.v A5_MUL, README (z11)): the
     /// mode's operand bits (constants already on LUTs) and the product bits.
     Mul { mode: crate::dsp::Mode, a: Vec<Sig>, b: Vec<Sig>, p: Vec<Option<u32>> },
@@ -357,7 +358,7 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
             }
             "A5_IOPLL" => {
                 let khz = |k: &str| -> Result<u64> { Ok(param(p, k)?.iter().enumerate().fold(0u64, |a, (i, &b)| a | (b as u64) << i)) };
-                cells.push(Cell::Pll { refclk: net(one("REFCLK")?)?, out: net(one("OUTCLK")?)?, ref_khz: khz("REF_KHZ")?, out_khz: khz("OUT_KHZ")? });
+                cells.push(Cell::Pll { refclk: net(one("REFCLK")?)?, out: net(one("OUTCLK")?)?, rst: u32::MAX, ref_khz: khz("REF_KHZ")?, out_khz: khz("OUT_KHZ")? });
             }
             _ => bail!("{name}: cell type {t} is not supported"),
         }
@@ -466,4 +467,26 @@ pub fn read(path: &str, top: &str) -> Result<Netlist> {
         v.sort();
     }
     Ok(Netlist { nets, aliases, cells, ports })
+}
+
+/// Every IOPLL's reset, held off: an undriven reset pin holds the PLL in
+/// reset, so each PLL gets a constant-0 LUT routed to it (End::PllRst)
+/// [obs, board 2026-11-06: plo with the pin undriven, or tied to a LUT
+/// that outputs 1, never clocks its counter; tied to 0 it runs at 100 MHz.
+/// Quartus' pa, whose RTL ties rst to 0, drives the pin from a 6-LUT whose
+/// stored mask is all ones, which outputs 0 (emit::six_stored)].
+pub fn tie_pll_resets(nl: &mut Netlist) {
+    for i in 0..nl.cells.len() {
+        if let Cell::Pll { rst, .. } = nl.cells[i] {
+            if rst != u32::MAX {
+                continue;
+            }
+            let n = nl.nets.len() as u32;
+            nl.nets.push(format!("pll{i}_rst"));
+            nl.cells.push(Cell::Lut { ins: vec![], mask: 0, out: n });
+            if let Cell::Pll { rst, .. } = &mut nl.cells[i] {
+                *rst = n;
+            }
+        }
+    }
 }

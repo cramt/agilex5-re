@@ -95,6 +95,9 @@ pub struct Placement {
 /// of its sinks in the LAB (`get_max_lab_line_fanout`), and a line per 5 of
 /// the further LEIMs it takes within one ALM (`Alm::line_sinks`).
 pub const LAB_LINES: u32 = 55;
+/// Where V16's IOPLL takes its reset from the fabric: the HIOL tile at
+/// X121 Y46 (main.rs, RPI I38).
+pub const PLL_RST_XY: (u32, u32) = (121, 46);
 
 /// ALMs from which placement starts from a global placement.
 const GLOBAL_FROM: usize = 1500;
@@ -347,7 +350,7 @@ pub fn place(
     let alm_of = |e: &End| -> Option<usize> {
         match e {
             End::Out { alm, .. } | End::In { alm, .. } | End::Ctl { alm, .. } => Some(*alm),
-            End::Port(_) | End::M20k { .. } | End::Pll(_) | End::Io { .. } | End::Dsp { .. } => None,
+            End::Port(_) | End::M20k { .. } | End::Pll(_) | End::PllRst(_) | End::Io { .. } | End::Dsp { .. } => None,
         }
     };
     let mut alm_nets: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -684,6 +687,7 @@ fn global(
                 End::M20k { m, .. } => Some(Pin { of: PinOf::Fixed(fix(&mut prob, m20k_at[*m])), dx: 0.0, dy: 0.0 }),
                 End::Dsp { d, .. } => Some(Pin { of: PinOf::Fixed(fix(&mut prob, dsp_at[*d])), dx: 0.0, dy: 0.0 }),
                 End::Pll(_) => None,
+                End::PllRst(_) => Some(Pin { of: PinOf::Fixed(fix(&mut prob, PLL_RST_XY)), dx: 0.0, dy: 0.0 }),
             };
             pins.extend(pin);
         }

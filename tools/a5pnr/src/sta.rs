@@ -165,7 +165,7 @@ impl Sta {
                         ends.push((x, 0.0, None, format!("output {}", nl.ports[pi].name)));
                         x
                     }
-                    End::Out { .. } | End::Pll(_) => continue,
+                    End::Out { .. } | End::Pll(_) | End::PllRst(_) => continue,
                 };
                 edges.push((src, dst, Arc::Conn(ci)));
             }
