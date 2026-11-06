@@ -206,6 +206,17 @@ tb.append(f'  {top} dut({", ".join(conn_d)});')
 tb.append(f'  {top}_readback rb({", ".join(conn_r)});')
 tb.append('  integer cyc, bad = 0, seed = 1, bias, bad_run = 0, changes = 0, xs = 0;')
 tb.append('  reg v; reg [1023:0] w;')
+# RTL memory words and the image's MLAB bits as they power up, kept so the
+# power-up run can restart from them after the random cycles: an MLAB starts
+# at its configured contents, not 0 (README "Board test": a5pnr left an
+# all-zero RAM at the idle all-ones mask, the cpu's x0 read 1s on the board,
+# and forcing both sides to 0 hid it).
+mem_regs = [(mem_word(ref), flop) for ref, flop in regs if mem_word(ref)]
+mem_words = sorted({mw[0] for mw, _ in mem_regs})
+for i, _ in enumerate(mem_words):
+    tb.append(f'  reg [1023:0] pr{i};')
+if mem_regs:
+    tb.append(f'  reg [{len(mem_regs) - 1}:0] pf;')
 tb.append(f'  reg [{max(len(regs), 1) - 1}:0] seen = 0;')
 for n, d, w in ports:
     if d == 'output':
@@ -228,6 +239,10 @@ down = ' '.join(f'i_{c} = 0;' for c in clocks)
 clk = [f'      #4 {up} #4 {down} #1;' if clocks else '      #9;']
 tb.append('  initial begin')
 tb.append('    #1;')
+for i, word in enumerate(mem_words):
+    tb.append(f'    pr{i} = {word};')
+for j, (_, flop) in enumerate(mem_regs):
+    tb.append(f'    pf[{j}] = ' + (f'~{flop[1:]};' if flop.startswith('~') else f'{flop};'))
 # Phase 1: every cycle from a fresh random state, the same on both sides;
 # the ones-bias cycles through 0.5, 0.9, 0.97 and 0.03 so long carries run.
 tb.append(f'    for (cyc = 0; cyc < {cycles}; cyc = cyc + 1) begin')
@@ -253,6 +268,9 @@ if run:
     # at 1 its own way, README (z3)).
     if cycles:
         tb += assign_all("1'b0")
+        for i, word in enumerate(mem_words):
+            tb.append(f'    w = pr{i}; {word} = w;')
+        tb += ['    ' + put(flop, f'pf[{j}]') for j, (_, flop) in enumerate(mem_regs)]
     # A register the RTL leaves at x (picorv32 initialises none) starts at
     # what the device's flop powers up to: x there means any value.
     tb.append('    #1;')
