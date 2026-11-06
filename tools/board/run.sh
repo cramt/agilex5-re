@@ -3,7 +3,7 @@
 # "Board test"):
 #   tools/board/run.sh [--dry-run] [--from <step>] [--answers <step>=<y|n>,...]
 # Loads each file into the DE25-Nano's SRAM over its USB-Blaster III
-# (openFPGALoader with the A5EB013B part, tools/board/openfpgaloader.nix),
+# (Quartus Prime Pro's quartus_pgm through chipsmith-vendor; see below),
 # prints what the LEDs should do, and asks y/n plus an optional note. Results
 # go to specimens/board/runs/<time>.tsv. A gating step that fails stops the
 # run with a diagnosis. Every file's SHA-256 is checked against the README
@@ -31,19 +31,31 @@ echo "== checksums (README) of $B"
 (cd "$B" && sha256sum --quiet -c <<< "$sums") || { echo "files differ from the README's checksums: rebuild with tools/board/build.sh or fix the README" >&2; exit 1; }
 echo "   $(wc -l <<< "$sums") files OK"
 
-ofl=$(nix build --no-link --print-out-paths --impure --expr \
-    '(builtins.getFlake "nixpkgs").legacyPackages.x86_64-linux.callPackage ./tools/board/openfpgaloader.nix {}' | tail -1)/bin/openFPGALoader
-"$ofl" --list-fpga | grep -q '0xc362c0dd' || { echo "$ofl lacks the A5EB013B" >&2; exit 1; }
+# The loader is Quartus Prime Pro's programmer (no licence needed, so outside
+# tools/quartus.sh's network namespace: its jtagd needs loopback). On the board
+# 2026-11-06 openFPGALoader 1.2.0 (tools/board/openfpgaloader.nix, cable
+# de25-nano) read the chain but couldn't load even Quartus' blinky: its ISC
+# configure poll races (300 polls, passed on a retry) and its transfer loop
+# spins on the SDM's busy bit with no timeout. quartus_pgm loads .sof and .rbf
+# and prints the SDM's verdict ("Configuration succeeded").
+export CHIPSMITH_INSTALL_ROOT=${CHIPSMITH_INSTALL_ROOT:-/pool/dev/altera_pro}
+q() { "${CHIPSMITH_VENDOR:-chipsmith-vendor}" run --backend quartus-pro --version 26.1.1 "$1" -- "${@:2}" 2>&1 | grep -v 'connect() failed'; return "${PIPESTATUS[0]}"; }
 
 # The cable and its permission, before the first JTAG step. udev rule:
-# nixconf modules/bundles/nixos-general.nix (09fb:6022, plugdev).
+# nixconf modules/bundles/nixos-general.nix (09fb:6022|6026, plugdev).
+# 09fb:6022 is the standalone cable; the DE25-Nano's onboard one enumerates
+# as 09fb:6026 (an FT4232H, "TERASIC DE25-Nano"; JTAG on channel A with ADBUS4
+# high), which jtagd names "DE25-Nano [<usb port>-iface0]".
+pid=6022 port=0
 if ! ((dry)); then
-    usb=$(grep -lx 6022 /sys/bus/usb/devices/*/idProduct 2>/dev/null | while read -r f; do
-        d=${f%/idProduct}; [[ $(cat "$d/idVendor") == 09fb ]] && printf '/dev/bus/usb/%03d/%03d\n' "$(cat "$d/busnum")" "$(cat "$d/devnum")"; done | head -1)
-    [[ -n $usb ]] || { echo "no USB-Blaster III (09fb:6022) on USB: board powered and its USB-C (JTAG) port plugged in?" >&2; exit 1; }
-    [[ -w $usb ]] || { echo "$usb isn't writable: the 09fb:6022 udev rule is in nixconf; run sudo nixos-rebuild switch and replug" >&2; exit 1; }
-    echo "== cable: $usb"
+    usb=$(grep -lxE '6022|6026' /sys/bus/usb/devices/*/idProduct 2>/dev/null | while read -r f; do
+        d=${f%/idProduct}; [[ $(cat "$d/idVendor") == 09fb ]] && printf '/dev/bus/usb/%03d/%03d %s %s\n' "$(cat "$d/busnum")" "$(cat "$d/devnum")" "$(cat "$f")" "${d##*/}"; done | head -1)
+    port=${usb##* }; usb=${usb% *}; pid=${usb#* }; usb=${usb% *}
+    [[ -n $usb ]] || { echo "no USB-Blaster III (09fb:6022 or 6026) on USB: board powered and its JTAG micro-USB plugged in with a data cable (a charge-only one shows nothing)?" >&2; exit 1; }
+    [[ -w $usb ]] || { echo "$usb isn't writable: the 09fb:6022|6026 udev rule is in nixconf; run sudo nixos-rebuild switch and replug" >&2; exit 1; }
+    echo "== cable: $usb (09fb:$pid)"
 fi
+case $pid in 6026) cable="DE25-Nano [$port-iface0]" ;; *) cable="USB-BlasterIII [$port]" ;; esac
 
 mkdir -p specimens/board/runs
 log=specimens/board/runs/$(date +%Y%m%d-%H%M%S)$( ((dry)) && echo -dry).tsv
@@ -66,31 +78,29 @@ step() {
     echo; echo "== step $id: ${file/#-/IDCODE}"
     local rc=0 out="" sr="" sha="-"
     if [[ $gate == idcode ]]; then
-        local cmd=("$ofl" -c usb-blasterIII --detect)
+        local cmd=(q jtagconfig --enum)
     else
         sha=$(sha256sum "$B/$file" | cut -c1-16)
-        local cmd=("$ofl" -c usb-blasterIII "$B/$file")
+        local cmd=(q quartus_pgm -c "$cable" -m jtag -o "p;$B/$file")
     fi
     echo "   \$ ${cmd[*]}"
     if ((dry)); then
-        [[ $gate == idcode ]] && out=$'\tidcode 0xc362c0dd (dry run)'
+        [[ $gate == idcode ]] && out="1) $cable"$'\n  4362C0DD   A5E(A013BB23B|B013BB23BCS)/.. (dry run)'
     else
         out=$("${cmd[@]}" 2>&1); rc=$?
         echo "$out" > "$outs/$id.txt"
         echo "$out" | tail -8 | sed 's/^/   | /'
     fi
-    # openFPGALoader's Agilex path names the failing stage (init step, ISC
-    # configure, "Device Configuration Error" after the stream) but no SDM
-    # status word.
-    sr=$(grep -m1 -iE 'error|fail' <<< "$out" | tr '\t' ' ')
+    sr=$(grep -m1 -E '^Error' <<< "$out" | tr '\t' ' ')
     if [[ $gate == idcode ]]; then
-        local id_read; id_read=$(grep -oiE 'idcode +0x[0-9a-f]+' <<< "$out" | head -1 | grep -oiE '0x[0-9a-f]+')
+        local id_read; id_read=$(grep -A1 -F "$cable" <<< "$out" | grep -oE '^ +[0-9A-F]{8}' | head -1 | tr -d ' ')
+        id_read=${id_read:+0x${id_read,,}}
         printf '%s\t-\t-\t%s\t-\t%s\t\n' "$id" "$rc" "${id_read:-none}" >> "$log"
         summary+=("$id: IDCODE ${id_read:-none}")
-        if [[ ${id_read,,} != 0xc362c0dd ]]; then
+        if [[ ${id_read,,} != 0x4362c0dd ]]; then
             echo; echo "STOP: $diag" | fold -s -w 78; echo "   (read: ${id_read:-nothing})"; finish 1
         fi
-        echo "   IDCODE 0xc362c0dd, the A5EB013B"
+        echo "   IDCODE 0x4362c0dd, the A5EB013B"
         return 0
     fi
     echo "   expect: $expect" | fold -s -w 78 | sed '2,$s/^/           /'
@@ -108,7 +118,7 @@ step() {
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$file" "$sha" "$rc" "${sr:--}" "$ans" "$note" >> "$log"
     summary+=("$id: loader $rc, $ans${note:+ ($note)}")
     if [[ $rc != 0 && ( $gate == load || $gate == all ) ]]; then
-        echo; echo "STOP: the file didn't configure (openFPGALoader exit $rc). $diag" | fold -s -w 78; finish 1
+        echo; echo "STOP: the file didn't configure (quartus_pgm exit $rc). $diag" | fold -s -w 78; finish 1
     fi
     if [[ $ans == n && $gate == all ]]; then
         echo; echo "STOP: $diag" | fold -s -w 78; finish 1
@@ -123,12 +133,12 @@ finish() {
 
 # 1. The chain: the cable, the device, its IDCODE (README (n)).
 step idcode idcode - "" \
-    "no A5EB013B on the chain. No cable: is the USB-Blaster III (09fb:6022) in lsusb, and may this user open it (NixOS: services.udev.packages = [ pkgs.openfpgaloader ] in the system config)? Another IDCODE: record it; the IDCODE came from the image's header (README (n)), so the part table entry (tools/board/openfpgaloader-a5eb013b.patch) is what to fix."
+    "no A5EB013B on the chain. No cable: is the USB-Blaster III (09fb:6026 on the DE25-Nano) in /sys/bus/usb/devices, and may this user open it (nixconf udev rule, plugdev)? jtagconfig --enum lists what jtagd sees. Another IDCODE: record it (the board read 0x4362c0dd on 2026-11-06; the image header holds 0xc362c0dd, README (n))."
 
 # 2. The loader, with a Quartus-made image (phase 5's blinky through pfg).
 step control all blinky_pfg.rbf \
     "LED0 blinks at about 1.5 Hz (on 0.67 s, off 0.67 s). KEY0 does nothing." \
-    "Quartus' own image doesn't work through openFPGALoader: the loader or the board's setup is the problem, not any bitstream here. Failing at 'Device specific configuration step' or 'ISC configure mode': openFPGALoader's Agilex init words were taken from Agilex 3 and the A5EC008B, never this part. 'Device Configuration Error' after the stream: the SDM refused Quartus' own image, so check MSEL (JTAG-compatible as shipped). Then try Quartus' programmer: CHIPSMITH_INSTALL_ROOT=/pool/dev/altera_pro tools/quartus.sh quartus_pgm -c 1 -m jtag -o 'p;specimens/board/blinky.sof' (jtagd in quartus.sh's network namespace is untried)."
+    "Quartus' own image doesn't configure through quartus_pgm: the board's setup is the problem (MSEL: JTAG-compatible as shipped; power), not any bitstream here. It configured and blinked on 2026-11-06."
 
 # 3. SDM acceptance of an a5db image with no Quartus in its history.
 step scratch load scratch.rbf \
@@ -143,7 +153,7 @@ step zero-design-hash info scratch_zero-design-hash.rbf \
     "Unknown, this is the question: answer y if LED0 blinks (the SDM ignores the design hash), n if it is refused or dark (it checks it)." \
     "the SDM checks the design hash."
 step corrupt-core info scratch_corrupt-core.rbf \
-    "Refused: openFPGALoader reports a configuration error and LED0 stays dark (one bit flipped in a hashed CORE page, hashes left stale). Answer y if refused." \
+    "Refused: quartus_pgm reports a configuration error and LED0 stays dark (one bit flipped in a hashed CORE page, hashes left stale). Answer y if refused." \
     "the SDM configured an image whose CORE page hash is stale: it doesn't check section hashes, so steps zero-io-hash and zero-design-hash prove less."
 
 # 5. Phase 8's A/B pairs: the LUT rule (README (z3)).
