@@ -564,8 +564,12 @@ section (`IO`, `CORE`), in 4 KiB blocks:
   `.sof`, the IO hash as a hex string in the OPTIONS record (field 1.20)
   and the design hash in record 0x36 field 2.10 [obs]. The IO hash in
   `CORE` equalling the one in `IO` presumably ties a core image to its
-  periphery image [inf]. Whether the SDM checks either against the data
-  is [unk], and needs the board.
+  periphery image [inf]. **The SDM checks neither** [obs, board
+  2026-11-06]: a5db's scratch counter with its IO hash or its design hash
+  zeroed configures and blinks ("Board test"). Whether it checks the CORE
+  page hashes is still [unk]: quartus_pgm refuses the corrupt-core file
+  on the host (Error 19192, its own integrity check), so it never reaches
+  the SDM.
 - So an open writer can produce every hash and CRC itself. Only the
   descriptor's per-entry flag word (0, 1, 0x80000002, …) is [unk] as to
   meaning; it can be copied by position for now.
@@ -1197,8 +1201,9 @@ quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
   headers (l), **is the device's JTAG IDCODE** [obs: the assembler writes
   the same value to `jtag_id.txt`]. It has the Altera manufacturer id
   (0x6E in bits 1–11, as in openFPGALoader's `0x4369c0dd` for the
-  A5EC008B). So it is the IDCODE to add for the board test [inf until the
-  board reads it].
+  A5EC008B). So it is the IDCODE to add for the board test [inf]. The
+  board reports **`0x4362c0dd`** over JTAG [obs, 2026-11-06]: bit 31
+  differs from the image headers' value.
 - **Pin features as bit tables** (`db/sm4revb/io/`, `a5db apply`) [obs]:
   each pin is the named bits that differ between idle0 (pin unused) and
   blinky, kept to that pin's buffer:
@@ -1883,6 +1888,14 @@ named bit under `xpllwrap_top` with a Quartus image.
 - The PLL's input pin and output routing are not in these lines: the
   reference pin needs its pin bits, and each output enters the clock
   network as a graph edge (r).
+- **The PLL's reset must be driven 0** [obs, board 2026-11-06]: V16's PLL
+  takes its reset from the fabric at `HVIOWR_RE:X121Y30Z500I2715` (from
+  `RPI:X121Y46Z0I38`, the route Quartus' pl takes for `rst`). Undriven,
+  or driven 1, it holds the PLL in reset: a5pnr's pll counted on CLOCK2_50
+  only. Quartus' pa ties `rst(1'b0)` to a 6-LUT that outputs 0; a5pnr now
+  ties every IOPLL's reset to a constant-0 LUT
+  (`netlist::tie_pll_resets`), and the readback holds a PLL's output at 0
+  while that pin isn't 0, so the old image fails simcheck.
 
 ### (w) Phase 6: an open flow (yosys, a5pnr, a5db)
 
@@ -2709,6 +2722,19 @@ STA's own chain error.
   The model's figures aren't comparable with phase 8's for designs with
   carry chains (blinky 393 → 528 MHz, arith 352 → 497): its carry arcs
   changed (z7). fr has 69 LABs instead of 75 under the input budget.
+- **Corrected on the board (2026-11-06)**: an MLAB's idle stored mask is
+  all ones, and Quartus' ml writes explicit zeros for its empty RAMs (z5).
+  a5pnr wrote no mask for an all-zero RAM, so the CPU's register file
+  powered up all ones: x0 read 0xffffffff and the program always took its
+  fast path. It now writes every RAM mask that isn't all ones. simcheck
+  had hidden it by forcing every mapped register, MLAB words included, to
+  0 before the power-up run; it now restarts MLAB words from their
+  power-up contents (the old cpu image: 514,595 mismatches). Board probes
+  (`designs/p13/mw*`): writes, a full ten-ALM MLAB, read-after-write at
+  lags 0–3 and write-data hold all behave as modelled at 50 MHz; mwp shows
+  the zeros power up as 0. mwr and its no-write control, which read a
+  never-written word at an address changing every 8 cycles into a sticky
+  flag, latch on silicon but not in simulation [unk: not explained].
 - Not done [unk]: logic in an MLAB beside RAM, RAMs deeper than 32 words
   (memory_libmap would build them from several with a read mux; not tried),
   the read register inside the MLAB (Quartus uses LAB clock 1 for it, (z5)),
@@ -2797,8 +2823,20 @@ tristate output (yosys `$_TBUF_`, kept by `tribuf` in synth.sh when the
 RTL has a `'bz`) its OE flop as well. The flops leave the ALMs; their data
 and controls are routed to the RPIs that feed the block pins above
 (`End::Io`), the clock to the block's register clock entry (hvio_3_1:
-HIOL row 49 `GLOBAL_LOCAL_SEL` I5, hvio_0_1: row 9; IO96 lane 4: VIO X106
-I3, lane 5: X107 I3; other blocks and lanes are refused, [unk]). Every
+HIOL row 49 `GLOBAL_LOCAL_SEL` I5, hvio_0_1: row 9; IO96: each lane has two,
+the VIO `GLOBAL_LOCAL_SEL` I3 whose RPI reaches the lane's
+`IOFBRADAPT_IO12LANE_RE` I901 for input registers or I902 for output and
+OE registers, lane 4 (X72) X98 and X99, lane 5 (X73) X106 and X107; other
+blocks and lanes are refused, [unk]). **Corrected on the board
+(2026-11-06)**: phase 10 took X106 for lane 4's clock; it is lane 5's
+input-register clock, and lane 4's output registers on it held their reset
+value (io's LED4, LED5, LED7). Quartus' own compile of io
+(`designs/p13/qio`, `specimens/runs/qio0`) routes X99, X106 and X107, as
+a5pnr now does; `ioreg::clock_node` checks each entry against the graph
+(the lane its pin's data enters), and `tools/alm/ioclk_oracle.sh` compares
+a5pnr's entries with Quartus' (`build.sh` runs it on io). Whether input
+registers on lane 4 work on I901 (X98) is [inf]: no board input reaches
+lane 4. Every
 active-high control, and the OE register's data, gets its RPI's
 inverter; a flop without an enable gets a constant-1 LUT on it, as Quartus
 does. The block settings are `attr` lines, as `a5db extract` decodes them
@@ -3351,7 +3389,7 @@ list. Fitter and assembler are unaffected, so blinky was assembled with a
 separate `quartus_asm blinky`. With `brotli.lib` on `LD_LIBRARY_PATH`
 quartus_sta runs (u) [obs].
 
-### Board test (tools/board/run.sh; not run: the board is off)
+### Board test (tools/board/run.sh; run on 2026-11-06)
 
 `tools/board/run.sh` is the board test: it loads one file at a time into
 the DE25-Nano's SRAM over the on-board USB-Blaster III (JTAG, MSEL as
@@ -3370,21 +3408,58 @@ tools/board/run.sh --from <step>          # resume after a stop
 
 The log is `specimens/board/runs/<time>.tsv` (step, file, SHA-256, loader
 exit, its first error line, answer, note), with each step's full loader
-output beside it. The loader is nixpkgs' openFPGALoader 1.2.0 with one
-line added to its part table (`tools/board/openfpgaloader.nix`): IDCODE
-`0xC362C0DD`, the A5EB013B (n), next to the A5EC008B it already knows; its
-Agilex programming sequence is the A5EC008B's and Agilex 3's, untried on
-this part [unk].
+output beside it. The loader is Quartus Prime Pro's `quartus_pgm` through
+chipsmith-vendor (no licence; outside `tools/quartus.sh`'s namespace, since
+jtagd needs loopback), on the cable `DE25-Nano [3-10-iface0]` (09fb:6026).
+openFPGALoader 1.2.0 (`tools/board/openfpgaloader.nix`) finds the part but
+races the ISC configure poll and spins on SDM busy, so it isn't used. The
+board's LEDs are **active low** (a design 1 is dark); the runbook's texts
+say lit and dark as the board shows them.
 
 | order | step | file | stops the run if |
 |---|---|---|---|
-| 1 | idcode | (chain) | the IDCODE isn't `0xC362C0DD` |
+| 1 | idcode | (chain) | no A5EB013B on the chain (it reads `0x4362c0dd`) |
 | 2 | control | `blinky_pfg.rbf` (Quartus' blinky through pfg) | it doesn't load or LED0 doesn't blink |
 | 3 | scratch | `scratch.rbf` (hand-placed counter, a5db only) | the SDM refuses it |
 | 4 | zero-io-hash, zero-design-hash, corrupt-core | `scratch_*.rbf` | (recorded: which hashes the SDM checks) |
 | 5 | scratch-p5, ctl, ctl-p7 | phase 8's A/B pairs | (recorded: the LUT rule, (z3)) |
 | 6 | blinky | `blinky.rbf` | it doesn't load or doesn't blink |
 | 6 | leds … fr | 17 open-flow designs | (recorded, with the diagnosis per design) |
+
+**Results, 2026-11-06** [obs; nobody at the bench: SW0–SW3 down, no key
+pressed; LEDs read from a webcam at minimum exposure, per-LED rates and
+patterns from the clips, verdicts and evidence in
+[docs/board-history.md](docs/board-history.md)]. The IDCODE is
+`0x4362c0dd`. Quartus' blinky blinks, and so does a5db's scratch counter:
+**an image built from the database alone configures and runs**. The SDM
+takes it with the IO hash or the design hash zeroed (both blink).
+corrupt-core never reaches the SDM: quartus_pgm refuses it on the host
+(Error 19192). Every other file configured. Of the 19 LED steps from
+scratch-p5 on, 14 behaved as described (SW-dependent parts as with the
+switches down): scratch-p5, ctl, ctl-p7, leds, acc, arith, ram, rom, rf,
+mul, cpu-ff, picorv32, sha256, fr; ramx is inconclusive (with SW0 down it
+writes nothing and shows its power-up 0). Three failures, each found
+against Quartus' own images and probes on the board, fixed on branch
+`board-fixes`, and the rebuilt file then passed on the board:
+
+| step | on the board | cause | fix | rebuilt file on the board |
+|---|---|---|---|---|
+| pll | LED[3:0], the 100 MHz counter, held 0 | V16's PLL reset pin left undriven holds the PLL in reset (v) | a constant-0 LUT on every IOPLL's reset; the readback models the reset | LED3 = LED7 = 0.75 Hz, LED0 = LED4 = 5.96 Hz |
+| io | LED4, LED5, LED7 held 0, LED6 right | IO96 lane 4's registers clocked from lane 5's input clock (X106) (z10) | each lane's own clocks, by direction, checked against the graph | LED4 0.75, LED5 1.49, LED6 2.98, LED7 5.96 Hz |
+| cpu, cpu-ys | counted fast with SW0 down | an all-zero MLAB RAM left at the idle all-ones mask: x0 = 0xffffffff (z9) | every RAM mask written; simcheck restarts MLAB words from their power-up contents | binary count, LED0 1.98 Hz (0.25 s per value), as cpu-ff |
+
+The checks that would have caught each now do: simcheck fails the old pll
+image (41,197 mismatches) and the old cpu image (514,595 with SW0 down),
+and `tools/alm/ioclk_oracle.sh` flags the old io's clock entries against
+Quartus' compile of io (`designs/p13/qio`, `specimens/runs/qio0`).
+The probes are in `designs/p13` (`iol`, `plo`, `mw`, `mw20`, `mwt`, `mwd`,
+`mwe`, `mwr`, `mwp`, `cpus`: the CPU on a 25 MHz PLL clock, which counted
+fast too and so ruled out timing).
+
+Needs a person at the bench [unk]: every KEY and SW behaviour (ctl's
+holds, leds' inversion and order, rf's and ramx's write side, io's input
+registers and clears, the CPUs' fast path and reset, picorv32 and
+sha256's freeze, which would also show they aren't stuck at a mid level).
 
 `tools/board/build.sh` rebuilds every file into `specimens/board/p12/`
 (git-ignored) from this tree: Quartus' blinky through pfg as the control
@@ -3402,8 +3477,14 @@ chipsmith 35f73c5, whose netlists equal a780413's. **Every check passed**
 three CPUs, picorv32, sha256), the scratch counter (asm2 0 of 25,516
 differ, `.rbf` equal to pfg's), integrity OK on all but corrupt-core
 (`FAIL`, as meant), and 18 of 18 phase-9 holds plus 9 of 9 phase-10 ones
-with 0 mismatches. sha256 took its second placement, as in phase 11. The
-checksums, which `run.sh` checks before anything else:
+with 0 mismatches. sha256 took its second placement, as in phase 11.
+**io, pll, cpu and cpu_ys were rebuilt on 2026-11-06** from branch
+`board-fixes` fefdb96 (the three fixes above, on top of (z15)'s router), by
+the same suite and go.sh steps (`specimens/p13/board`): all four checks
+pass (simcheck 0 mismatches, asm2 0 differ, pfg identical, integrity OK),
+the io clock oracle agrees with Quartus, and each passed on the board; the
+phase-12 files they replace are in `specimens/board/p12/old-20261104/`.
+The checksums, which `run.sh` checks before anything else:
 
 <!-- board-sha256 begin -->
 ```
@@ -3412,16 +3493,16 @@ fde7b9cc4f8dede27593ac8f5f0392e3722a2f930016dafa2770c8d205b92410  arith.rbf
 8b490e7823c3823e386d1fd6c3a699f61e32175e30e007a1bcb758a06c80d597  blinky_pfg.rbf
 18e90707c9365e0a35cf3069c827c492c30bc175cd64585461ecc078dd8dbae6  blinky.rbf
 d65934b6227de991066fc02318f8316e78bda4f821a759f3202a6c77e821fc5a  cpu_ff.rbf
-81772d2644496fd87e702bff34871142f77e23a86ab1f9a71be93f7abd7b71d6  cpu.rbf
-fb914fc3bf2f2b4ae248a5f00e7f9d2af34ed2d62078ca5a862c30c0af9249bc  cpu_ys.rbf
+a5a84eec9bfcb633edb77d3912bc34318d792979f5d26c1e713eea525e07ea37  cpu.rbf
+5d9e1ee5afdca7ba0b1cc063b37988e5fa0d37065046db1f3f9491a58328f68c  cpu_ys.rbf
 bd4d0148209c0fd0e47345e84e50519ca7d802fe037e1ff4ed5d19dad043f30a  ctl_p7.rbf
 7e5e14122e820bdd4f9d36b28530cecd76cad1d3babb610cf790391b4baef2f1  ctl.rbf
 993fa42ddfe19e79d4dd75e7a90cb29fd7dab07c3fcdd88a608ac86858c377f3  fr.rbf
-f5a5bfe067f26bb22c7e5b9935e89ffe09e492f5c4ea33db6ac4ec973ad9ff1b  io.rbf
+6441f8abb6952759188dd5951cd68291a67d4c7dfda6da2f8f69f57b38037fa2  io.rbf
 08fb40c71a6426eb8b22eced3f50d63cea882f6bcf95671dc7d7eca41fa7fa3d  leds.rbf
 cbce12b67a0c5111770c110474f29f17171ec6a80ccf504d40b254c44f590d3d  mul.rbf
 f5f6d3b3f25603736050980079c466db81172e10b121ff038a74c3b577887531  picorv32.rbf
-3f16a01219ad4ae468aca6f66e4c1298f6fc6e739d8113f8cfabd376b6af7705  pll.rbf
+8b32d2dc2f26be7209bfc5c3720e58888e4117ae10c02d9a26eafb459d36cedc  pll.rbf
 3f473da43641149c83d0f0bc68cc4ca9ee627f903238517410a09f9f0aaa5e2e  ram.rbf
 b22f7525b035bd20c84b1fc1ae0ed0b51b9c05cc1fe55dc4570cf82d4c570543  ramx.rbf
 5d91e9b41a188c34919dc0d6b95c0c70860659f9ab94ac6cae6c5852f74a59ea  rf.rbf
@@ -3464,6 +3545,20 @@ critical warning, which a real design should follow.
 
 ## Plan
 
+**Board-fixes status** (branch `board-fixes`, 2026-11-06): the board test
+ran ("Board test", results there and in docs/board-history.md). The three
+failures are fixed and their rebuilt files pass on the board: pll (the
+PLL's reset, (v)), io (IO96 lane clocks, (z10)), cpu and cpu-ys (an empty
+MLAB's mask, (z9)). Each fix has a check that fails the old file. Open:
+
+- Every KEY/SW behaviour, which needs a person at the bench; ramx's write
+  side with SW0 up.
+- The other board files are still phase 12's build (master e0dad11); a
+  full `tools/board/build.sh` on this branch would rebuild them with
+  (z15)'s router and these fixes (about 4 h).
+- mwr's latch (z9) [unk], lane 4's input-register clock (X98) [inf], the
+  SDM's CORE hash check [unk].
+
 **Phase 12 status** (branch `phase12`): the board test ready to run,
 every board file rebuilt, chipsmith's mapper from `open`, two QoR fixes.
 
@@ -3490,9 +3585,8 @@ every board file rebuilt, chipsmith's mapper from `open`, two QoR fixes.
 
 Open after phase 12 [unk]:
 
-- Everything on silicon (`tools/board/run.sh`), including openFPGALoader's
-  Agilex sequence on this part and whether jtagd works inside
-  `tools/quartus.sh`'s network namespace (the runbook's fallback).
+- Everything on silicon (`tools/board/run.sh`): ran on 2026-11-06, see
+  the board-fixes status above.
 - IO96 I/O-register timing and the I/O block's enable and clear setups (the
   model assumes the HVIO path's values).
 - Register duplication or retiming for high fanout (Quartus' flop CPU:

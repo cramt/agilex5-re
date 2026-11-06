@@ -1,4 +1,4 @@
-# Board test, phases 4–11 (superseded)
+# Board test, phases 4–11 (superseded), and the run of 2026-11-06
 
 The board test as each phase from 4 to 11 prepared it, kept because the
 phase statuses in the README cite its step numbers ("steps 27–30") and its
@@ -285,3 +285,143 @@ cfce635e…, `arith.rbf` dd830f2a…, `fr.rbf` 99f66baa…; `blinky.rbf`
 `ramx.rbf` c8d6cd36…, `pll.rbf` c67946ab…, `rf.rbf` 9125aab9… (= phase
 9's).
 
+## The run of 2026-11-06 (phase 12's files, `tools/board/run.sh`'s steps)
+
+The DE25-Nano on the onboard USB-Blaster III (09fb:6026), IDCODE
+`0x4362c0dd`, every file loaded with `quartus_pgm` through chipsmith-vendor.
+Nobody was at the bench: SW0–SW3 down, no key pressed, LEDs read by a
+webcam. Quartus' blinky (control) blinks; a5db's scratch counter blinks
+like it; the zero-io-hash and zero-design-hash variants configure and blink
+(the SDM checks neither hash); corrupt-core is refused by quartus_pgm on
+the host ("Fail to check bitstream integrity", Error 19192) and never
+reaches the SDM; blinky blinks. The LED steps:
+
+All 19 files were re-loaded with quartus_pgm (every one "Configuration succeeded") and re-recorded at minimum exposure
+(exposure_time_absolute=50, brightness=-64). Clips are in /tmp/cam/v/<id>.mkv and analyses in <id>.a2.
+At this exposure the 8 LEDs separate cleanly (centres x=1041..1104, 9 px pitch, y=800; /tmp/cam/ledpos2.json). The
+analyzers are /tmp/probe/leds2.py (per-LED state, rates, run-length pattern sequence) and /tmp/probe/chan.py
+(light integrated in the unsaturated R/B halo, which separates "steady lit" from "fast-toggling, half lit").
+
+Conventions: the LEDs are active-low, so "lit" on the board = design value 0. Hex values below are design values
+(LED7..LED0). Rates are full cycles per second. A steady LED gives 100% integrated light, fast ~50% duty gives about 75-80%
+(gamma), and its saturated centre still reads FULL. KEY/SW parts are not checked. Every switch-dependent design
+agrees that SW0 to SW3 are all down (SW1 down too).
+
+| step | verdict | one-line evidence |
+|---|---|---|
+| scratch-p5 | PASS (y) | LED0 steady for 10 s, no blink; dim (~32% of a lit LED). LED1-7 dark |
+| ctl | PASS (visible parts) | b and c count every 0.67 s, LED6=LED7 at 1.49 Hz, LED[1:0] held at 0 (SW0 down) |
+| ctl-p7 | PASS (y: misbehaves) | only LED6 toggles (1.50 Hz); LED7 doesn't follow, LED[5:2] stuck 0, LED[1:0] dim |
+| leds | PASS (visible parts) | LED7 0.37 Hz, LED6 0.75, LED5 1.50, LED4 2.97, LED3 5.93, LED2 11.7 Hz: binary count, normal order (SW0 down) |
+| acc | PASS | LED7 1.49 Hz (0.34 s per change), LED6 2.95, LED5 5.9, LED4 11.6 Hz; LED[3:0] faster, half lit |
+| arith | PASS (SW3..0 down) | LED[3:0] count 2,3,...,F,0,1 every 40 frames (1.34 s); LED[7:4] == LED[3:0] every frame |
+| ram | PASS | binary count 0x13 -> 0x2D, 5 frames per value (6 Hz), LED0 2.95 Hz |
+| rom | PASS | one dark LED bounces LED0 -> LED7 -> LED0, 2.5 frames (83 ms) per step |
+| ramx | INCONCLUSIVE | all 0x00 for 30 s, as predicted with SW0 down (nothing is ever written), but this exercises nothing; needs SW0 up |
+| rf | PASS (read side) | LED[3:0] 6 D 4 B 2 9 0 7 E 5 C 3 A 1 8 F..., LED[7:4] = 15-a, 5 frames (0.17 s) per step |
+| pll | **FAIL** | LED[7:4] (CLOCK2_50) count correctly (LED7 0.75 Hz); LED[3:0] (100 MHz PLL domain) steady 0 |
+| io | **FAIL** | LED6 toggles at 2.97 Hz as expected; LED4, LED5, LED7 steady lit (0), should blink 0.75/1.49/5.96 Hz |
+| mul | PASS | LED0 lit (=0: no wrong product), LED1 2.97 Hz (0.17 s), LED2 1.50, LED3 0.75 Hz, LED[7:4]=0 |
+| cpu-ff | PASS (SW0 down) | binary count 0x0C -> 0x1C..., ~7.5 frames per value, LED0 1.99 Hz (0.25 s) |
+| cpu | **FAIL** | all 8 LEDs uniformly half lit (fast toggling), no 0.25 s count, though cpu-ff (same program, same SW0) counts |
+| cpu-ys | **FAIL** | same as cpu: uniformly half lit, no slow count |
+| picorv32 | PASS (camera-limited) | all 8 LEDs uniformly half lit (~79% light, not steady, not dark), as "dimly lit, too fast to read" predicts |
+| sha256 | PASS (camera-limited) | same: all 8 half lit, neither dark nor static-full |
+| fr | PASS | configured, no SDM error; O[3:0] on LED[3:0] half lit (fast random XORs), LED[7:4] unused and dark |
+
+### Evidence and notes per step
+
+**scratch-p5**: 302 frames, LED0 never changes (frame-to-frame cv 5%). Its integrated light is 3.2 against about 10
+for a steady lit LED0 (blinky's lit frames are 9.4 to 10.6), with a centre of 177 against 235. So LED0 is either
+weakly driven or toggling fast at a low duty (roughly 8% linear duty under gamma 2.2); the camera can't tell which.
+Either way it isn't the 1.49 Hz blink, so the answer is y.
+
+**ctl** (source designs/p7/ctl.v). The pattern repeats every 8 x 10 frames: 14 D4 28 E8 3C FC 00 C0. Here
+b = LED[3:2] and c = LED[5:4] step together every 0.67 s (tick = &pre), and d = LED6 = pre[24] toggles at 1.49 Hz.
+e = LED7 follows d. a = LED[1:0] stays 0, so SW0 is down. LED6 isn't held off, so SW1 is down. The runbook's
+"LED6 toggles every 0.67 s" is a full period; the source and the board give a 0.335 s half-period. The same
+period/half-period mislabel is in step control's and scratch's "on 0.67 s, off 0.67 s". KEY0/KEY1 not checked.
+
+**ctl-p7**: LED6 toggles at 1.50 Hz (so d = pre[24] works). LED7 is steady lit (e stuck at 0, not following d).
+LED[5:2] are steady lit (b and c never count, so tick/t2 = &pre don't fire, or the counters don't). LED1 and LED0 are
+steady but dim (54% and 30% of full light). It doesn't behave like ctl, which was expected.
+
+**leds** (source designs/p6/leds.v): c[26:19] count, so LED7 = c[26] gives 0.37 Hz (1.34 s half-period). LED1 and
+LED0 alias above 15 Hz. The MSB is on LED7, so SW0 is down, and KEY1 isn't held (no inversion). KEY0, KEY1 and SW0
+not checked.
+
+**acc** (source designs/p6/acc.v): a[55] predicts 1.49 Hz and the board gives 1.49 Hz. LED3 aliases (23.8 -> 6.6 Hz).
+LED2..LED0 are faster still, read FULL and are half lit in the halo. KEY0 not checked.
+
+**arith**: 23 runs over 30 s: 22 33 44 ... FF 00 11 ... 88 (LED[7:4] and LED[3:0] equal throughout, both counting up
+once per 1.34 s). With SW3 down, LED[7:4] = LED[3:0] + 2*SW2 + SW1 + SW0, so SW0, SW1 and SW2 are down.
+Counting up rather than down also confirms the active-low reading. SW parts not checked.
+
+**ram**: 15 s, 0x13 to 0x2D, 5 frames per value, so 6 Hz. LED7 stays 0 (the count stays below 0x80 inside the clip).
+
+**rom**: 6 s, a clean bounce: 04 02 01 02 04 08 10 20 40 80 40 20 ... at 2 to 3 frames per step (83 ms).
+
+**ramx** (source designs/p7/ramx.v): WE = SW0. With SW0 down nothing is ever written, so the M20K reads its
+power-up 0 forever, and recording longer won't change that. The LEDs did show 0x00 for 30 s, but a dead
+M20K or output register would show the same. Re-test with SW0 up.
+
+**rf** (source designs/p9/rf.v): low nibble = (7a+1) mod 16 and high nibble = 15 - a[3:0] in every frame (e.g. C6, BD,
+A4, 9B, 82, 79...). A full sweep takes 16 x 0.17 = 2.7 s, which matches the runbook's "every 2.7 s". So the
+initial MLAB contents load and both RAMs read, including the 16x4 RAM's unrouted address bit. The single-frame
+0x02 between 0x13 and 0x0A is a transition frame. SW0 and KEY1 (the write side) not checked.
+
+**pll** (source designs/p7/pll.v; FAIL). b[25:22] on CLOCK2_50 counts correctly: LED7 0.75 Hz, LED6 1.50, LED5
+2.97, LED4 5.93 Hz. a[26:23] on the IOPLL's 100 MHz should give LED3 0.75 Hz (twice LED7's rate at the same bit
+weight: a[26] at 100 MHz = b[25] at 50 MHz). Instead LED[3:0] are steady lit for 20 s (halo 12.5-12.8, the steady
+level; toggling LEDs in the same clip read ~6), so a = 0 and holds its initial value. The PLL's output clock never
+reaches the counter: the IOPLL doesn't lock or run, or its output isn't routed to the clock network. a can't be
+toggling fast; that would need a GHz-range clock. This matches the runbook's "LED[3:0] dark (text) = not running or
+not locked".
+
+**io** (source designs/p10/io/io.v; FAIL). The source predicts LED4 = cnt[25] (0.75 Hz), LED5 = cnt[24] with KEY1
+enable (1.49 Hz), LED6 = cnt[23] with async clear on posedge rst (2.98 Hz) and LED7 = cnt[22] with async clear on
+negedge k0 (5.96 Hz). The board shows LED6 at 2.97 Hz, which is correct, so cnt, the clock, KEY0's input register
+and an output register with an async clear all work. LED4, LED5 and LED7 are steady lit (design 0). Their halo
+light is 12.2-13.1 with 0.8-2.9% frame-to-frame cv, against 7.3 and 84% for LED6, so they really are static, not
+fast. LED4 is the plain case (`led[4] <= cnt[25]`, no enable or clear), so suspect the output registers' D input or
+clock for DN25 (LED4), DP25 (LED5) and DP30 (LED7), not the control lines. LED[3:0] = 0 fits SW[3:0] all down
+(LED3 = 0 would also hide a KEY0 fault). The KEY and SW parts, and the GPIO pins GQ/GZ, not checked.
+
+**mul**: 20 s: 06 08 0A 0C 0E 00 02... is LED[3:1] counting with LED0 = 0 and LED[7:4] = 0. That means no wrong
+products, and LED1 runs at 2.97 Hz (0.17 s half-period).
+
+**cpu-ff**: 0x0C, 0x0D, ... 0x1C, about 7.5 frames (0.25 s) per value, LED0 1.99 Hz. That is the SW0-down count.
+KEY0 not checked.
+
+**cpu, cpu-ys** (source designs/p7/cpu/cpu.v, asm.py; FAIL). All 8 LEDs read FULL at the centre, and their halo
+light is 9.7-10.7 against 12.5-13.2 for steady all-lit ramx, with a cv of only 1-2%. That is the "half lit" look of a
+fast count, which the source gives with SW0 up (3-turn delay, 1.1 MHz). cpu-ff, the same program loaded minutes
+earlier with the same SW0, counts at 0.25 s, so SW0 is down. The program reads SW0 into x5 (`lw x5,4(x1)`) and
+loads the delay into x3 (`lui x3,0x200000`). A fast count means the MLAB register file returns a wrong x5 (non-zero,
+so it takes the fast path) or a wrong x3 (short delay). The CPU fetches and stores, so the M20K and the store path
+work. Both chipsmith's and yosys' synthesis fail the same way, which points at the MLAB RAM's read or write on
+silicon (see rf: its MLAB reads are right, but its write side was never exercised; SW0 down). It can't be fully
+excluded that the LEDs are stuck at a partial level rather than counting fast, but the 75-80% halo matches fast ~50%
+duty (acc, fr).
+
+**picorv32, sha256**: they look the same as cpu: every LED half lit, with halo light identical to cpu's within
+noise. Neither dark nor steady full, so they are consistent with "flicker too fast to read". The camera can't
+prove they are changing rather than stuck at a mid level. KEY0 freeze not checked; that check would settle it.
+
+**fr**: configured with no SDM error (the runbook's whole criterion). LED[3:0] are half lit (6.4/6.2/5.3/5.4 halo,
+centres saturated); LED[7:4] are unused pins and dark.
+
+### After the fixes (branch `board-fixes`, the same night)
+
+Each failure was found against Quartus' own images and board probes
+(`designs/p13`), fixed in a5pnr, and its rebuilt file loaded and recorded
+the same way:
+
+| step | rebuilt file on the board |
+|---|---|
+| pll | LED[7:4] 0.75/1.49/2.98/5.96 Hz (LED7..4), LED[3:0] the same (LED3..0): the 100 MHz counter runs at twice the CLOCK2_50 one's rate |
+| io | LED4 0.75 Hz, LED5 1.49, LED6 2.98, LED7 5.96; LED[3:0] 0 (switches down) |
+| cpu | binary count, LED0 1.98 Hz, LED1 0.99, LED2 0.50, LED3 0.25, LED4 0.12 (0.25 s per value) |
+| cpu-ys | the same, LED0 1.94 Hz, LED1 0.99, LED2 0.50 |
+
+Causes and fixes are in the README ("Board test", (v), (z9), (z10)).
