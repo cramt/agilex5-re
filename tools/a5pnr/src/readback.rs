@@ -27,6 +27,8 @@ enum Src {
     IoIn(usize),
     /// DSP block (x, y) output pin (README (z11)).
     Dsp(u32, u32, u32),
+    /// PLL k's output 0 (`plls_rb`).
+    Pll(usize),
 }
 
 /// The M20K settings a5pnr's 512 x 32 use writes (emit::M20K_SDP); any
@@ -187,14 +189,19 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         sources.push((if registered { Src::IoIn(k) } else { Src::Port(k) }, *n));
     }
     // A PLL passes its reference clock on (for this check its frequency
-    // doesn't matter): V16's PLL output 0 is HVIOWR_RE I16 (README (y)).
+    // doesn't matter) while its reset pin is 0: V16's PLL output 0 is
+    // HVIOWR_RE I16 (README (y)), its reset enters from RPI X121 Y46 I38, and
+    // an undriven reset holds the PLL in reset [obs, board 2026-11-06,
+    // netlist::tie_pll_resets].
+    let mut plls_rb: Vec<(usize, u32)> = Vec::new();
     for u in &plls {
-        let (ball, node) = match u.as_str() {
-            "hvio_3_1" => ("V16", "HVIOWR_RE:X121Y30Z500I16"),
+        let (ball, node, rst) = match u.as_str() {
+            "hvio_3_1" => ("V16", "HVIOWR_RE:X121Y30Z500I16", "RPI:X121Y46Z0I38"),
             _ => bail!("PLL in {u}: outside the model"),
         };
         let k = inputs.iter().position(|(n, _)| port_of.get(ball) == Some(n)).with_context(|| format!("PLL reference {ball} isn't an input"))?;
-        sources.push((Src::Port(k), g.node(node).context("PLL output node")?));
+        sources.push((Src::Pll(plls_rb.len()), g.node(node).context("PLL output node")?));
+        plls_rb.push((k, g.node(rst).context("PLL reset node")?));
     }
     for &(x, y) in m20ks.keys() {
         for pin in 83..123u32 {
@@ -270,6 +277,7 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
             Src::M20k(x, y, p) => format!("m{x}_{y}_q{p}"),
             Src::IoIn(k) => format!("io_{}_i", inputs[*k].0.replace(['[', ']'], "_")),
             Src::Dsp(x, y, p) => format!("d{x}_{y}_q{p}"),
+            Src::Pll(k) => format!("pll{k}_out"),
         })
     };
     let lab_node = |x: u32, y: u32, pin: u32| g.node(&format!("LAB_RE:X{x}Y{y}Z0I{pin}"));
@@ -738,6 +746,10 @@ pub fn run(g: &Graph, db: &str, extract: &str, pins: &str, top: &str, out: &str)
         if !used_io.contains(k) {
             bail!("{} {} = {}: I/O setting outside the model", k.0, k.1, io_attr[k]);
         }
+    }
+    for (k, &(port, rst)) in plls_rb.iter().enumerate() {
+        let r = sig(Some(rst)).unwrap_or_else(|| "1'b1".into());
+        writeln!(d, "  wire pll{k}_out = ({r} === 1'b0) ? {} : 1'b0;", inputs[port].0.replace(['[', ']'], "_"))?;
     }
     for (name, n) in &outputs {
         // An unrouted output pin reads 1, so through its RPI's inverter 0:

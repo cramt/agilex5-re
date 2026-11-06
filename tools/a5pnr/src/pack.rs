@@ -199,6 +199,8 @@ pub enum End {
     M20k { m: usize, pin: u16 },
     /// IOPLL k's output.
     Pll(usize),
+    /// IOPLL k's reset pin (a sink).
+    PllRst(usize),
     /// Pin of DSP block d (`MP_MAC_RE` index, README (z11)).
     Dsp { d: usize, pin: u16 },
     /// Port k's I/O cell (README (z10)): a register control or data input
@@ -617,8 +619,9 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
                     add(Sig::Net(n), "ctl");
                 }
             }
-            Cell::Pll { out, .. } => {
+            Cell::Pll { out, rst, .. } => {
                 driver.insert(*out, i);
+                add(Sig::Net(*rst), "pll");
             }
             Cell::Mul { a, b, p, .. } => {
                 for s in a.iter().chain(b) {
@@ -1160,8 +1163,9 @@ pub fn pack(nl: &Netlist, mode: PackMode, io: &[crate::ioreg::IoRegs]) -> Result
     }
     let plls: Vec<usize> = nl.cells.iter().enumerate().filter(|(_, c)| matches!(c, Cell::Pll { .. })).map(|(i, _)| i).collect();
     for (k, &ci) in plls.iter().enumerate() {
-        let Cell::Pll { out, .. } = nl.cells[ci] else { unreachable!() };
+        let Cell::Pll { out, rst, .. } = nl.cells[ci] else { unreachable!() };
         nets.entry(out).or_insert((none, vec![])).0 = End::Pll(k);
+        nets.entry(rst).or_insert((none, vec![])).1.push(End::PllRst(k));
     }
     // I/O registers (README (z10)): their data, controls and outputs.
     use crate::ioreg::Role;
