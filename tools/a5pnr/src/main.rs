@@ -307,7 +307,10 @@ fn main() -> Result<()> {
                 let b = p.block_pin(role).and_then(|n| g.node(&n)).with_context(|| format!("{ball}: no {role:?} pin"))?;
                 rpi_blk.get(&b).copied().with_context(|| format!("{ball}: no RPI feeds {}", g.name(b)))
             };
-            let clk = ioreg::clock_node(p)?;
+            if p.io96 && r.input.is_some() && (r.output.is_some() || r.oe.is_some()) {
+                anyhow::bail!("{pname}: an IO96 pin's input and output registers take different lane clocks, one port can't have both");
+            }
+            let clk = ioreg::clock_node(&g, p, r.input.is_some())?;
             io_node.insert((r.port, Role::Clk), g.node(&clk).with_context(|| format!("no node {clk}"))?);
             let mut inv: Vec<u32> = Vec::new();
             let mut set = |sub: &str, v: &str| io_attrs.push((p.uid.clone(), format!("{}/{sub}", p.path), v.to_owned()));

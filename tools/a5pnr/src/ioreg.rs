@@ -315,17 +315,59 @@ pub fn rpi_of_block(g: &Graph, rpis: &HashMap<(String, String), u32>) -> HashMap
     rpis.values().filter_map(|&r| forward_block(g, &single, r).map(|b| (b, r))).collect()
 }
 
+/// The IO96 lane pin a node's hops with no choice lead to: the
+/// `IOFBRADAPT_IO12LANE_RE` node's (X, I). Its X names the lane (X72 lane
+/// 4, X73 lane 5, from the pins' output data paths).
+pub fn io12lane_of(g: &Graph, mut n: u32) -> Option<(u32, u32)> {
+    for _ in 0..12 {
+        if g.type_name(n) == "IOFBRADAPT_IO12LANE_RE" {
+            return Some((g.x[n as usize] as u32, g.i[n as usize]));
+        }
+        let next: Vec<u32> = g.fanout(n).map(|e| g.dst[e]).collect();
+        let [m] = next.as_slice() else { return None };
+        n = *m;
+    }
+    None
+}
+
+/// An IO96 lane's two register clock pins: I901 clocks the input
+/// registers, I902 the output and OE registers.
+const LANE_IN_CLK: u32 = 901;
+const LANE_OUT_CLK: u32 = 902;
+
 /// Where a pin's I/O registers take their clock: the routing node the
-/// block's register clock pin is entered from [obs: Quartus' iq uses
-/// hvio_3_1's at HIOL row 49, hvio_0_1's at row 9, IO96 lane 4's at VIO
-/// X106 and lane 5's at X107; inf: each HVIO block's top row serves it all,
-/// other IO96 lanes unknown].
-pub fn clock_node(p: &IoPin) -> Result<String> {
-    Ok(match (p.uid.as_str(), p.io96) {
-        ("hvio_3_1", _) => "RPI:X121Y49Z0I29".into(),
-        ("hvio_0_1", _) => "RPI:X121Y9Z0I29".into(),
-        ("pio_0_0", true) if p.path.starts_with("x0/xiophyadaptwr_4/") => "GLOBAL_LOCAL_SEL:X106Y5Z0I3".into(),
-        ("pio_0_0", true) if p.path.starts_with("x0/xiophyadaptwr_5/") => "GLOBAL_LOCAL_SEL:X107Y5Z0I3".into(),
+/// block's register clock pin is entered from. HVIO [obs: Quartus' iq uses
+/// hvio_3_1's at HIOL row 49, hvio_0_1's at row 9; inf: each block's top row
+/// serves it all]. IO96: each lane has two, the VIO `GLOBAL_LOCAL_SEL` I3
+/// whose RPI reaches the lane's I901 (input registers) or I902 (output and
+/// OE registers): lane 4 X98 and X99, lane 5 X106 and X107 [obs, graph;
+/// board 2026-11-06: lane 4's outputs on X106 (lane 5's input clock, which
+/// phase 10 took for lane 4's) held their reset value, on X99 they run;
+/// Quartus' iq drives X99 for lane 4's output and OE registers, X106 and
+/// X107 for lane 5's input and output ones]. Other lanes unknown.
+pub fn clock_node(g: &Graph, p: &IoPin, input: bool) -> Result<String> {
+    let lane = |l4: &str, l5: &str| -> Result<String> {
+        let e = if p.path.starts_with("x0/xiophyadaptwr_4/") {
+            l4
+        } else if p.path.starts_with("x0/xiophyadaptwr_5/") {
+            l5
+        } else {
+            bail!("{}: I/O registers in {} {} aren't modelled (no clock entry seen)", p.ball, p.uid, p.path)
+        };
+        let n = format!("GLOBAL_LOCAL_SEL:X{e}Y5Z0I3");
+        // The clock must reach the lane the pin's own data enters.
+        let want = (p.block_pin(Role::Out).and_then(|b| g.node(&b)).and_then(|b| io12lane_of(g, b)).map(|(x, _)| x), if input { LANE_IN_CLK } else { LANE_OUT_CLK });
+        let got = g.node(&n).and_then(|c| io12lane_of(g, c));
+        match (want, got) {
+            ((Some(x), i), Some(c)) if c == (x, i) => Ok(n),
+            _ => bail!("{}: clock entry {n} reaches lane pin {got:?}, the pin's lane wants {want:?}", p.ball),
+        }
+    };
+    match (p.uid.as_str(), p.io96) {
+        ("hvio_3_1", _) => Ok("RPI:X121Y49Z0I29".into()),
+        ("hvio_0_1", _) => Ok("RPI:X121Y9Z0I29".into()),
+        ("pio_0_0", true) if input => lane("98", "106"),
+        ("pio_0_0", true) => lane("99", "107"),
         _ => bail!("{}: I/O registers in {} {} aren't modelled (no clock entry seen)", p.ball, p.uid, p.path),
-    })
+    }
 }
