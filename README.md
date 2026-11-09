@@ -3691,32 +3691,118 @@ fits (256,547 B) and boots. Platform Designer's generator needs 127.0.0.1, so
 F2SDRAM and HPS2FPGA on, and an unread bridge output fails synthesis (Error
 129015). The design folds them into spare interrupt lines.
 
-**What a chipsmith/a5db image needs for this path** [inf]. The core.rbf is
-the same container that a5db already writes (CMF copied verbatim, then
-4 KiB-aligned IO and CORE sections with the same block CRCs, keyed hashes and
-SHA-384 chain). The differences are in the IO section and the header words:
+**a5db writes the core.rbf** [obs, 2026-11-09]. `a5db rbf` on `hpsf.sof`
+gives pfg's `hpsf.core.rbf` byte for byte, and the same for variant B; the
+78 FPGA-only pairs of (o) stay identical. The HPS-first container differs
+from the FPGA-only one in four places, all visible in the `.sof`:
 
-- The IO section must be the HPS-first variant. It leaves out the HPS I/O
-  (393,216 B here against 413,696 for blinky) and carries the board's HPS
-  IO hash. The SDM presumably rejects a mismatch [unk: untested]. MiSTer-DE25
-  treats a mismatch as unloadable
-  ([ahmadexp/MiSTer-DE25-Nano](https://github.com/ahmadexp/MiSTer-DE25-Nano)).
-- The CORE section must carry the HPS-first header word and the IO hash. The
-  design must route through the same HPS block that phase 1 configured.
-  An a5pnr design with no HPS instance would need the HPS-side fabric
-  configuration that this core carries [unk].
-- The simplest route copies the IO section and its hashes from a Quartus
-  compile of `designs/hpsf` (the same pins and HPS) and swaps only CORE, as
-  for FPGA-first images. Whether the SDM accepts a CORE whose IO hash and
-  checksum words point at a different compile is untested [unk].
+- **IO streams**: the IO96 streams 3–5 (headers, t41, t40) carry only target 0,
+  `io96_0`. `io96_1` is the HPS EMIF's bank, which phase 1 configures.
+  `io_config.fw` is left out, and the second action page has the one-bank
+  `0x17` records and lacks the seven records before them
+  (`tables::IO_ACT2_HPS_FIRST`).
+- **Header words**: in both sections +0xB8 = 0x002F0000, +0x184 = 0x400 and
+  +0x190 = 0xB. IO also has +0xB4 = 0x0001036C (it points at the record at
+  +0x36C, `2c2c0003`), +0x20B = 0xC1, +0x210 = 0x80 and the HPS IO hash at
+  +0x374. The FPGA-first build of the same design (`HPS_INITIALIZATION "AFTER
+  INIT_DONE"`) has the same words except +0x190 = 3, so they mark an HPS, and
+  bit 3 of +0x190 marks HPS-first. What each one means is [inf]. +0x9C is
+  OPTIONS 1.2: 100,000,000 without an HPS, 125,000,000 with the GHRD's.
+- **OPTIONS** (record 0x3A index 3, field 1): 1.9.1 = 1 means the design has an HPS. 1.9.3 = 0
+  only in the HPS-first build (it is 1 in FPGA-only designs too). 1.21 is
+  the HPS IO hash as hex text (a `0000111122223333…` placeholder without an
+  HPS).
+- **Hashes are image functions**: with an HPS, the IO hash (1.20) is
+  SHA-256 of `io96_0` alone and the HPS IO hash (1.21) is SHA-256 of
+  `io96_1`, in both builds (without an HPS, the IO hash covers both banks,
+  (n)). OPTIONS 1.8 is SHA-256 of `perictrl0`.
 
-**Open** [unk]: the HPS-to-FPGA bridges after a load from Linux (U-Boot's
+`a5db` reads the boot order from OPTIONS 1.9 (`rbf::Boot`). It refuses an
+FPGA-first image with an HPS, because it has no writer for that image's HPS
+section. An image that `a5db build` made has a container that says FPGA-only,
+so `a5db rbf … hps-first=<phase-1 .sof | HPS IO hash>` names the phase 1
+that is on the board. a5db then computes the IO hash over `io96_0`.
+
+**On the board, from the open flow** [obs, all through `/dev/fpga-load` on
+mercury, state `operating`, dmesg only fpga-load's "loaded N bytes"]:
+
+| core.rbf | what changed | GICD_ISPENDR1 |
+|---|---|---|
+| a5db's, from `hpsf.sof` (= pfg's) | nothing | 0x00040000 / 0x00060000 |
+| a5db's, from variant B's `.sof` | Quartus' variant B | 0x00080000 / 0x000A0000 |
+| `a5db build` of hpsf's own design file (`a5db extract`, 0 bits differ) | design hash only (a5db's own) | 0x00040000 / 0x00060000 |
+| the same, one LUT mask inverted | irq0[3]'s XOR LUT (LAB X81 Y50, ALM 5) | 0x00140000 / 0x00160000 |
+| a5pnr's placement + Quartus' HPS shell | all fabric logic | bit 17 at 2.93 Hz, bit 20 at 1.43 Hz with 23 % duty, bits 21–22 = 1 |
+
+- **Where the interrupts enter** (Quartus' own route dump, `quartus_fit --eco`
+  with `report_routing` on the HPS atom's `F2S_FPGA_IRQ` ports):
+  `f2h_irq0[k]` enters `SOC_HPS_WRAPPER_RE` X0 Y52 at I(5401 + k) from
+  `RPI:X52Y51Z0I…`, reached from `LEIM:X52Y51Z0I63` (k = 0) and `…I38`
+  (k = 3). It reads as GICD_ISPENDR1 bit 17 + k. The constant lines (irq0[1] = 1, [2] = 0) are not routed. An HPS
+  input that nothing drives reads 1, and `rpi_sel INV` in the row-51
+  routing tile (`cw_rt_vio_*_r51_*`) makes it 0. That is why the GIC shows
+  0xFFFE0000 with no fabric.
+- **The open-flow core** (`designs/hpsf/open`): `hpsf_open.v` is a counter
+  on CLOCK1_50 that drives irq0[0] with cnt[23] and irq0[3] with
+  cnt[24] & cnt[23]. yosys and a5pnr place it in 14 ALMs.
+  `pins.txt` binds the two outputs to the RPII nodes with a new form,
+  `<port> node <graph node>`. `tools/hps_shell.sh` takes from `a5db extract`
+  of `hpsf.sof` only the IO96/pio lines and the row-51 `rpi_sel` ties, which
+  gives 1,769 attr, 5,723 bit and 15 raw lines. Quartus' logic, routing, DFT flops and clock delays are
+  left out. The merged design file goes through `a5db build` and then
+  `a5db rbf hps-first=D921CDF7…C3D07A`. Its IO section is byte-identical to
+  pfg's except for the image byte sum at +0x78, so the IO hash and the HPS
+  IO hash match phase 1. The rates match the design: 2.98 Hz and 1.49 Hz
+  at 25 % are expected. irq0[4] and [5] read 1 because they are now
+  undriven.
+- **The SDM checks neither the design hash nor the +0x78 sum** here either.
+
+**A wrong HPS IO hash wedges the SDM** [obs, 2026-11-09 05:52]. The test file is
+`hpsf.sof` written with the FPGA-first build's HPS IO hash (`2C6BA7E8…`).
+Every other field and hash in it is valid. Over a running core A the SDM
+does not refuse it. `dd` blocks: killed at 90 s, it stays in D state. The manager's state
+stays `write` and the kernel logs the 11-08 message, "timeout waiting for
+svc layer buffers". The HPS's SDM mailbox stops answering: hwmon logs
+"timeout occurred, waiting for async message" every 60 s. The old fabric
+is gone (GIC 0xFFFE0000). `systemctl reboot` then hangs in shutdown on the
+D-state `dd`, as the HPS console shows ("shutdown[1]: Waiting for process:
+3563 (dd)"). Only a power cycle recovers the board. So a loader must check
+the hash itself before it writes: compare the file's IO +0x374 with phase
+1's HPS IO hash (`quartus_pfg -i`, or SHA-256 of phase 1's `io96_1`). An
+FPGA-first full image is presumably the same case: its IO section has no
+HPS IO hash at all [inf].
+
+**What chipsmith needs to flash the DE25-Nano through mercury** [inf, from
+the above]:
+
+- *Once per board setup, from Quartus*: an HPS-first build of the HPS
+  shell (`designs/hpsf`: the GHRD's HPS and EMIF, the LED/clock pins). Keep its
+  `hps.rbf` (phase 1, with the Arm GNU 11.2 SPL) and its `.sof`. Phase 1
+  goes into QSPI as a `.jic` (not done yet), or over JTAG after every power
+  cycle. From the `.sof` keep `a5db extract` → `tools/hps_shell.sh` (the
+  shell lines) and the HPS IO hash (OPTIONS 1.21).
+- *Per design, no Quartus*: synthesis and a5pnr with `pins.txt` (balls,
+  plus `node` sinks for the HPS inputs it drives). Concatenate the shell
+  lines, then run `a5db build` and `a5db rbf … hps-first=<HPS IO hash>`.
+  Before writing, check the file's HPS IO hash against the board's phase 1.
+  Then `scp` the file and `dd` it to `/dev/fpga-load` (fpga-load.ko,
+  `manager=intel,agilex5-soc-fpga-mgr`). Read back by the GIC, or by the
+  HPS-to-FPGA bridge once a driver for it exists.
+- Constraints on the design: it must not use the LED pins differently from the shell build.
+  The LED pins are on `io96_0`, which the IO section and its hash carry, so
+  new I/O on `io96_0` means a new IO hash. The IO hash is only checked
+  against CORE's copy [inf], and a5db writes both, so that is likely fine,
+  but it is untested. a5pnr's IRQ sinks are graph nodes that come from
+  Quartus' route dump. Other HPS inputs (the bridges' AXI ports) are not
+  mapped yet.
+
+**Open** [unk]: the HPS-to-FPGA bridges after a load from Linux. U-Boot's
 `bridge enable` runs before the fabric exists, and this kernel has no
-Agilex bridge driver: the ATF SMC `HPS_SET_BRIDGES` is the way in). Whether
-loading a mismatched HPS IO hash, or an FPGA-first full image, after an
-HPS-first boot also wedges the SDM. An HPS-first `.jic` in QSPI would make
-this the board's power-on state. It is not written: that needs the QSPI, which
-boots the HPS, and has to be reported first.
+Agilex bridge driver; the ATF SMC `HPS_SET_BRIDGES` is the way in. Also open:
+whether an `io96_0` that differs from phase 1's build loads, and whether the
+kernel can recover from the wedge without a power cycle. An HPS-first
+`.jic` in QSPI would make this the board's power-on state. It is not
+written: that needs the QSPI, which boots the HPS, and has to be reported first.
 
 ## Oracle
 
