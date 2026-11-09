@@ -1,0 +1,42 @@
+# HPS-first test design (README "HPS-first"). HPS IP and HPS pin scripts:
+# github.com/spersvold/de25_nano 5df43af (Apache-2.0), which carry Terasic's
+# DE25-Nano GHRD HPS settings. Device options as Terasic's golden_top.qsf.
+set_global_assignment -name FAMILY "Agilex 5"
+set_global_assignment -name DEVICE A5EB013BB23BE4SCS
+set_global_assignment -name TOP_LEVEL_ENTITY hpsf_top
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name SYSTEMVERILOG_FILE hpsf_top.sv
+set_global_assignment -name SYSTEMVERILOG_FILE hps_wrapper.sv
+set_global_assignment -name IP_FILE ip/agilex_hps.ip
+set_global_assignment -name IP_FILE ip/emif_io96b_hps.ip
+set_global_assignment -name SDC_FILE hpsf.sdc
+# agilex_hps.ip has both bridges enabled; hps_wrapper exposes them under these.
+set_global_assignment -name VERILOG_MACRO "ENABLE_FPGA2SDRAM=1"
+set_global_assignment -name VERILOG_MACRO "ENABLE_HPS2FPGA=1"
+
+# The point of the design: the SDM configures HPS I/O and boots the HPS
+# first; the fabric (the .core.rbf) comes later, from Linux.
+set_global_assignment -name HPS_INITIALIZATION "HPS FIRST"
+
+set_global_assignment -name USE_CONF_DONE SDM_IO16
+set_global_assignment -name USE_HPS_COLD_RESET SDM_IO11
+set_global_assignment -name STRATIXV_CONFIGURATION_SCHEME "ACTIVE SERIAL X4"
+set_global_assignment -name ACTIVE_SERIAL_CLOCK AS_FREQ_125MHZ
+set_global_assignment -name DEVICE_INITIALIZATION_CLOCK OSC_CLK_1_125MHZ
+set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
+set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
+
+set_location_assignment PIN_V16 -to CLOCK1_50
+set_instance_assignment -name IO_STANDARD "3.3-V LVCMOS" -to CLOCK1_50
+set_location_assignment PIN_DF35 -to LED[0]
+set_location_assignment PIN_DJ32 -to LED[1]
+set_location_assignment PIN_DN22 -to LED[2]
+set_location_assignment PIN_DP23 -to LED[3]
+set_location_assignment PIN_DN25 -to LED[4]
+set_location_assignment PIN_DP25 -to LED[5]
+set_location_assignment PIN_DJ27 -to LED[6]
+set_location_assignment PIN_DP30 -to LED[7]
+set_instance_assignment -name IO_STANDARD "1.1-V" -to LED[*]
+
+source pins/hps_pin_assignments.tcl
+source pins/lpddr4a_pin_assignments.tcl

@@ -20,6 +20,9 @@ case "${ORACLE_NETNS:-}" in
         unshare --user --map-root-user --net "$0" "$@"
     ;;
 1)
+    # Platform Designer's generator (qsys-generate, run for IP_FILEs) talks
+    # to its own workers over 127.0.0.1; a new namespace's lo starts down.
+    ip link set lo up
     if [[ -n "${ORACLE_LICENSE_MAC:-}" ]]; then
         ip link add hostid0 address "$ORACLE_LICENSE_MAC" type dummy
         ip link set hostid0 addrgenmode none

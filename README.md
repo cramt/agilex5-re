@@ -3611,6 +3611,113 @@ lit), hold KEY1 (row blinks 4 Hz), and flip SW0–SW3 up one at a time (0.5,
 1, 2, 3 Hz). Either read it by eye, or run `cam.py record` and `cam.py
 trace` with the box above while doing it.
 
+### HPS-first: a fabric image from the board's own Linux (2026-11-09)
+
+The goal is a chipsmith `flash --ssh mercury` like the Zybo's: Linux on the
+DE25-Nano's HPS loads the fabric through the kernel's fpga-manager
+(`/dev/fpga-load` from nixos-fpga's `common/fpga`). Design `designs/hpsf`,
+files in `specimens/hps-first/` (git-ignored), log there in `NOTES.md`.
+
+**What the board boots** [inf]. MSEL is AS x4, so the SDM reads QSPI at power-on.
+The QSPI holds Terasic's factory image. It can't be read from Linux: the QSPI
+node is disabled in the DT, and RSU reports no sub-partition table. Terasic's
+GHRD packs it with `quartus_pfg -c golden_top.sof golden_top_hps.sof -o
+hps_path=u-boot-spl-dtb.hex`, without `-o hps=on`, and its `golden_top.qsf`
+sets no `HPS_INITIALIZATION`
+([GHRD mirror](https://github.com/malindailankoon/de25-nano-high-bw-datalink/tree/main/GHRD)),
+so the image is FPGA-first: the SDM configures the whole fabric, then starts
+the SPL. Nothing later loads a fabric: the stock `u-boot.itb` is U-Boot, ATF
+and a DTB only, and the stock boot script is fatload+booti. Altera lists HPS
+fabric configuration as "HPS boot first only"
+([HPS brief](https://cdrdv2-public.intel.com/749262/agilex-5-hard-processor-subsystem-and-embedded-software-architecture-brief.pdf))
+[obs]. That fits the 2026-11-08 wedge: `blinky_pfg.rbf` (FPGA-first,
+CMF+IO+CORE) written to the manager from the booted HPS stopped the SDM
+("timeout waiting for svc layer buffers").
+
+**The HPS-first split** [obs]. `designs/hpsf` is the smallest design the SDM
+takes from Linux. It is the HPS of Terasic's GHRD (the `agilex_hps.ip`,
+`emif_io96b_hps.ip`, `hps_wrapper.sv` and HPS/LPDDR4A pin scripts of
+[spersvold/de25_nano](https://github.com/spersvold/de25_nano) 5df43af,
+Apache-2.0), a 50 MHz counter on the LEDs, and three FPGA-to-HPS interrupt
+lines, compiled with `HPS_INITIALIZATION "HPS FIRST"`. The SPL is Terasic's
+U-Boot `de25_nano_revA_v1.0` (d0f8813f), with its defconfig unchanged.
+`quartus_pfg -c hpsf.sof hpsf.rbf -o hps_path=u-boot-spl-dtb.hex -o hps=1`
+writes two files:
+
+| file | sections (`tools/bitstream.py`) | what it is |
+|---|---|---|
+| `hpsf.hps.rbf` (864,256 B) | CMF, HPIO, HPS | phase 1: HPS I/O, HPS EMIF, SPL. QSPI (.jic) or JTAG. |
+| `hpsf.core.rbf` (1,015,808 B) | CMF, IO, CORE | phase 2: the fabric, loaded by Linux |
+
+`quartus_pfg -i` prints an `HPS IO hash` for both
+(`D921CDF7…C3D07A`) and `HPS/FPGA configuration order: HPS_FIRST`. The
+core's IO section carries that hash at +0x374 and its own IO hash at +0x348.
+Its CORE section repeats the IO hash at +0x234. Header words +0xB4/+0xB8
+(+0xB8 in CORE) are nonzero in the core and 0 in the FPGA-first blinky. The
+CMF section is byte-identical to `blinky_pfg.rbf`'s. Every CRC, keyed hash
+and SHA-384 chain that `bitstream.py check` knows passes on both files.
+
+**On the board** (QSPI untouched, nothing physical) [obs]:
+
+1. Phase 1 over JTAG from luna:
+   `quartus_pgm -c "DE25-Nano [3-10-iface0]" -m jtag -o "p;hpsf.hps.rbf"`.
+   The HPS console is the FT4232H's third port (`/dev/ttyUSB2` on luna, 115200).
+   It shows the SPL (DDR calibration OK, 1024 MiB), ATF, the stock U-Boot, then
+   `FPGA not ready. Bridge reset aborted!` for the boot script's
+   `bridge enable`, and NixOS boots. With no fabric, GICD_ISPENDR1
+   (0x1D000204) reads 0xFFFE0000: INTIDs 49–63, the FPGA-to-HPS lines, all
+   pending.
+2. `insmod fpga-load.ko manager=intel,agilex5-soc-fpga-mgr`, then
+   `dd if=hpsf.core.rbf of=/dev/fpga-load bs=1M`: 2.1 s, exit 0,
+   `/sys/class/fpga_manager/fpga0/state` = `operating`. dmesg shows only
+   fpga-load's "loaded 1015808 bytes".
+3. Readback by the HPS, no bridge needed: GICD_ISPENDR1 alternates
+   0x00060000 / 0x00040000. Bit 17 (irq0[0], cnt[25]) toggles every 0.67 s,
+   bit 18 (irq0[1]) is 1, the rest are 0, as designed. Webcam on the LED
+   column: 0.74, 0.75, 0.37, 0.19 Hz, the counter's bits 25–27 (which LED is
+   which is approximate at that angle).
+4. The same core loaded again works. Variant B (`HPSF_B`: twice the rate,
+   irq0[1]/[2] swapped; same IO and HPS IO hash, different CORE) loaded over
+   it: 0x00080000 / 0x000A0000 at 1.49 Hz. Loading A back restored A. The
+   fabric really is replaced, while Linux keeps running.
+
+**What failed first** [obs]. SPLs from GCC 16 hang without printing anything:
+with SPL NAND off to fit (194 KB), the board stayed silent and never reached
+the network, from either an HPS-first or an FPGA-first JTAG image. The stock
+defconfig overflows OCRAM under GCC 16 (`__u_boot_list` at 0x40c58). With
+Arm GNU 11.2-2022.02, the toolchain Terasic documents, the stock defconfig
+fits (256,547 B) and boots. Platform Designer's generator needs 127.0.0.1, so
+`tools/quartus.sh` now brings `lo` up in its namespace. The GHRD HPS has
+F2SDRAM and HPS2FPGA on, and an unread bridge output fails synthesis (Error
+129015). The design folds them into spare interrupt lines.
+
+**What a chipsmith/a5db image needs for this path** [inf]. The core.rbf is
+the same container that a5db already writes (CMF copied verbatim, then
+4 KiB-aligned IO and CORE sections with the same block CRCs, keyed hashes and
+SHA-384 chain). The differences are in the IO section and the header words:
+
+- The IO section must be the HPS-first variant. It leaves out the HPS I/O
+  (393,216 B here against 413,696 for blinky) and carries the board's HPS
+  IO hash. The SDM presumably rejects a mismatch [unk: untested]. MiSTer-DE25
+  treats a mismatch as unloadable
+  ([ahmadexp/MiSTer-DE25-Nano](https://github.com/ahmadexp/MiSTer-DE25-Nano)).
+- The CORE section must carry the HPS-first header word and the IO hash. The
+  design must route through the same HPS block that phase 1 configured.
+  An a5pnr design with no HPS instance would need the HPS-side fabric
+  configuration that this core carries [unk].
+- The simplest route copies the IO section and its hashes from a Quartus
+  compile of `designs/hpsf` (the same pins and HPS) and swaps only CORE, as
+  for FPGA-first images. Whether the SDM accepts a CORE whose IO hash and
+  checksum words point at a different compile is untested [unk].
+
+**Open** [unk]: the HPS-to-FPGA bridges after a load from Linux (U-Boot's
+`bridge enable` runs before the fabric exists, and this kernel has no
+Agilex bridge driver: the ATF SMC `HPS_SET_BRIDGES` is the way in). Whether
+loading a mismatched HPS IO hash, or an FPGA-first full image, after an
+HPS-first boot also wedges the SDM. An HPS-first `.jic` in QSPI would make
+this the board's power-on state. It is not written: that needs the QSPI, which
+boots the HPS, and has to be reported first.
+
 ## Oracle
 
 `tools/quartus.sh <tool> <args…>` runs one Quartus Pro tool through
