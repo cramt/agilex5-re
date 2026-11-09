@@ -19,48 +19,85 @@ use section::{Fields, Kind, Page, FLAG_ACTION, PAGE};
 
 pub const RBF_MAGIC: u32 = 0x6229_4895;
 
-/// The design's "IO hash" and "Design hash" from the .sof (README (g2)):
-/// the IO hash is hex text in the OPTIONS record (a later 0x3a record,
-/// after its u32 index, field 1.20), the design hash raw in record 0x36
-/// field 2.10.
-pub fn sof_hashes(records: &[(u16, &[u8])]) -> Result<([u8; 32], [u8; 32])> {
-    let field = |b: &[u8], path: &[u64]| -> Option<Vec<u8>> {
-        let mut cur = b.to_vec();
-        if pb_parse(&cur).is_none() {
-            cur = b.get(4..)?.to_vec();
-        }
-        for &f in path {
-            let fs = pb_parse(&cur)?;
-            let v = fs.into_iter().find_map(|(g, v)| match v {
-                Pb::Bytes(x) if g == f => Some(x.to_vec()),
-                _ => None,
-            })?;
-            cur = v;
-        }
-        Some(cur)
-    };
-    let mut io = None;
-    let mut design = None;
-    for (tag, data) in records.iter().skip(1) {
-        if *tag == 0x3a && io.is_none() {
-            if let Some(t) = field(data, &[1, 20]) {
-                if t.len() == 64 && t.iter().all(u8::is_ascii_hexdigit) {
-                    let s = std::str::from_utf8(&t)?;
-                    let mut h = [0u8; 32];
-                    for i in 0..32 {
-                        h[i] = u8::from_str_radix(&s[2 * i..2 * i + 2], 16)?;
-                    }
-                    io = Some(h);
-                }
-            }
-        }
-        if *tag == 0x36 {
-            if let Some(d) = field(data, &[2, 10]) {
-                design = d.try_into().ok();
-            }
-        }
+/// How the image boots, from OPTIONS 1.9 (README, "HPS-first").
+pub enum Boot {
+    /// No HPS: the SDM configures IO and CORE at power-on.
+    FpgaOnly,
+    /// `HPS_INITIALIZATION "HPS FIRST"`: phase 1 (HPS I/O, HPS EMIF, SPL)
+    /// is loaded on its own, and this is phase 2, the `core.rbf` the HPS
+    /// hands to the SDM. Its IO section leaves out the HPS EMIF's IO96 bank
+    /// (io96_1) and names phase 1 by its HPS IO hash.
+    HpsFirst { hps_io_hash: [u8; 32] },
+}
+
+/// What the section headers take from the .sof's OPTIONS record (the
+/// 0x3a record after the image, behind its u32 index; README (g2)).
+pub struct Design {
+    /// "IO hash", hex text in field 1.20 (both sections).
+    pub io_hash: [u8; 32],
+    /// "Design hash", raw in record 0x36 field 2.10 (CORE).
+    pub design_hash: [u8; 32],
+    /// Field 1.2, header +0x9C: 100 MHz without an HPS, 125 MHz with the
+    /// GHRD's (both builds of designs/hpsf). What it clocks is [unk].
+    pub hdr_clk_hz: u32,
+    pub boot: Boot,
+}
+
+fn hex32(t: &[u8]) -> Result<[u8; 32]> {
+    ensure!(t.len() == 64 && t.iter().all(u8::is_ascii_hexdigit), "not 64 hex digits");
+    let s = std::str::from_utf8(t)?;
+    let mut h = [0u8; 32];
+    for (i, b) in h.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&s[2 * i..2 * i + 2], 16)?;
     }
-    Ok((io.context("no IO hash (record 0x3a field 1.20)")?, design.context("no design hash (record 0x36 field 2.10)")?))
+    Ok(h)
+}
+
+pub fn sof_design(records: &[(u16, &[u8])]) -> Result<Design> {
+    fn msg(b: &[u8], f: u64) -> Option<Vec<(u64, Pb<'_>)>> {
+        let fs = pb_parse(b).or_else(|| pb_parse(b.get(4..)?))?;
+        fs.into_iter().find_map(|(g, v)| match v {
+            Pb::Bytes(x) if g == f => pb_parse(x),
+            _ => None,
+        })
+    }
+    let bytes = |m: &[(u64, Pb<'_>)], f: u64| -> Option<Vec<u8>> {
+        m.iter().find_map(|(g, v)| match v {
+            Pb::Bytes(x) if *g == f => Some(x.to_vec()),
+            _ => None,
+        })
+    };
+    let int = |m: &[(u64, Pb<'_>)], f: u64| -> Option<u64> {
+        m.iter().find_map(|(g, v)| match v {
+            Pb::Int(x) if *g == f => Some(*x),
+            _ => None,
+        })
+    };
+    let opts = records
+        .iter()
+        .skip(1)
+        .filter(|(t, _)| *t == 0x3a)
+        .find_map(|(_, d)| msg(d, 1).filter(|m| bytes(m, 20).is_some_and(|t| t.len() == 64)))
+        .context("no OPTIONS record (0x3a with field 1.20)")?;
+    let design = records
+        .iter()
+        .filter(|(t, _)| *t == 0x36)
+        .find_map(|(_, d)| msg(d, 2).and_then(|m| bytes(&m, 10)))
+        .context("no design hash (record 0x36 field 2.10)")?;
+    let boot_opts = bytes(&opts, 9).and_then(|b| pb_parse(&b).map(|m| (int(&m, 1), int(&m, 3)))).context("no OPTIONS 1.9")?;
+    // 1.9.1: the design has an HPS; 1.9.3: the SDM configures the fabric
+    // before the HPS (1 in FPGA-only designs too).
+    let boot = match boot_opts {
+        (Some(0) | None, _) => Boot::FpgaOnly,
+        (Some(_), Some(0) | None) => Boot::HpsFirst { hps_io_hash: hex32(&bytes(&opts, 21).context("HPS-first, but no HPS IO hash (OPTIONS 1.21)")?)? },
+        (Some(_), Some(_)) => anyhow::bail!("FPGA-first with an HPS: a5db does not write the HPS section"),
+    };
+    Ok(Design {
+        io_hash: hex32(&bytes(&opts, 20).unwrap())?,
+        design_hash: design.try_into().ok().context("design hash is not 32 bytes")?,
+        hdr_clk_hz: int(&opts, 2).context("no OPTIONS 1.2")? as u32,
+        boot,
+    })
 }
 
 /// The CMF section: main.cmf with +0x1F00 = number of sections after it and
@@ -79,11 +116,14 @@ fn hashed(pages: Vec<Vec<u8>>, flag: u32) -> impl Iterator<Item = Page> {
 
 fn io_section(db: &mut Db, inst: &Install, img: &[u8], f: &Fields, key: &[u8]) -> Result<Vec<u8>> {
     let ranges = io::pd_ranges(db)?;
-    let streams = io::streams(img, &ranges);
+    let hps_first = matches!(f.design.boot, Boot::HpsFirst { .. });
+    // HPS-first leaves the HPS EMIF's bank (io96_1) and io_config.fw to phase 1.
+    let banks = if hps_first { 1 } else { 2 };
+    let streams = io::streams(img, &ranges, banks);
     let pages: Vec<Vec<Vec<u8>>> = streams.iter().map(|s| Ok(section::stream_pages(&deflate::deflate(s)?))).collect::<Result<_>>()?;
     let count = |i: usize| (pages[i].len() as u32, vec![false; pages[i].len()]);
     let act1 = section::action_page(tables::IO_ACT1, &[count(0), count(1), count(2)])?;
-    let act2 = section::action_page(tables::IO_ACT2, &[count(3), count(4), count(5)])?;
+    let act2 = section::action_page(if hps_first { tables::IO_ACT2_HPS_FIRST } else { tables::IO_ACT2 }, &[count(3), count(4), count(5)])?;
     let mut out: Vec<Page> = Vec::new();
     out.extend(section::module(inst.fw("enable_pm.fw")?)?);
     out.extend(section::module(inst.fw("cssm.fw")?)?);
@@ -94,7 +134,9 @@ fn io_section(db: &mut Db, inst: &Install, img: &[u8], f: &Fields, key: &[u8]) -
     }
     out.extend(section::module(inst.fw("cssm_reset_release.fw")?)?);
     out.extend(section::module(inst.fw("cssm_ux_phy.fw")?)?);
-    out.extend(section::module(inst.fw("io_config.fw")?)?);
+    if !hps_first {
+        out.extend(section::module(inst.fw("io_config.fw")?)?);
+    }
     out.push(Page::Hashed(act2, FLAG_ACTION));
     for p in pages {
         out.extend(hashed(p, 0));
@@ -240,10 +282,10 @@ fn header_sum(img: &[u8]) -> u32 {
 
 pub fn write(db: &mut Db, inst: &Install, sof: &crate::sof::Sof, key: &[u8]) -> Result<Vec<u8>> {
     let img = sof.image();
-    let (io_hash, design_hash) = sof_hashes(&sof.records())?;
+    let design = sof_design(&sof.records())?;
     let sum = header_sum(img);
-    let io_f = Fields { kind: Kind::Io, io_hash, design_hash, sum, following: 1 };
-    let core_f = Fields { kind: Kind::Core, io_hash, design_hash, sum, following: 0 };
+    let io_f = Fields { kind: Kind::Io, design: &design, sum, following: 1 };
+    let core_f = Fields { kind: Kind::Core, design: &design, sum, following: 0 };
     let mut out = cmf(inst, 2)?;
     ensure!(u32::from_le_bytes(out[0..4].try_into().unwrap()) == RBF_MAGIC, "main.cmf does not start with the .rbf magic");
     out.extend(io_section(db, inst, img, &io_f, key)?);

@@ -163,7 +163,7 @@ fn io_field_payload(hdr: &[u8], field: Option<(usize, usize)>, rlen: usize) -> V
     pl
 }
 
-fn io_hdr_stream(hdrs: [&[u8]; 2]) -> Vec<u8> {
+fn io_hdr_stream(hdrs: &[&[u8]]) -> Vec<u8> {
     let f = io_fields();
     let mut out = Vec::new();
     for (kind, rlen) in [(3, 200), (2, 200), (1, 200), (0, 116)] {
@@ -196,7 +196,7 @@ fn t40_blocks() -> Vec<(usize, usize, usize)> {
     (0..part("io96_0", "t40").1).step_by(0x800).map(|o| (T40_ADDR + o, o, 0x800)).collect()
 }
 
-fn mem_stream(blocks: &[(usize, usize, usize)], datas: [&[u8]; 2]) -> Vec<u8> {
+fn mem_stream(blocks: &[(usize, usize, usize)], datas: &[&[u8]]) -> Vec<u8> {
     let mut out = Vec::new();
     for (i, &(a, o, l)) in blocks.iter().enumerate() {
         for (t, d) in datas.iter().enumerate() {
@@ -208,8 +208,9 @@ fn mem_stream(blocks: &[(usize, usize, usize)], datas: [&[u8]; 2]) -> Vec<u8> {
     out
 }
 
-/// The six inflated design streams, in chain order.
-pub fn streams(img: &[u8], ranges: &[(usize, usize)]) -> [Vec<u8>; 6] {
+/// The six inflated design streams, in chain order. The IO96 streams cover
+/// the first `banks` banks (2, or 1 when io96_1 is the HPS EMIF's).
+pub fn streams(img: &[u8], ranges: &[(usize, usize)], banks: usize) -> [Vec<u8>; 6] {
     let p = |o: &str, q: &str| img_part(img, o, q);
     let mut pc21 = Vec::new();
     pc_hdr_sends(&mut pc21, 0, p("perictrl2", "hdr"));
@@ -220,9 +221,9 @@ pub fn streams(img: &[u8], ranges: &[(usize, usize)]) -> [Vec<u8>; 6] {
         pd_stream(p("perictrl0", "data"), ranges),
         pc21,
         pc0,
-        io_hdr_stream([p("io96_0", "hdr"), p("io96_1", "hdr")]),
-        mem_stream(&t41_blocks(), [p("io96_0", "t41"), p("io96_1", "t41")]),
-        mem_stream(&t40_blocks(), [p("io96_0", "t40"), p("io96_1", "t40")]),
+        io_hdr_stream(&[p("io96_0", "hdr"), p("io96_1", "hdr")][..banks]),
+        mem_stream(&t41_blocks(), &[p("io96_0", "t41"), p("io96_1", "t41")][..banks]),
+        mem_stream(&t40_blocks(), &[p("io96_0", "t40"), p("io96_1", "t40")][..banks]),
     ]
 }
 

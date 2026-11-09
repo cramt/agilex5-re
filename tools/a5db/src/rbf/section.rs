@@ -107,11 +107,9 @@ pub enum Kind {
     Core,
 }
 
-pub struct Fields {
+pub struct Fields<'a> {
     pub kind: Kind,
-    /// "IO hash" from the .sof (both sections) and "Design hash" (CORE).
-    pub io_hash: [u8; 32],
-    pub design_hash: [u8; 32],
+    pub design: &'a super::Design,
     /// Byte sum of the image's object headers and both sectors' CRAM.
     pub sum: u32,
     /// Sections after this one (+0x1F00).
@@ -165,11 +163,32 @@ pub fn assemble(pages: Vec<Page>, f: &Fields, keyed_hash_key: &[u8]) -> Result<V
     put(&mut h, 0x3c, &Sha256::digest(&body)[..4]);
     put(&mut h, 0x78, &f.sum.to_le_bytes());
     put(&mut h, 0xc0, &sha384(&body[..PAGE]));
+    let d = f.design;
     match f.kind {
-        Kind::Io => put(&mut h, 0x348, &f.io_hash),
+        Kind::Io => {
+            put(&mut h, 0x9c, &d.hdr_clk_hz.to_le_bytes());
+            put(&mut h, 0x348, &d.io_hash);
+        }
         Kind::Core => {
-            put(&mut h, 0x1e0, &f.design_hash);
-            put(&mut h, 0x234, &f.io_hash);
+            put(&mut h, 0x1e0, &d.design_hash);
+            put(&mut h, 0x234, &d.io_hash);
+        }
+    }
+    if let super::Boot::HpsFirst { hps_io_hash } = &d.boot {
+        // pfg's HPS-first core.rbf (designs/hpsf; README, "HPS-first").
+        // +0xB8, +0x184, IO +0x20B/+0x210 are the same in the FPGA-first
+        // build of that design, +0x190 is 3 there: they mark an HPS, +0x190
+        // bit 3 HPS-first. IO +0xB4 points at the record at +0x36C, which
+        // holds phase 1's HPS IO hash. Their meaning is [inf].
+        put(&mut h, 0xb8, &0x002f_0000u32.to_le_bytes());
+        put(&mut h, 0x184, &0x0000_0400u32.to_le_bytes());
+        put(&mut h, 0x190, &0x0bu32.to_le_bytes());
+        if let Kind::Io = f.kind {
+            put(&mut h, 0xb4, &0x0001_036cu32.to_le_bytes());
+            put(&mut h, 0x20b, &[0xc1]);
+            put(&mut h, 0x210, &[0x80]);
+            put(&mut h, 0x36c, &hex("2c2c0003"));
+            put(&mut h, 0x374, hps_io_hash);
         }
     }
     let mut mac = Hmac::<Sha256>::new_from_slice(keyed_hash_key)?;

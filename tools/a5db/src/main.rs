@@ -7,6 +7,7 @@
 //!   a5db rbf   <db> <in.sof> <out.rbf> <quartus root> <keyed-hash.key>
 //!       the .rbf quartus_pfg would make, byte for byte; the root is the
 //!       install's version directory, the key `tools/bitstream.py key`'s
+//!       (an HPS-first .sof gives its phase-2 core.rbf, README "HPS-first")
 //!   a5db join  <db> <graph>                       how many graph edges resolve to bits
 //!   a5db route <db> <graph> <in.sof> <out.sof> <hmac.key> <routes>
 //!                                                  write the routes' mux bits
