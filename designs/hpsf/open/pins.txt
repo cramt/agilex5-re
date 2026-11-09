@@ -1,0 +1,4 @@
+CLOCK1_50 V16 3.3
+# f2h_irq0[k] enters the HPS at SOC_HPS_WRAPPER_RE X0Y52 I(5401 + k) through these RPIIs (Quartus' route dump)
+irq0 node RPII:X52Y51Z0I44
+irq3 node RPII:X52Y51Z0I24

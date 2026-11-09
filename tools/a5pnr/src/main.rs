@@ -14,7 +14,8 @@
 //! them by simulated annealing, routes every net with PathFinder over the
 //! routing graph (`<graph>`: tools/rgdump output plus `a5db usable`'s
 //! usable.bin) and writes an a5db design file; `a5db build` and `a5db rbf`
-//! turn that into a bitstream. pins.txt: `<port> <ball> <3.3|1.8|1.1>` lines.
+//! turn that into a bitstream. pins.txt: `<port> <ball> <3.3|1.8|1.1>` lines,
+//! or `<port> node <graph node>` for an output that ends inside the fabric.
 //! delays.tsv: tools/timing/fit.py's model (node costs, timing).
 
 mod det;
@@ -188,9 +189,14 @@ fn main() -> Result<()> {
     // I/O cell (a fourth column `reg`, README (z10)).
     let mut pin_of: HashMap<String, (String, String)> = HashMap::default();
     let mut reg_ports: Vec<String> = Vec::new();
+    // `<port> node <graph node>`: an output that ends on a fabric node instead
+    // of a pin, e.g. an HPS input's RPII (README, "HPS-first").
+    let mut sink_of: HashMap<String, String> = HashMap::default();
     for l in std::fs::read_to_string(pins).context("reading pins")?.lines() {
         let f: Vec<&str> = l.split_whitespace().collect();
-        if f.len() >= 3 && !f[0].starts_with('#') {
+        if f.len() == 3 && f[1] == "node" && !f[0].starts_with('#') {
+            sink_of.insert(f[0].to_owned(), f[2].to_owned());
+        } else if f.len() >= 3 && !f[0].starts_with('#') {
             pin_of.insert(f[0].to_owned(), (f[1].to_owned(), f[2].to_owned()));
             if f.get(3) == Some(&"reg") {
                 reg_ports.push(f[0].to_owned());
@@ -234,6 +240,11 @@ fn main() -> Result<()> {
     let mut pin_lines = Vec::new();
     let mut pll_ball: HashMap<usize, String> = HashMap::default();
     for (pi, p) in nl.ports.iter().enumerate() {
+        if let Some(node) = sink_of.get(&p.name) {
+            anyhow::ensure!(!p.input, "port {}: only outputs can end on a node", p.name);
+            port_node.insert(pi, g.node(node).with_context(|| format!("no node {node}"))?);
+            continue;
+        }
         let Some((ball, std)) = pin_of.get(&p.name) else {
             if matches!(p.net, Sig::Net(n) if packed.nets.contains_key(&n)) {
                 bail!("port {} has no pin in {pins}", p.name);
