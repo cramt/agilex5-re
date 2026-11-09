@@ -8,6 +8,9 @@
 //!       the .rbf quartus_pfg would make, byte for byte; the root is the
 //!       install's version directory, the key `tools/bitstream.py key`'s
 //!       (an HPS-first .sof gives its phase-2 core.rbf, README "HPS-first")
+//!   a5db rbf   <db> <in.sof> <out.rbf> <quartus root> <keyed-hash.key> hps-first=<phase-1 .sof | HPS IO hash>
+//!       the phase-2 core.rbf of an a5db-built image, for a board whose
+//!       phase 1 came from that HPS-first build (64 hex digits: the hash)
 //!   a5db join  <db> <graph>                       how many graph edges resolve to bits
 //!   a5db route <db> <graph> <in.sof> <out.sof> <hmac.key> <routes>
 //!                                                  write the routes' mux bits
@@ -657,12 +660,16 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        ["rbf", dbdir, inp, out, root, key] => {
+        ["rbf", dbdir, inp, out, root, key, rest @ ..] if rest.len() <= 1 => {
             let mut db = Db::open(dbdir)?;
             let inst = rbf::install::Install::open(std::path::Path::new(root))?;
             let sof = sof::Sof::read(inp)?;
             let key = std::fs::read(key).with_context(|| format!("reading {key}"))?;
-            std::fs::write(out, rbf::write(&mut db, &inst, &sof, &key)?).with_context(|| format!("writing {out}"))
+            let phase1 = match rest {
+                [r] => Some(rbf::Phase1::parse(r.strip_prefix("hps-first=").context("expected hps-first=<phase-1 .sof or HPS IO hash>")?)?),
+                _ => None,
+            };
+            std::fs::write(out, rbf::write(&mut db, &inst, &sof, &key, phase1.as_ref())?).with_context(|| format!("writing {out}"))
         }
         ["route", dbdir, g, inp, out, key, routes] => route_cmd(dbdir, g, inp, routes, Some((out, key)), false),
         ["routecheck", dbdir, g, inp, routes] => route_cmd(dbdir, g, inp, routes, None, true),

@@ -280,9 +280,58 @@ fn header_sum(img: &[u8]) -> u32 {
     s
 }
 
-pub fn write(db: &mut Db, inst: &Install, sof: &crate::sof::Sof, key: &[u8]) -> Result<Vec<u8>> {
+/// SHA-256 over IO96 objects (README (n)): the IO hash covers both banks
+/// without an HPS; with one, io96_1 is the HPS EMIF's, and the IO hash
+/// covers io96_0 while the HPS IO hash is io96_1's [obs, designs/hpsf in
+/// both boot orders].
+pub fn io96_hash(img: &[u8], objs: &[&str]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    for obj in objs {
+        for (o, _, start, n) in crate::db::PARTS {
+            if o == obj {
+                h.update(&img[*start..start + n]);
+            }
+        }
+    }
+    h.finalize().into()
+}
+
+/// The GHRD HPS's OPTIONS 1.2 (header +0x9C) [obs, designs/hpsf].
+const HPS_HDR_CLK_HZ: u32 = 125_000_000;
+
+/// The board's phase 1, for an image a5db built (its own .sof container
+/// says FPGA-only): the HPS-first .sof it was made from, or its HPS IO hash
+/// as 64 hex digits (`quartus_pfg -i`'s "HPS IO hash").
+pub enum Phase1 {
+    Sof(crate::sof::Sof),
+    HpsIoHash([u8; 32]),
+}
+
+impl Phase1 {
+    pub fn parse(arg: &str) -> Result<Phase1> {
+        if arg.len() == 64 && arg.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Ok(Phase1::HpsIoHash(hex32(arg.as_bytes())?));
+        }
+        Ok(Phase1::Sof(crate::sof::Sof::read(arg)?))
+    }
+}
+
+pub fn write(db: &mut Db, inst: &Install, sof: &crate::sof::Sof, key: &[u8], phase1: Option<&Phase1>) -> Result<Vec<u8>> {
     let img = sof.image();
-    let design = sof_design(&sof.records())?;
+    let mut design = sof_design(&sof.records())?;
+    if let Some(p) = phase1 {
+        let (hps_io_hash, clk) = match p {
+            Phase1::HpsIoHash(h) => (*h, HPS_HDR_CLK_HZ),
+            Phase1::Sof(r) => match sof_design(&r.records())? {
+                Design { boot: Boot::HpsFirst { hps_io_hash }, hdr_clk_hz, .. } => (hps_io_hash, hdr_clk_hz),
+                _ => anyhow::bail!("the phase-1 .sof is not an HPS-first build"),
+            },
+        };
+        design.boot = Boot::HpsFirst { hps_io_hash };
+        design.hdr_clk_hz = clk;
+        design.io_hash = io96_hash(img, &["io96_0"]);
+    }
     let sum = header_sum(img);
     let io_f = Fields { kind: Kind::Io, design: &design, sum, following: 1 };
     let core_f = Fields { kind: Kind::Core, design: &design, sum, following: 0 };
