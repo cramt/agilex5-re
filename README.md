@@ -3766,11 +3766,28 @@ svc layer buffers". The HPS's SDM mailbox stops answering: hwmon logs
 "timeout occurred, waiting for async message" every 60 s. The old fabric
 is gone (GIC 0xFFFE0000). `systemctl reboot` then hangs in shutdown on the
 D-state `dd`, as the HPS console shows ("shutdown[1]: Waiting for process:
-3563 (dd)"). Only a power cycle recovers the board. So a loader must check
+3563 (dd)"). A power cycle recovers the board, and so does reloading
+phase 1 over JTAG (`tools/board/recover.sh`, 2026-11-12: the SDM takes the
+JTAG image, the SPL cold-boots and mercury is back in about 70 s; a forced
+sysrq reboot of the HPS alone doesn't). So a loader must check
 the hash itself before it writes: compare the file's IO +0x374 with phase
 1's HPS IO hash (`quartus_pfg -i`, or SHA-256 of phase 1's `io96_1`). An
 FPGA-first full image is presumably the same case: its IO section has no
 HPS IO hash at all [inf].
+
+**The SDM checks the keyed hash** [obs, 2026-11-12]. `tools/keyed_hash.py`
+zeroes a section's keyed hash (+0xBB0) and recomputes everything in the
+section derived from the header page: its CRC at +0xFFC, block 1's SHA-384
+of it and block 1's CRC (with nothing zeroed it reproduces pfg's file byte
+for byte). On `spl11/hpsf.core.rbf` through `/dev/fpga-load`, after phase 1
+over JTAG: the unmodified file loads (`operating`, GIC 0x00040000 /
+0x00060000); zeroing IO's, CORE's, or both wedges the SDM exactly as a
+wrong HPS IO hash does. No other SHA-384 or SHA-256 of those header pages
+appears anywhere in the file, so nothing else covers the bytes changed. So
+an open writer needs the 32-byte key from `libpgm_bitasm.so`
+(`BITASM_COMMON::calculate_keyed_hash`), unlike the IO and design hashes
+(Board test). Not separated: whether it is the HMAC itself or only "not
+zero" that the SDM tests; a single flipped bit would tell.
 
 **What chipsmith needs to flash the DE25-Nano through mercury** [inf, from
 the above]:
@@ -3800,7 +3817,7 @@ the above]:
 `bridge enable` runs before the fabric exists, and this kernel has no
 Agilex bridge driver; the ATF SMC `HPS_SET_BRIDGES` is the way in. Also open:
 whether an `io96_0` that differs from phase 1's build loads, and whether the
-kernel can recover from the wedge without a power cycle. An HPS-first
+kernel can recover from the wedge on its own (JTAG can, above). An HPS-first
 `.jic` in QSPI would make this the board's power-on state. It is not
 written: that needs the QSPI, which boots the HPS, and has to be reported first.
 
