@@ -17,6 +17,7 @@
         packages = {
           db = pkgs.callPackage ./nix/db.nix { };
           graph = pkgs.callPackage ./nix/graph.nix { };
+          quartus = pkgs.callPackage ./nix/quartus.nix { };
         };
       }
     );
