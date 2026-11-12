@@ -36,7 +36,7 @@ IMAGE_TAG = 0x3a
 CRC_TAG = 0x08
 HMAC_TAG = 0x41
 POF_LIB = '/pool/dev/altera_pro/quartus-pro/26.1.1/qcore/linux64/libpgm_pof.so'
-KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'specimens', 'sof_hmac.key')
+KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'keys', 'sof_hmac.key')
 
 
 def derive_key(lib=POF_LIB):

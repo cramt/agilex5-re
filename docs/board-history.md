@@ -28,7 +28,7 @@ cp <blinky run>/output_files/blinky.sof $B/blinky.sof
 tools/quartus.sh quartus_pfg -c $B/blinky.sof $B/blinky_pfg.rbf          # control, pfg's own
 tools/cap.sh 12G python3 -I designs/blinky_a5db/build.py specimens/b5/r5  # 10 min
 cp specimens/b5/r5/blinky_a5db.sof $B/scratch.sof
-$A rbf db/sm4revb $B/scratch.sof $B/scratch_a5db.rbf $Q specimens/rbf_keyed_hash.key
+$A rbf db/sm4revb $B/scratch.sof $B/scratch_a5db.rbf $Q keys/rbf_keyed_hash.key
 tools/quartus.sh quartus_pfg -c $B/scratch.sof $B/scratch_pfg.rbf        # equals scratch_a5db.rbf
 for v in zero-io-hash zero-design-hash corrupt-core; do
     python3 -I tools/rbf_patch.py $v $B/scratch_a5db.rbf $B/scratch_a5db_$v.rbf; done

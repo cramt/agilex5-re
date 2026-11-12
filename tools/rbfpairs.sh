@@ -11,7 +11,7 @@ out=$(mktemp -d); trap 'rm -rf "$out"' EXIT
 same=0; differ=0
 while read -r s; do
     o=$out/x.rbf
-    "$here/cap.sh" 4G "$repo/tools/a5db/target/release/a5db" rbf "$repo/db/sm4revb" "$base/$s" "$o" "$Q" "$repo/specimens/rbf_keyed_hash.key"
+    "$here/cap.sh" 4G "$repo/tools/a5db/target/release/a5db" rbf "$repo/db/sm4revb" "$base/$s" "$o" "$Q" "$repo/keys/rbf_keyed_hash.key"
     if cmp -s "$o" "$base/${s%.sof}.rbf"; then same=$((same + 1)); else differ=$((differ + 1)); echo "DIFF $s"; fi
 done < "$list"
 echo "identical $same, differ $differ"

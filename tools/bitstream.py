@@ -22,7 +22,7 @@ import zlib
 SECTION_MAGIC = 0x97566593
 RBF_MAGIC = 0x62294895
 BITASM_LIB = '/pool/dev/altera_pro/quartus-pro/26.1.1/quartus/linux64/libpgm_bitasm.so'
-KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'specimens', 'rbf_keyed_hash.key')
+KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'keys', 'rbf_keyed_hash.key')
 # The keyed hash of a design section: HMAC-SHA256 over [section, +0xBB0),
 # stored at +0xBB0 (BITASM_COMMON::calculate_keyed_hash / verify_keyed_hash).
 KEYED_HASH_AT = 0xBB0

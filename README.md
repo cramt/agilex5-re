@@ -330,9 +330,10 @@ any protobuf (`sof_meta.pb`, the `.sof` 0x36 record) without a schema.
   - Record 0x41 is 8 zero bytes and an **HMAC-SHA256** over every byte
     before the HMAC itself (`OSTREAM_HMAC_CRC_TRANSPORT` in
     `qcore/linux64/libpgm_pof.so`). The key is `HMAC_KEY_1` XOR a 32-byte
-    mask that `HMAC_TRANSPORT`'s constructor stores. It is Altera's, so it
-    isn't committed: `sof.py key` derives it from the local install into
-    `specimens/`.
+    mask that `HMAC_TRANSPORT`'s constructor stores. It is committed as
+    `keys/sof_hmac.key` (interoperability: an open flow can't write a
+    `.sof` Quartus accepts without it); `sof.py key` re-derives it from a
+    local install over that file.
   - With both recomputed, `quartus_pfg` turns a hand-edited `.sof` into an
     `.rbf` in about 20 s. A flipped image bit becomes a changed `.rbf`
     with no fitter run, so the `.sof` → `.rbf` mapping (Plan step 2) can
@@ -554,7 +555,7 @@ section (`IO`, `CORE`), in 4 KiB blocks:
 | where | what |
 |---|---|
 | block 0 (+0x000) | section header (TRM table 35); at +0xC0 the SHA-384 of the descriptor block |
-| block 0 +0xBB0 | **keyed hash**: HMAC-SHA256 over `[section, +0xBB0)`. The key is a 32-byte constant in `libpgm_bitasm.so` (`BITASM_COMMON::calculate_keyed_hash`); `bitstream.py key` derives it from the install into `specimens/`, and it isn't committed |
+| block 0 +0xBB0 | **keyed hash**: HMAC-SHA256 over `[section, +0xBB0)`. The key is a 32-byte constant in `libpgm_bitasm.so` (`BITASM_COMMON::calculate_keyed_hash`); committed as `keys/rbf_keyed_hash.key` (the SDM rejects a section without it); `bitstream.py key` re-derives it from a local install over that file |
 | block 1 (+0x1000) | SHA-384 of block 0 at +0; the place a signature goes [inf] |
 | block 2 (+0x2000) | descriptor: `u32 1, u32 0x488, u32 count (22 in CORE)`, then per data block `u32 flags/route` + SHA-384 of the 4 KiB block |
 | end of blocks 0 and 1 | CRC-32/BZIP2, see (f) |
@@ -1107,13 +1108,13 @@ chip) → a flip-flop clocked from fz's clock network.
 
 ```
 L=cw_la_lab_r20_c40; P=xtophalf/xale0
-a5db set db/sm4revb fz0.sof t0.sof specimens/sof_hmac.key $L \
+a5db set db/sm4revb fz0.sof t0.sof keys/sof_hmac.key $L \
     $P/xcw_la_le_lut/lut_mask=0101…01 $P/xcw_la_le_reg0/xlabclk_mux/regclk=DFF_LABCLK0 \
     $P/xcw_la_le_reg0/xreg0/reg_input=LUTOUT_6LUT $P/xcw_la_le_reg0/xreg0/register_comb=DFF_LATCH \
     $P/xcw_la_le_reg0/xreg0/leout=LEOUT $P/xcw_la_le_reg0/xreg_aclr/regclr=CLR2 \
     $P/xcw_la_le_regctrl/xcw_la_le_regctrl_reg/ce_sel=CE $P/xcw_la_le_regctrl/xcw_la_le_regctrl_reg/clr_sel=CLR \
     xsecmux/xcw_la_lcb_clkgen/xlabclk0/smxclk_tie_off=DISABLE_TIEOFF
-a5db net db/sm4revb specimens/rg/full t0.sof t1.sof specimens/sof_hmac.key \
+a5db net db/sm4revb specimens/rg/full t0.sof t1.sof keys/sof_hmac.key \
     'LAB_RE:X120Y48Z0I107>LAB_RE:X40Y20Z0I3' 'clock:<fz0 clock-route nodes>>LAB_RE:X40Y20Z0I83'
 quartus_asm -t tools/rgdump/getattrs.tcl t1.sof <uid attribute list>
 ```
@@ -3786,7 +3787,7 @@ wrong HPS IO hash does. No other SHA-384 or SHA-256 of those header pages
 appears anywhere in the file, so nothing else covers the bytes changed. So
 an open writer needs the 32-byte key from `libpgm_bitasm.so`
 (`BITASM_COMMON::calculate_keyed_hash`), unlike the IO and design hashes
-(Board test). Not separated: whether it is the HMAC itself or only "not
+(Board test); it is committed as `keys/rbf_keyed_hash.key`. Not separated: whether it is the HMAC itself or only "not
 zero" that the SDM tests; a single flipped bit would tell.
 
 **What chipsmith needs to flash the DE25-Nano through mercury** [inf, from

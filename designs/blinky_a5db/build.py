@@ -28,8 +28,8 @@ A5DB = os.path.join(REPO, 'tools/a5db/target/release/a5db')
 DB = os.path.join(REPO, 'db/sm4revb')
 GRAPH = os.path.join(REPO, 'specimens/rg/full')
 QUARTUS = '/pool/dev/altera_pro/quartus-pro/26.1.1'
-SOF_KEY = os.path.join(REPO, 'specimens/sof_hmac.key')
-RBF_KEY = os.path.join(REPO, 'specimens/rbf_keyed_hash.key')
+SOF_KEY = os.path.join(REPO, 'keys/sof_hmac.key')
+RBF_KEY = os.path.join(REPO, 'keys/rbf_keyed_hash.key')
 
 X, ROWS = 107, (6, 7, 8)
 # LAB_RE pins of ALM k (README (n)): LUT inputs A..F, reg0/xreg0 and

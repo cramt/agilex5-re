@@ -16,7 +16,7 @@ for s in "$@"; do
     python3 -I "$here/iopll.py" "$ball" "$ref" "$outs" >> "$out/design.txt"
     uids+=("$(awk -F'\t' -v b="$ball" '$1 == b {print $2}' "$db/io/pins.tsv")")
 done
-"$repo/tools/cap.sh" 12G "$A" build "$db" "$repo/specimens/rg/full" "$Q" "$repo/specimens/sof_hmac.key" "$out/design.txt" "$out/pred.sof" 2> "$out/build.log"
+"$repo/tools/cap.sh" 12G "$A" build "$db" "$repo/specimens/rg/full" "$Q" "$repo/keys/sof_hmac.key" "$out/design.txt" "$out/pred.sof" 2> "$out/build.log"
 total=0; bad=0
 for u in "${uids[@]}"; do
     "$repo/tools/cap.sh" 6G "$A" bits "$db" "$out/pred.sof" "$u" | grep '^xpllwrap_top' > "$out/$u.pred"

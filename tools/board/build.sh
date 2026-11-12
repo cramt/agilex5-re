@@ -26,7 +26,7 @@ done
 log "control: blinky_pfg.rbf"
 cp specimens/board/blinky.sof "$W/blinky.sof"
 tools/cap.sh 20G tools/quartus.sh quartus_pfg -c "$W/blinky.sof" "$W/blinky_pfg.rbf" > "$W/blinky_pfg.log" 2>&1
-tools/cap.sh 12G $A rbf db/sm4revb "$W/blinky.sof" "$W/blinky_a5db.rbf" $Q specimens/rbf_keyed_hash.key > /dev/null
+tools/cap.sh 12G $A rbf db/sm4revb "$W/blinky.sof" "$W/blinky_a5db.rbf" $Q keys/rbf_keyed_hash.key > /dev/null
 cmp -s "$W/blinky_pfg.rbf" "$W/blinky_a5db.rbf" && log "control: a5db's .rbf equals pfg's" || log "control: a5db's .rbf DIFFERS from pfg's"
 
 # The hand-placed counter from the database alone (designs/blinky_a5db),
