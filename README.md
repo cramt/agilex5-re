@@ -3796,8 +3796,10 @@ the above]:
 - *Once per board setup, from Quartus*: an HPS-first build of the HPS
   shell (`designs/hpsf`: the GHRD's HPS and EMIF, the LED/clock pins). Keep its
   `hps.rbf` (phase 1, with the Arm GNU 11.2 SPL) and its `.sof`. Phase 1
-  goes into QSPI as a `.jic` (not done yet), or over JTAG after every power
-  cycle. From the `.sof` keep `a5db extract` → `tools/hps_shell.sh` (the
+  goes into QSPI as a `.jic` (done 2026-11-12: the board boots it at
+  power-up), or over JTAG after every power cycle. The DE25-Nano's is
+  committed as `phase1/de25-nano` (flake package `phase1`), with its shell
+  lines and HPS IO hash. From the `.sof` keep `a5db extract` → `tools/hps_shell.sh` (the
   shell lines) and the HPS IO hash (OPTIONS 1.21).
 - *Per design, no Quartus*: synthesis and a5pnr with `pins.txt` (balls,
   plus `node` sinks for the HPS inputs it drives). Concatenate the shell
@@ -3818,9 +3820,23 @@ the above]:
 `bridge enable` runs before the fabric exists, and this kernel has no
 Agilex bridge driver; the ATF SMC `HPS_SET_BRIDGES` is the way in. Also open:
 whether an `io96_0` that differs from phase 1's build loads, and whether the
-kernel can recover from the wedge on its own (JTAG can, above). An HPS-first
-`.jic` in QSPI would make this the board's power-on state. It is not
-written: that needs the QSPI, which boots the HPS, and has to be reported first.
+kernel can recover from the wedge on its own (JTAG can, above). Since 2026-11-12 the
+QSPI holds the HPS-first `.jic` of `phase1/de25-nano` (factory image read
+back first), so this is the board's power-on state.
+
+**Phase 1 and the QSPI image** [obs, 2026-11-12]. The HPS section of a
+`.hps.rbf` is a module page (`Sign-26.1.1sm-7`, record type 0x15), an action
+page, one raw-deflate stream (zlib 9, window −13, `Z_FIXED`, as the IO
+section) and a second module page (type 0x16). The stream inflates to the SPL
+zero-padded to 16 bytes, then 0x660 bytes of HPS handoff data (`BOOT`, `PMUX`,
+…). The action page's record 0x2B is [stream pages, 0, 2, 0, 0, padded SPL
+bytes, 0x7F000, 0x660]. Two builds that differ only in the SPL differ only
+there and in the hashes, so chipsmith rebuilds the section around any SPL and
+reproduces either build from the other. The `.jic` (MT25QU128) carries the
+CMF section at 0, 0x80000, 0x100000 and 0x180000 and the rest of the file
+from 0x200000, 0xFF elsewhere, in record 0x1C with each byte bit-reversed.
+Records 0x01–0x1B, 0x1E and 0x1A are constant, and record 0x08 is a
+CRC-16/X-25 over the file up to and including its own tag and length.
 
 ## Oracle
 

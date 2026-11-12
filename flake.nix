@@ -18,6 +18,7 @@
           db = pkgs.callPackage ./nix/db.nix { };
           graph = pkgs.callPackage ./nix/graph.nix { };
           quartus = pkgs.callPackage ./nix/quartus.nix { };
+          phase1 = pkgs.callPackage ./nix/phase1.nix { };
         };
       }
     );
