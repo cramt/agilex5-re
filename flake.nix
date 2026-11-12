@@ -14,7 +14,10 @@
         pkgs = nixpkgs.legacyPackages.${system};
       in
       {
-        packages.db = pkgs.callPackage ./nix/db.nix { };
+        packages = {
+          db = pkgs.callPackage ./nix/db.nix { };
+          graph = pkgs.callPackage ./nix/graph.nix { };
+        };
       }
     );
 }
