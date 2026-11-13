@@ -12,4 +12,9 @@ runCommand "agilex5-db" {
 } ''
   mkdir $out
   cp -r $src/db $src/keys $out/
+  chmod -R u+w $out
+  # The tables git keeps as .tsv.xz, decompressed once here: readers take a
+  # table or its .xz, and io96's 300 MB layout costs chipsmith ~20 s per
+  # build to decompress (pure-Rust LZMA, ~15 MB/s).
+  find $out -name '*.xz' -exec xz -d {} +
 ''
