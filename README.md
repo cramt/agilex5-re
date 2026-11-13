@@ -3816,9 +3816,36 @@ the above]:
   Quartus' route dump. Other HPS inputs (the bridges' AXI ports) are not
   mapped yet.
 
-**Open** [unk]: the HPS-to-FPGA bridges after a load from Linux. U-Boot's
-`bridge enable` runs before the fabric exists, and this kernel has no
-Agilex bridge driver; the ATF SMC `HPS_SET_BRIDGES` is the way in. Also open:
+**The bridges after a load from Linux** [obs, 2026-11-12]. A `.core.rbf`
+load through `/dev/fpga-load` brings them up with no driver and no ATF call:
+the reset manager's `BRGMODRST` (0x10d1102c) reads 0xF before and 0x0 after,
+and with designs/hpsf's core loaded `devmem 0x20000000` reads 0x48505346
+("HPSF") and +4 the design's counter. The lightweight bridge is the first
+512 MiB of the fabric window at 0x20000000. A read there with nothing
+answering hangs the HPS bus until the HPS is reset; so did a read of the
+reset manager at 0x10d11020.
+
+**The lightweight bridge at the fabric** [obs, Quartus route dumps,
+2026-11-13]. `tools/hps_routes.tcl` (an ECO script) traces every
+`LWSOC2FPGA_*` port bit of the HPS atom: inputs with `report_routing -to
+<hps> -to_port TYPE[bit]` (TYPE alone gives one route for the whole port),
+outputs to each fanout's data port. On designs/hpsf and its `HPSF_LWMAP`
+variant (every bridge bit live), 200 bits, the clock and irq0[0..3] meet
+the routing graph at fixed nodes, the same in both builds
+(`db/sm4revb/hps/lwhps2fpga.tsv`; irq0[0]/[3] reproduce `RPII:X52Y51Z0I44`
+/ `I24`):
+- inputs (`AW/AR/W_READY`, `B_*`, `R_*`) end on an `RPII` at Y51
+  (X32–X52), as the irq lines: `LEIM → RPII → RPI → SOC_HPS_WRAPPER_RE`;
+- outputs (`AW/AR_*`, `W_*`, `B/R_READY`) leave from a `SOC_HPS_WRAPPER_RE`
+  node that drives two `VIO_TO_CORE` nodes at Y51, ordinary routing;
+- the bridge clock `LWSOC2FPGA_CLK` is a sink of a global clock:
+  `ROWCLK_TAPOFF → GLOBAL_LOCAL_SEL → RPII:X37Y51Z0I51 → RPI →` the HPS.
+Quartus' HPS IP puts a soft `hps_axi4_ready_latency_adp` between the atom
+and the user: one register stage on every signal each way and, on AW, AR and
+W, a 7-entry FIFO that is ready while 2 more beats fit. Its FIFO writes when
+the atom's valid and ready were both high a cycle before, so the atom's pins
+handshake as plain AXI and the adapter is timing slack [inf]; its response
+path is AXI only if the HPS holds `rready`/`bready` high [inf]. Also open:
 whether an `io96_0` that differs from phase 1's build loads, and whether the
 kernel can recover from the wedge on its own (JTAG can, above). Since 2026-11-12 the
 QSPI holds the HPS-first `.jic` of `phase1/de25-nano` (factory image read

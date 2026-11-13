@@ -111,7 +111,18 @@ module hpsf_top
    wire arready = !r_busy;
    wire rvalid  = r_busy;
    wire rlast   = r_busy && r_left == 8'd0;
+`ifdef HPSF_LWMAP
+   // Mapping build only (tools/hps_routes.tcl; never loaded): every bridge
+   // input bit is driven by logic and every output bit read, so Quartus
+   // routes all of them (db/sm4revb/hps/lwhps2fpga.tsv).
+   reg [31:0] cnt32 = '0;
+   always @(posedge clk) cnt32 <= cnt32 + 1'b1;
+   wire [31:0] rdata = cnt32 ^ {3'b0, r_addr};
+   wire [1:0]  bresp = cnt32[1:0], rresp = cnt32[3:2];
+`else
    wire [31:0] rdata = r_addr[11:2] == 10'd0 ? 32'h4850_5346 : cnt[29:0];
+   wire [1:0]  bresp = 2'b00, rresp = 2'b00;
+`endif
 
    always @(posedge clk)
      if (rst) begin
@@ -267,13 +278,13 @@ module hpsf_top
       .lwhps2fpga_awready (awready),
       .lwhps2fpga_wdata   (wdata),   .lwhps2fpga_wstrb   (wstrb),   .lwhps2fpga_wlast   (wlast),
       .lwhps2fpga_wvalid  (wvalid),  .lwhps2fpga_wready  (wready),
-      .lwhps2fpga_bid     (bid),     .lwhps2fpga_bresp   (2'b00),   .lwhps2fpga_bvalid  (b_pend),
+      .lwhps2fpga_bid     (bid),     .lwhps2fpga_bresp   (bresp),   .lwhps2fpga_bvalid  (b_pend),
       .lwhps2fpga_bready  (bready),
       .lwhps2fpga_arid    (arid),    .lwhps2fpga_araddr  (araddr),  .lwhps2fpga_arlen   (arlen),
       .lwhps2fpga_arsize  (arsize),  .lwhps2fpga_arburst (arburst), .lwhps2fpga_arlock  (arlock),
       .lwhps2fpga_arcache (arcache), .lwhps2fpga_arprot  (arprot),  .lwhps2fpga_arvalid (arvalid),
       .lwhps2fpga_arready (arready),
-      .lwhps2fpga_rid     (rid),     .lwhps2fpga_rdata   (rdata),   .lwhps2fpga_rresp   (2'b00),
+      .lwhps2fpga_rid     (rid),     .lwhps2fpga_rdata   (rdata),   .lwhps2fpga_rresp   (rresp),
       .lwhps2fpga_rlast   (rlast),   .lwhps2fpga_rvalid  (rvalid),  .lwhps2fpga_rready  (rready),
       .hps_io_hps_osc_clk  (HPS_CLK_25),
       .hps_io_mdio0_mdc    (HPS_ENET_MDC),
