@@ -3873,7 +3873,7 @@ AR readies) leave from `SOC_MPFE_WRAPPER_RE` nodes, the routes passing
 configurable muxes inside the MPFE (`ALTRHPSMUX21`, the VIO data-width
 demuxes) that phase 1's HPS shell is assumed to set [inf].
 `tools/hps_routes.tcl` takes the atom types too (`HPS_ROUTES_ATOMS`);
-`db/sm4revb/hps/f2sdram.tsv`: 762 bits of the five channels and the clock
+`db/sm4revb/hps/f2sdram.tsv`: 777 bits of the five channels and the clock
 (32 of the 44 address bits). The `SOC_HPS` atom's `F2SOC_*` outputs are
 the same responses on their way to the MPFE, not the fabric's.
 
