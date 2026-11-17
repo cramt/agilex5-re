@@ -12,6 +12,9 @@
 // count up (LED3 0.75 Hz, LED4 0.37 Hz, ...).
 // With HPSF_B defined (the second core for the same phase 1): everything twice
 // as fast, and [1]/[2] and LED1/LED2 swapped.
+// With HPSF_F2STEST (an oracle, never a phase 1): chipsmith's
+// examples/de25-f2sdram master in place of the register file (README,
+// "FPGA-to-SDRAM on the board").
 module hpsf_top
   (
     input  wire         CLOCK1_50
@@ -99,6 +102,130 @@ module hpsf_top
    wire        wlast, wvalid;
    wire        bready, rready;
 
+`ifdef HPSF_F2STEST
+   // Oracle build (never part of a phase 1): chipsmith's examples/de25-f2sdram
+   // master, the same RTL, on the lightweight bridge (control) and the
+   // FPGA-to-SDRAM bridge, so Quartus' core and chipsmith's can be loaded in
+   // turn and compared on the board. Its bridge clocks are clk_sys here.
+   wire        awready, wready, arready, rvalid, rlast, b_pend;
+   wire [3:0]  bid, rid;
+   wire [31:0] rdata;
+   wire [1:0]  bresp, rresp;
+   wire [4:0] f2s_awid;
+   wire [31:0] f2s_awaddr;
+   wire [3:0] f2s_awregion;
+   wire [7:0] f2s_awlen;
+   wire [2:0] f2s_awsize;
+   wire [1:0] f2s_awburst;
+   wire [0:0] f2s_awlock;
+   wire [3:0] f2s_awcache;
+   wire [2:0] f2s_awprot;
+   wire [3:0] f2s_awqos;
+   wire [24:0] f2s_awuser;
+   wire [0:0] f2s_awvalid;
+   wire [255:0] f2s_wdata;
+   wire [31:0] f2s_wstrb;
+   wire [0:0] f2s_wlast;
+   wire [7:0] f2s_wuser;
+   wire [0:0] f2s_wvalid;
+   wire [0:0] f2s_bready;
+   wire [4:0] f2s_arid;
+   wire [31:0] f2s_araddr;
+   wire [3:0] f2s_arregion;
+   wire [7:0] f2s_arlen;
+   wire [2:0] f2s_arsize;
+   wire [1:0] f2s_arburst;
+   wire [0:0] f2s_arlock;
+   wire [3:0] f2s_arcache;
+   wire [2:0] f2s_arprot;
+   wire [3:0] f2s_arqos;
+   wire [24:0] f2s_aruser;
+   wire [0:0] f2s_arvalid;
+   wire [0:0] f2s_rready;
+   f2sdram u_f2s
+     (.CLOCK1_50 (clk),
+      .lw_clk    (),
+      .f2s_clk   (),
+       .awid     (awid),
+       .awaddr   (awaddr),
+       .awlen    (awlen),
+       .awsize   (awsize),
+       .awburst  (awburst),
+       .awlock   (awlock),
+       .awcache  (awcache),
+       .awprot   (awprot),
+       .awvalid  (awvalid),
+       .awready  (awready),
+       .wdata    (wdata),
+       .wstrb    (wstrb),
+       .wlast    (wlast),
+       .wvalid   (wvalid),
+       .wready   (wready),
+       .bid      (bid),
+       .bresp    (bresp),
+       .bready   (bready),
+       .arid     (arid),
+       .araddr   (araddr),
+       .arlen    (arlen),
+       .arsize   (arsize),
+       .arburst  (arburst),
+       .arlock   (arlock),
+       .arcache  (arcache),
+       .arprot   (arprot),
+       .arvalid  (arvalid),
+       .arready  (arready),
+       .rid      (rid),
+       .rdata    (rdata),
+       .rresp    (rresp),
+       .rlast    (rlast),
+       .rvalid   (rvalid),
+       .rready   (rready),
+       .bvalid   (b_pend),
+       .f2s_awid     (f2s_awid),
+       .f2s_awaddr   (f2s_awaddr),
+       .f2s_awregion (f2s_awregion),
+       .f2s_awlen    (f2s_awlen),
+       .f2s_awsize   (f2s_awsize),
+       .f2s_awburst  (f2s_awburst),
+       .f2s_awlock   (f2s_awlock),
+       .f2s_awcache  (f2s_awcache),
+       .f2s_awprot   (f2s_awprot),
+       .f2s_awqos    (f2s_awqos),
+       .f2s_awuser   (f2s_awuser),
+       .f2s_awvalid  (f2s_awvalid),
+       .f2s_wdata    (f2s_wdata),
+       .f2s_wstrb    (f2s_wstrb),
+       .f2s_wlast    (f2s_wlast),
+       .f2s_wuser    (f2s_wuser),
+       .f2s_wvalid   (f2s_wvalid),
+       .f2s_bready   (f2s_bready),
+       .f2s_arid     (f2s_arid),
+       .f2s_araddr   (f2s_araddr),
+       .f2s_arregion (f2s_arregion),
+       .f2s_arlen    (f2s_arlen),
+       .f2s_arsize   (f2s_arsize),
+       .f2s_arburst  (f2s_arburst),
+       .f2s_arlock   (f2s_arlock),
+       .f2s_arcache  (f2s_arcache),
+       .f2s_arprot   (f2s_arprot),
+       .f2s_arqos    (f2s_arqos),
+       .f2s_aruser   (f2s_aruser),
+       .f2s_arvalid  (f2s_arvalid),
+       .f2s_rready   (f2s_rready),
+       .f2s_awready  (f2sdram_awready),
+       .f2s_wready   (f2sdram_wready),
+       .f2s_bid      (f2sdram_bid),
+       .f2s_bresp    (f2sdram_bresp),
+       .f2s_buser    (f2sdram_buser),
+       .f2s_bvalid   (f2sdram_bvalid),
+       .f2s_arready  (f2sdram_arready),
+       .f2s_rid      (f2sdram_rid),
+       .f2s_rdata    (f2sdram_rdata),
+       .f2s_rresp    (f2sdram_rresp),
+       .f2s_rlast    (f2sdram_rlast),
+       .f2s_ruser    (f2sdram_ruser),
+       .f2s_rvalid   (f2sdram_rvalid));
+`else
    reg         aw_busy = 1'b0, b_pend = 1'b0;
    reg [3:0]   bid = '0;
    reg         r_busy = 1'b0;
@@ -139,6 +266,7 @@ module hpsf_top
         end
      end
 
+`endif
 
    // Quartus refuses the HPS atom if an unused bridge output is left unread
    // (Error 129015): fold them into two spare FPGA-to-HPS IRQ lines.
@@ -195,6 +323,11 @@ module hpsf_top
 `else
  `define LIVE(o, w, c) c
 `endif
+`ifdef HPSF_F2STEST
+ `define F2S(n, o, w, c) f2s_``n
+`else
+ `define F2S(n, o, w, c) `LIVE(o, w, c)
+`endif
    hps_wrapper u_hps
      (.clk_sys                            (clk),
       .rst_sys                            (rst),
@@ -203,42 +336,42 @@ module hpsf_top
       .h2f_warm_reset_handshake_reset_ack,
       .f2h_irq0                           ({26'd0, lw_sink, hps2fpga_sink, f2sdram_sink, marks, blink}),
       // The GHRD's HPS has the F2SDRAM and HPS2FPGA bridges; unused here.
-      .f2sdram_awid            (`LIVE(0, 5, '0)),
-      .f2sdram_awaddr          (`LIVE(5, 32, '0)),
-      .f2sdram_awregion        (`LIVE(37, 4, '0)),
-      .f2sdram_awlen           (`LIVE(41, 8, '0)),
-      .f2sdram_awsize          (`LIVE(49, 3, '0)),
-      .f2sdram_awburst         (`LIVE(52, 2, '0)),
-      .f2sdram_awlock          (`LIVE(54, 1, '0)),
-      .f2sdram_awcache         (`LIVE(55, 4, '0)),
-      .f2sdram_awprot          (`LIVE(59, 3, '0)),
-      .f2sdram_awqos           (`LIVE(62, 4, '0)),
-      .f2sdram_awuser          (`LIVE(66, 25, '0)),
-      .f2sdram_awvalid         (`LIVE(91, 1, '0)),
+      .f2sdram_awid            (`F2S(awid, 0, 5, '0)),
+      .f2sdram_awaddr          (`F2S(awaddr, 5, 32, '0)),
+      .f2sdram_awregion        (`F2S(awregion, 37, 4, '0)),
+      .f2sdram_awlen           (`F2S(awlen, 41, 8, '0)),
+      .f2sdram_awsize          (`F2S(awsize, 49, 3, '0)),
+      .f2sdram_awburst         (`F2S(awburst, 52, 2, '0)),
+      .f2sdram_awlock          (`F2S(awlock, 54, 1, '0)),
+      .f2sdram_awcache         (`F2S(awcache, 55, 4, '0)),
+      .f2sdram_awprot          (`F2S(awprot, 59, 3, '0)),
+      .f2sdram_awqos           (`F2S(awqos, 62, 4, '0)),
+      .f2sdram_awuser          (`F2S(awuser, 66, 25, '0)),
+      .f2sdram_awvalid         (`F2S(awvalid, 91, 1, '0)),
       .f2sdram_awready         (f2sdram_awready),
-      .f2sdram_wdata           (`LIVE(92, 256, '0)),
-      .f2sdram_wstrb           (`LIVE(348, 32, '0)),
-      .f2sdram_wlast           (`LIVE(380, 1, '0)),
-      .f2sdram_wuser           (`LIVE(381, 8, '0)),
-      .f2sdram_wvalid          (`LIVE(389, 1, '0)),
+      .f2sdram_wdata           (`F2S(wdata, 92, 256, '0)),
+      .f2sdram_wstrb           (`F2S(wstrb, 348, 32, '0)),
+      .f2sdram_wlast           (`F2S(wlast, 380, 1, '0)),
+      .f2sdram_wuser           (`F2S(wuser, 381, 8, '0)),
+      .f2sdram_wvalid          (`F2S(wvalid, 389, 1, '0)),
       .f2sdram_wready          (f2sdram_wready),
       .f2sdram_bid             (f2sdram_bid),
       .f2sdram_bresp           (f2sdram_bresp),
       .f2sdram_buser           (f2sdram_buser),
       .f2sdram_bvalid          (f2sdram_bvalid),
-      .f2sdram_bready          (`LIVE(390, 1, 1'b1)),
-      .f2sdram_arid            (`LIVE(391, 5, '0)),
-      .f2sdram_araddr          (`LIVE(396, 32, '0)),
-      .f2sdram_arregion        (`LIVE(428, 4, '0)),
-      .f2sdram_arlen           (`LIVE(432, 8, '0)),
-      .f2sdram_arsize          (`LIVE(440, 3, '0)),
-      .f2sdram_arburst         (`LIVE(443, 2, '0)),
-      .f2sdram_arlock          (`LIVE(445, 1, '0)),
-      .f2sdram_arcache         (`LIVE(446, 4, '0)),
-      .f2sdram_arprot          (`LIVE(450, 3, '0)),
-      .f2sdram_arqos           (`LIVE(453, 4, '0)),
-      .f2sdram_aruser          (`LIVE(457, 25, '0)),
-      .f2sdram_arvalid         (`LIVE(482, 1, '0)),
+      .f2sdram_bready          (`F2S(bready, 390, 1, 1'b1)),
+      .f2sdram_arid            (`F2S(arid, 391, 5, '0)),
+      .f2sdram_araddr          (`F2S(araddr, 396, 32, '0)),
+      .f2sdram_arregion        (`F2S(arregion, 428, 4, '0)),
+      .f2sdram_arlen           (`F2S(arlen, 432, 8, '0)),
+      .f2sdram_arsize          (`F2S(arsize, 440, 3, '0)),
+      .f2sdram_arburst         (`F2S(arburst, 443, 2, '0)),
+      .f2sdram_arlock          (`F2S(arlock, 445, 1, '0)),
+      .f2sdram_arcache         (`F2S(arcache, 446, 4, '0)),
+      .f2sdram_arprot          (`F2S(arprot, 450, 3, '0)),
+      .f2sdram_arqos           (`F2S(arqos, 453, 4, '0)),
+      .f2sdram_aruser          (`F2S(aruser, 457, 25, '0)),
+      .f2sdram_arvalid         (`F2S(arvalid, 482, 1, '0)),
       .f2sdram_arready         (f2sdram_arready),
       .f2sdram_rid             (f2sdram_rid),
       .f2sdram_rdata           (f2sdram_rdata),
@@ -246,7 +379,7 @@ module hpsf_top
       .f2sdram_rlast           (f2sdram_rlast),
       .f2sdram_ruser           (f2sdram_ruser),
       .f2sdram_rvalid          (f2sdram_rvalid),
-      .f2sdram_rready          (`LIVE(483, 1, 1'b1)),
+      .f2sdram_rready          (`F2S(rready, 483, 1, 1'b1)),
       .hps2fpga_awid           (hps2fpga_awid),
       .hps2fpga_awaddr         (hps2fpga_awaddr),
       .hps2fpga_awlen          (hps2fpga_awlen),

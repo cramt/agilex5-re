@@ -3877,6 +3877,30 @@ demuxes) that phase 1's HPS shell is assumed to set [inf].
 (32 of the 44 address bits). The `SOC_HPS` atom's `F2SOC_*` outputs are
 the same responses on their way to the MPFE, not the fabric's.
 
+**FPGA-to-SDRAM on the board: every response DECERR** [obs, 2026-11-17].
+chipsmith's de25-f2sdram (built from `f2sdram.tsv`) gets a DECERR for
+every read beat at every address (0 to 0xF0000000) and AxPROT. Ruled out:
+the bridge enable (F2SDRAM manager 0x18001000: FLAGOUTSTATUS0 0x100, bit 1
+clear on an HPS-first boot; set through FLAGOUTSET0 +0x50 it reads 0x102,
+still DECERR); the five HPS↔MPFE links (`F2SDRAM_BRIDGE_RST_N`,
+`FLUSH_REQ`/`ACK`, the TBU interrupts) and all 9,035 edges inside the MPFE
+on Quartus' F2SDRAM routes (`SOC_MPFE_VIO_MAP_RE`, the data-width demuxes,
+`ALTR_HPS_AND`): none has a configuration bit, so the [inf] above is
+moot for the core; the SMMU's own record (with stream IDs 0 and 11–63
+given translating entries, no event and no GERROR; 1–9 are the HPS
+peripherals', 10 `/firmware/svc`'s). Disabling the SMMU node leaves it
+aborting everything (the SD card's DMA fails; mercury can't mount root).
+`designs/hpsf` with `HPSF_F2STEST` is the oracle: chipsmith's f2sdram.v
+in Quartus' core. Its image differs from the phase 1 build's only in
+fabric logic, the row-51 RPI inverters and `iss/i_c2p_clk/delay_mode
+DELAY_350` on the 16 VIO tiles of the F2SDRAM inputs (columns 63–91; the
+lightweight bridge's have it too, and chipsmith's bridge works without
+it): no MPFE, HPS or IO96 setting. Loaded, it answers 0xF25D0000 and then
+hangs the HPS on the first lightweight-bridge write (rcu stall, SD
+timeouts; phase 1 over JTAG recovers it), before any F2SDRAM request, so
+it says nothing about F2SDRAM yet: Quartus' soft adapter in front of the
+lightweight bridge and f2sdram.v's slave don't agree.
+
 **Phase 1 and the QSPI image** [obs, 2026-11-12]. The HPS section of a
 `.hps.rbf` is a module page (`Sign-26.1.1sm-7`, record type 0x15), an action
 page, one raw-deflate stream (zlib 9, window −13, `Z_FIXED`, as the IO
