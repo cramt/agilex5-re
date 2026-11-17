@@ -3865,10 +3865,17 @@ this build routes come out exactly as `lwhps2fpga.tsv` has them.
 out; 32 of the 40 address bits), the clock `SOC2FPGA_CLK` a global-clock
 sink at `RPII:X23Y51Z0I51`. chipsmith's de25-h2f, a 128-bit memory on the
 bridge built from this table, answers at 0x40000000 from Linux, every word
-right with 32- to 128-bit accesses (2026-11-17). **FPGA-to-SDRAM isn't on
-this atom**: the `SOC_HPS` atom has its responses (`F2SOC_*` ready, B, R)
-as outputs but none of its request inputs (`F2SDRAM` AW, W, AR), so they
-enter through another block [unk which]; the dump traces none of them.
+right with 32- to 128-bit accesses (2026-11-17). **FPGA-to-SDRAM is the
+`SM_SOC_MPFE` atom's** (an ECO query listing every atom with such ports):
+its requests (`F2SDRAM_AW*`, `W*`, `AR*`, the B and R readies) and its
+clock enter it at RPIIs, its responses (`F2SDRAM_B*`, `R*`, the AW, W and
+AR readies) leave from `SOC_MPFE_WRAPPER_RE` nodes, the routes passing
+configurable muxes inside the MPFE (`ALTRHPSMUX21`, the VIO data-width
+demuxes) that phase 1's HPS shell is assumed to set [inf].
+`tools/hps_routes.tcl` takes the atom types too (`HPS_ROUTES_ATOMS`);
+`db/sm4revb/hps/f2sdram.tsv`: 762 bits of the five channels and the clock
+(32 of the 44 address bits). The `SOC_HPS` atom's `F2SOC_*` outputs are
+the same responses on their way to the MPFE, not the fabric's.
 
 **Phase 1 and the QSPI image** [obs, 2026-11-12]. The HPS section of a
 `.hps.rbf` is a module page (`Sign-26.1.1sm-7`, record type 0x15), an action

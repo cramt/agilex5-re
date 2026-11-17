@@ -7,9 +7,13 @@
 #   T <to_port>, then R hops, X error, E end
 # HPS_ROUTES_MATCH (environment) lists the port types traced, as globs; by
 # default the lightweight bridge and the FPGA-to-HPS interrupts.
+# HPS_ROUTES_ATOMS lists the atom types searched (default SOC_HPS; the
+# FPGA-to-SDRAM bridge's requests enter SM_SOC_MPFE).
 read_atom_netlist
 set match {LWSOC2FPGA_* F2S_FPGA_IRQ}
 if {[info exists ::env(HPS_ROUTES_MATCH)]} { set match $::env(HPS_ROUTES_MATCH) }
+set atoms {SOC_HPS}
+if {[info exists ::env(HPS_ROUTES_ATOMS)]} { set atoms $::env(HPS_ROUTES_ATOMS) }
 proc traced {match pt} {
     foreach g $match { if {[string match $g $pt]} { return 1 } }
     return 0
@@ -27,8 +31,9 @@ proc dump {out to port} {
 foreach_in_collection a [get_atom_nodes] {
     set name [get_atom_node_info -node $a -key NAME]
     set type [get_atom_node_info -node $a -key TYPE]
-    if {$type ne "SOC_HPS"} { continue }
+    if {[lsearch -exact $atoms $type] < 0} { continue }
     puts $out "A $name $type"
+    set it {}; set ot {}
     foreach p [get_atom_iports -node $a] { lappend it [get_atom_port_info -node $a -port_id $p -type iport -key TYPE] }
     foreach p [get_atom_oports -node $a] { lappend ot [get_atom_port_info -node $a -port_id $p -type oport -key TYPE] }
     foreach t [lsort -unique $it] { puts $out "PI $t [llength [lsearch -all -exact $it $t]]" }

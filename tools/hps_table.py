@@ -6,7 +6,8 @@
 Per port bit of the HPS atom: `in` (the fabric drives the HPS) meets the
 graph at the RPII its route enters through (`LEIM → RPII → RPI → SOC_HPS_
 WRAPPER_RE`); `out` (the HPS drives the fabric) leaves from the
-last SOC_HPS_WRAPPER_RE node on its route (the one driving VIO_TO_CORE). A bit
+last SOC_HPS_WRAPPER_RE (or, for the FPGA-to-SDRAM bridge's SM_SOC_MPFE
+atom, SOC_MPFE_WRAPPER_RE) node on its route. A bit
 traced more than once must agree with itself; one with no route is left
 out. Lines `TYPE<TAB>BIT<TAB>in|out<TAB>NODE`, sorted, as
 db/sm4revb/hps/lwhps2fpga.tsv has them.
@@ -23,7 +24,11 @@ def node(hop):
     m = re.fullmatch(r"([A-Z0-9_]+?)_X(\d+)_Y(\d+)_N(\d+)_I(\d+)", hop)
     if not m:
         return None
-    kind = {"SOCHPSWRAPPERRE": "SOC_HPS_WRAPPER_RE", "VIOTOCORE": "VIO_TO_CORE"}.get(
+    kind = {
+        "SOCHPSWRAPPERRE": "SOC_HPS_WRAPPER_RE",
+        "SOCMPFEWRAPPERRE": "SOC_MPFE_WRAPPER_RE",
+        "VIOTOCORE": "VIO_TO_CORE",
+    }.get(
         m.group(1), m.group(1))
     return f"{kind}:X{m.group(2)}Y{m.group(3)}Z{m.group(4)}I{m.group(5)}"
 
@@ -58,7 +63,7 @@ def meet(direction, hops):
     # The last of the wrapper's nodes on the way out: the route may go on
     # into VIO_TO_CORE, or (Quartus' soft adapter right behind the atom)
     # straight to a register.
-    wrapper = [h for h in hops if h.startswith("SOC_HPS_WRAPPER_RE:")]
+    wrapper = [h for h in hops if h.startswith(("SOC_HPS_WRAPPER_RE:", "SOC_MPFE_WRAPPER_RE:"))]
     return wrapper[-1] if wrapper else None
 
 
