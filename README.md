@@ -3851,6 +3851,25 @@ kernel can recover from the wedge on its own (JTAG can, above). Since 2026-11-12
 QSPI holds the HPS-first `.jic` of `phase1/de25-nano` (factory image read
 back first), so this is the board's power-on state.
 
+**The HPS-to-FPGA bridge at the fabric** [obs, Quartus route dump,
+2026-11-17]. `designs/hpsf` with `HPSF_BRIDGEMAP` drives every input of the
+HPS-to-FPGA and FPGA-to-SDRAM bridges from logic (their outputs were read
+already), and `tools/hps_routes.tcl` now traces whatever port types
+`HPS_ROUTES_MATCH` lists. `tools/hps_table.py` turns a dump into a table:
+an input meets the graph at the RPII its route enters through, an output at
+the last `SOC_HPS_WRAPPER_RE` node of its route (here Quartus' soft adapter
+register sits right behind the atom, so the route doesn't show the
+`VIO_TO_CORE` hop). Checked on the lightweight bridge: the 181 of its bits
+this build routes come out exactly as `lwhps2fpga.tsv` has them.
+`db/sm4revb/hps/hps2fpga.tsv`: all 411 `SOC2FPGA_*` bits (147 in, 264
+out; 32 of the 40 address bits), the clock `SOC2FPGA_CLK` a global-clock
+sink at `RPII:X23Y51Z0I51`. chipsmith's de25-h2f, a 128-bit memory on the
+bridge built from this table, answers at 0x40000000 from Linux, every word
+right with 32- to 128-bit accesses (2026-11-17). **FPGA-to-SDRAM isn't on
+this atom**: the `SOC_HPS` atom has its responses (`F2SOC_*` ready, B, R)
+as outputs but none of its request inputs (`F2SDRAM` AW, W, AR), so they
+enter through another block [unk which]; the dump traces none of them.
+
 **Phase 1 and the QSPI image** [obs, 2026-11-12]. The HPS section of a
 `.hps.rbf` is a module page (`Sign-26.1.1sm-7`, record type 0x15), an action
 page, one raw-deflate stream (zlib 9, window −13, `Z_FIXED`, as the IO

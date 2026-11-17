@@ -5,7 +5,15 @@
 # written TYPE[bit]; HPS outputs are traced to each fanout's D/data port. Lines:
 #   I <type> <bit> fanin {..} <src>   O <type> <bit> -> <dest> <port>
 #   T <to_port>, then R hops, X error, E end
+# HPS_ROUTES_MATCH (environment) lists the port types traced, as globs; by
+# default the lightweight bridge and the FPGA-to-HPS interrupts.
 read_atom_netlist
+set match {LWSOC2FPGA_* F2S_FPGA_IRQ}
+if {[info exists ::env(HPS_ROUTES_MATCH)]} { set match $::env(HPS_ROUTES_MATCH) }
+proc traced {match pt} {
+    foreach g $match { if {[string match $g $pt]} { return 1 } }
+    return 0
+}
 set out [open hps_routes.txt w]
 proc dump {out to port} {
     puts $out "T $port"
@@ -31,7 +39,7 @@ foreach_in_collection a [get_atom_nodes] {
         set pt [get_atom_port_info -node $a -port_id $p -type iport -key TYPE]
         if {![info exists bit($pt)]} { set bit($pt) 0 }
         set k $bit($pt); incr bit($pt)
-        if {![string match "LWSOC2FPGA_*" $pt] && $pt ne "F2S_FPGA_IRQ"} { continue }
+        if {![traced $match $pt]} { continue }
         set src ""
         catch {set src [get_atom_port_info -node $a -port_id $p -type iport -key FANIN]}
         if {$src eq "" || [lindex $src 0] < 0} { continue }
@@ -46,7 +54,7 @@ foreach_in_collection a [get_atom_nodes] {
         set pt [get_atom_port_info -node $a -port_id $p -type oport -key TYPE]
         if {![info exists bit($pt)]} { set bit($pt) 0 }
         set k $bit($pt); incr bit($pt)
-        if {![string match "LWSOC2FPGA_*" $pt]} { continue }
+        if {![traced $match $pt]} { continue }
         set fo {}
         catch {set fo [get_atom_port_info -node $a -port_id $p -type oport -key FANOUT]}
         foreach f $fo {
