@@ -3934,7 +3934,13 @@ the bridge's reset, f2soc_enable (system manager 0x10d1214c = 3) and the
 reset manager's handshakes are as an HPS-first boot leaves them. The
 F2SDRAM master drives AxUSER 0, and F2SDRAM's stream ID rides in AxUSER
 (the MPFE wrapper's `aruser_smmu`), so an identity stream is the next
-F2SDRAM experiment.
+F2SDRAM experiment. Tried 2026-11-18, and it isn't: with AxUSER settable,
+stream 11 (identity) in its low bits, at bits 24:9 with and without SECSID
+or at three other offsets still gets DECERR, and the SMMU logs no event at
+any of them, where FPGA-to-HPS's wrong streams log translation faults, so
+F2SDRAM's requests are refused before the TBU. Nor is it the end of ATF's
+Agilex 5 F2SDRAM enable (whose FLAGOUT writes are the other families'
+branch): pulsing `BRGMODRST` bit 3 with a core loaded leaves it DECERR.
 
 **Phase 1 and the QSPI image** [obs, 2026-11-12]. The HPS section of a
 `.hps.rbf` is a module page (`Sign-26.1.1sm-7`, record type 0x15), an action
