@@ -2,7 +2,7 @@
 
 Phase 1 of the DE25-Nano's HPS-first boot, as the board runs it: the SDM
 firmware (CMF), the HPS I/O and EMIF (HPIO) and the HPS section (U-Boot SPL
-and its handoff data). It is in the board's QSPI since 2026-11-12, and every
+and its handoff data). It is in the board's QSPI since 2026-11-18 (the bridge-less one since 2026-11-12), and every
 core chipsmith builds for the board is phase 2 of it.
 
 - `hps.rbf`: `quartus_pfg -c hpsf.sof hpsf.rbf -o hps_path=spl11.hex -o hps=1`
