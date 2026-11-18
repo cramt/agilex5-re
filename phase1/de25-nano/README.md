@@ -7,11 +7,14 @@ core chipsmith builds for the board is phase 2 of it.
 
 - `hps.rbf`: `quartus_pfg -c hpsf.sof hpsf.rbf -o hps_path=spl11.hex -o hps=1`
   on Quartus Prime Pro 26.1.1's build of `designs/hpsf` (Terasic's GHRD HPS
-  and EMIF settings, `HPS_INITIALIZATION "HPS FIRST"`; README, "The
+  and EMIF settings plus the FPGA-to-HPS bridge since 2026-11-18, `HPS_INITIALIZATION "HPS FIRST"`; README, "The
   HPS-first split"). Its SPL is Terasic's U-Boot (github.com/terasic/
   u-boot-socfpga, tag `de25_nano_revA_v1.0`, d0f8813f, GPL-2.0+), stock
   defconfig, built with Arm GNU Toolchain 11.2-2022.02.
-- `shell.txt`: the shell lines (`tools/hps_shell.sh`) a core is built on.
+- `shell.txt`: the shell lines (`tools/hps_shell.sh`) a core is built on,
+  plus the RPI inverter of irq0[6] (`cw_rt_vio_lab_base_r51_c52`
+  `inst_rpi_12/xd`), which `hpsf_top`'s own logic drives in Quartus' build
+  but a core doesn't.
 - `hps_io_hash`: phase 1's HPS IO hash (`quartus_pfg -i`), which a core
   must carry.
 

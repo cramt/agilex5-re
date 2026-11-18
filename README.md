@@ -3901,6 +3901,41 @@ timeouts; phase 1 over JTAG recovers it), before any F2SDRAM request, so
 it says nothing about F2SDRAM yet: Quartus' soft adapter in front of the
 lightweight bridge and f2sdram.v's slave don't agree.
 
+**FPGA-to-HPS: phase 1 has it, and it is coherent** [obs, 2026-11-18].
+The HPS IP's `f2s_data_width` (0 in the GHRD's `agilex_hps.ip`) is the
+bridge's switch; at 256 the IP grows `fpga2hps_*` (ACE5-Lite: AxDOMAIN,
+AxSNOOP, stash, atop, AxMMUSID/AxMMUSECSID), which the MPFE wrapper takes
+through Quartus' soft ready-latency adapter to the `SM_SOC_MPFE` atom's
+`F2SOC_*` ports, on to the HPS's CCU. `designs/hpsf` now builds with it
+(`ENABLE_FPGA2HPS`; its outputs fold into irq0[6]), and with
+`HPSF_BRIDGEMAP` every input is driven: `db/sm4revb/hps/fpga2hps.tsv`, 813
+bits of the five channels and the clock (`F2SOC_CLK`, a global-clock sink at
+`RPII:X119Y51Z0I51`), from the dump's `SM_SOC_MPFE` routes only (the
+`SOC_HPS` atom's `F2SOC_*` are the MPFE↔HPS link, as with F2SDRAM; the
+MPFE-to-HPS clock `F2SOC_CLK_FDO_APS` is left out). The phase 1 built with
+it has the same HPS IO hash (D921…C3D07A) and the same shell but for 538 new
+RPI inverters on row 51, columns 95–120 (the bridge's inputs, tied off) and
+one gone: irq0[6], which `hpsf_top` now drives and a core doesn't, so
+`phase1/de25-nano/shell.txt` keeps it. A core built on the old shell leaves
+those 538 inputs undriven (reading 1) on the new phase 1, so cores are
+rebuilt.
+On the board (phase 1 over JTAG, chipsmith's de25-f2h): every response
+SLVERR until the SMMU lets the stream through. The core's AxMMUSID is the
+stream ID (1, gmac0's, logs translation faults at the buffer's physical
+address; an unowned stream such as 0 or 33 is aborted with no event, which
+is how F2SDRAM's DECERR looked too). With USB's stream (6) switched to an
+identity domain (`/sys/kernel/iommu_groups/N/type`, the device unbound),
+the fabric writes a user process's pages and the CPU reads them through its
+cached mapping, and the reverse, every word right over 16 pages, with
+AxDOMAIN inner or outer shareable and AxCACHE write-back; non-shareable or
+non-cacheable reads stale lines both ways (208–464 of 1024 words right),
+so the CCU's coherence is what makes it work. Nothing else was set up:
+the bridge's reset, f2soc_enable (system manager 0x10d1214c = 3) and the
+reset manager's handshakes are as an HPS-first boot leaves them. The
+F2SDRAM master drives AxUSER 0, and F2SDRAM's stream ID rides in AxUSER
+(the MPFE wrapper's `aruser_smmu`), so an identity stream is the next
+F2SDRAM experiment.
+
 **Phase 1 and the QSPI image** [obs, 2026-11-12]. The HPS section of a
 `.hps.rbf` is a module page (`Sign-26.1.1sm-7`, record type 0x15), an action
 page, one raw-deflate stream (zlib 9, window −13, `Z_FIXED`, as the IO

@@ -10,9 +10,11 @@ set_global_assignment -name SYSTEMVERILOG_FILE hps_wrapper.sv
 set_global_assignment -name IP_FILE ip/agilex_hps.ip
 set_global_assignment -name IP_FILE ip/emif_io96b_hps.ip
 set_global_assignment -name SDC_FILE hpsf.sdc
-# agilex_hps.ip has both bridges enabled; hps_wrapper exposes them under these.
+# agilex_hps.ip has three bridges enabled; hps_wrapper exposes them under these.
+# FPGA-to-HPS (f2s_data_width 256) since 2026-11-18: the board's phase 1 has it.
 set_global_assignment -name VERILOG_MACRO "ENABLE_FPGA2SDRAM=1"
 set_global_assignment -name VERILOG_MACRO "ENABLE_HPS2FPGA=1"
+set_global_assignment -name VERILOG_MACRO "ENABLE_FPGA2HPS=1"
 
 # The point of the design: the SDM configures HPS I/O and boots the HPS
 # first; the fabric (the .core.rbf) comes later, from Linux.

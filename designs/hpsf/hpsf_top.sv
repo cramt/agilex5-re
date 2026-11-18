@@ -5,7 +5,8 @@
 //
 // What the HPS can see once the core is in, with no bridge enabled:
 //   f2h_irq0[0]  the 0.75 Hz blink (GIC SPI 17, INTID 49), [1] = 1, [2] = 0
-//   ([5:3] carry the unused bridge outputs, 0 while the bridges idle)
+//   ([6:3] carry the unused bridge outputs, 0 while the bridges idle; [6]
+//   only with ENABLE_FPGA2HPS)
 // and on the lightweight bridge (0x2000_0000) once it is enabled:
 //   0x0 reads 0x48505346 ("HPSF"), anything else the 50 MHz counter.
 // LEDs are active low: LED0 blinks at 0.75 Hz, LED1 lit, LED2 dark, LED[7:3]
@@ -308,17 +309,38 @@ module hpsf_top
   wire hps2fpga_arvalid;
   wire hps2fpga_rready;
    wire f2sdram_sink  = ^{f2sdram_awready, f2sdram_wready, f2sdram_bid, f2sdram_bresp, f2sdram_buser, f2sdram_bvalid, f2sdram_arready, f2sdram_rid, f2sdram_rdata, f2sdram_rresp, f2sdram_rlast, f2sdram_ruser, f2sdram_rvalid};
+`ifdef ENABLE_FPGA2HPS
+   // FPGA-to-HPS (ACE5-Lite, 256-bit; f2s_data_width in agilex_hps.ip): unused
+   // here, its outputs folded into irq0[6] like the other bridges'.
+   wire fpga2hps_awready;
+   wire fpga2hps_wready;
+   wire [4:0] fpga2hps_bid;
+   wire [1:0] fpga2hps_bresp;
+   wire [7:0] fpga2hps_buser;
+   wire fpga2hps_bvalid;
+   wire fpga2hps_arready;
+   wire [4:0] fpga2hps_rid;
+   wire [255:0] fpga2hps_rdata;
+   wire [1:0] fpga2hps_rresp;
+   wire fpga2hps_rlast;
+   wire [7:0] fpga2hps_ruser;
+   wire fpga2hps_rvalid;
+   wire f2h_sink = ^{fpga2hps_awready, fpga2hps_wready, fpga2hps_bid, fpga2hps_bresp, fpga2hps_buser, fpga2hps_bvalid, fpga2hps_arready, fpga2hps_rid, fpga2hps_rdata, fpga2hps_rresp, fpga2hps_rlast, fpga2hps_ruser, fpga2hps_rvalid};
+`else
+   wire f2h_sink = 1'b0;
+`endif
    wire lw_sink = ^{awaddr, awlen, awsize, awburst, awlock, awcache, awprot, wdata, wstrb,
                     arsize, arburst, arlock, arcache, arprot};
    wire hps2fpga_sink = ^{hps2fpga_awid, hps2fpga_awaddr, hps2fpga_awlen, hps2fpga_awsize, hps2fpga_awburst, hps2fpga_awlock, hps2fpga_awcache, hps2fpga_awprot, hps2fpga_awvalid, hps2fpga_wdata, hps2fpga_wstrb, hps2fpga_wlast, hps2fpga_wvalid, hps2fpga_bready, hps2fpga_arid, hps2fpga_araddr, hps2fpga_arlen, hps2fpga_arsize, hps2fpga_arburst, hps2fpga_arlock, hps2fpga_arcache, hps2fpga_arprot, hps2fpga_arvalid, hps2fpga_rready};
 
 `ifdef HPSF_BRIDGEMAP
    // Mapping build only (tools/hps_routes.tcl; never loaded): every input of
-   // the HPS-to-FPGA and FPGA-to-SDRAM bridges driven by logic, so Quartus
-   // routes all of them (db/sm4revb/hps/hps2fpga.tsv, f2sdram.tsv).
+   // the HPS-to-FPGA, FPGA-to-SDRAM and (with ENABLE_FPGA2HPS) FPGA-to-HPS
+   // bridges driven by logic, so Quartus routes all of them
+   // (db/sm4revb/hps/hps2fpga.tsv, f2sdram.tsv, fpga2hps.tsv).
    reg [31:0] mcnt = '0;
    always @(posedge clk) mcnt <= mcnt + 1'b1;
-   wire [1023:0] live = {32{mcnt}};
+   wire [2047:0] live = {64{mcnt}};
  `define LIVE(o, w, c) live[(o) +: (w)]
 `else
  `define LIVE(o, w, c) c
@@ -334,7 +356,7 @@ module hpsf_top
       .h2f_reset_reset,
       .h2f_warm_reset_handshake_reset_req,
       .h2f_warm_reset_handshake_reset_ack,
-      .f2h_irq0                           ({26'd0, lw_sink, hps2fpga_sink, f2sdram_sink, marks, blink}),
+      .f2h_irq0                           ({25'd0, f2h_sink, lw_sink, hps2fpga_sink, f2sdram_sink, marks, blink}),
       // The GHRD's HPS has the F2SDRAM and HPS2FPGA bridges; unused here.
       .f2sdram_awid            (`F2S(awid, 0, 5, '0)),
       .f2sdram_awaddr          (`F2S(awaddr, 5, 32, '0)),
@@ -415,6 +437,65 @@ module hpsf_top
       .hps2fpga_rlast          (`LIVE(628, 1, '0)),
       .hps2fpga_rvalid         (`LIVE(629, 1, '0)),
       .hps2fpga_rready         (hps2fpga_rready),
+`ifdef ENABLE_FPGA2HPS
+      .fpga2hps_awid           (`LIVE(1024, 5, '0)),
+      .fpga2hps_awaddr         (`LIVE(1029, 32, '0)),
+      .fpga2hps_awregion       (`LIVE(1061, 4, '0)),
+      .fpga2hps_awdomain       (`LIVE(1065, 2, '0)),
+      .fpga2hps_awsnoop        (`LIVE(1067, 4, '0)),
+      .fpga2hps_awlen          (`LIVE(1071, 8, '0)),
+      .fpga2hps_awsize         (`LIVE(1079, 3, '0)),
+      .fpga2hps_arsize         (`LIVE(1082, 3, '0)),
+      .fpga2hps_awburst        (`LIVE(1085, 2, '0)),
+      .fpga2hps_awlock         (`LIVE(1087, 1, '0)),
+      .fpga2hps_awcache        (`LIVE(1088, 4, '0)),
+      .fpga2hps_awprot         (`LIVE(1092, 3, '0)),
+      .fpga2hps_awqos          (`LIVE(1095, 4, '0)),
+      .fpga2hps_awuser         (`LIVE(1099, 8, '0)),
+      .fpga2hps_awstashnid     (`LIVE(1107, 11, '0)),
+      .fpga2hps_awstashniden   (`LIVE(1118, 1, '0)),
+      .fpga2hps_awstashlpid    (`LIVE(1119, 5, '0)),
+      .fpga2hps_awstashlpiden  (`LIVE(1124, 1, '0)),
+      .fpga2hps_awatop         (`LIVE(1125, 6, '0)),
+      .fpga2hps_awmmusecsid    (`LIVE(1131, 1, '0)),
+      .fpga2hps_awmmusid       (`LIVE(1132, 16, '0)),
+      .fpga2hps_awvalid        (`LIVE(1148, 1, '0)),
+      .fpga2hps_awready        (fpga2hps_awready),
+      .fpga2hps_wdata          (`LIVE(1149, 256, '0)),
+      .fpga2hps_wstrb          (`LIVE(1405, 32, '0)),
+      .fpga2hps_wlast          (`LIVE(1437, 1, '0)),
+      .fpga2hps_wuser          (`LIVE(1438, 8, '0)),
+      .fpga2hps_wvalid         (`LIVE(1446, 1, '0)),
+      .fpga2hps_wready         (fpga2hps_wready),
+      .fpga2hps_bid            (fpga2hps_bid),
+      .fpga2hps_bresp          (fpga2hps_bresp),
+      .fpga2hps_buser          (fpga2hps_buser),
+      .fpga2hps_bvalid         (fpga2hps_bvalid),
+      .fpga2hps_bready         (`LIVE(1447, 1, 1'b1)),
+      .fpga2hps_arid           (`LIVE(1448, 5, '0)),
+      .fpga2hps_araddr         (`LIVE(1453, 32, '0)),
+      .fpga2hps_arregion       (`LIVE(1485, 4, '0)),
+      .fpga2hps_ardomain       (`LIVE(1489, 2, '0)),
+      .fpga2hps_arsnoop        (`LIVE(1491, 4, '0)),
+      .fpga2hps_arlen          (`LIVE(1495, 8, '0)),
+      .fpga2hps_arburst        (`LIVE(1503, 2, '0)),
+      .fpga2hps_arlock         (`LIVE(1505, 1, '0)),
+      .fpga2hps_arcache        (`LIVE(1506, 4, '0)),
+      .fpga2hps_arprot         (`LIVE(1510, 3, '0)),
+      .fpga2hps_arqos          (`LIVE(1513, 4, '0)),
+      .fpga2hps_aruser         (`LIVE(1517, 8, '0)),
+      .fpga2hps_armmusecsid    (`LIVE(1525, 1, '0)),
+      .fpga2hps_armmusid       (`LIVE(1526, 16, '0)),
+      .fpga2hps_arvalid        (`LIVE(1542, 1, '0)),
+      .fpga2hps_arready        (fpga2hps_arready),
+      .fpga2hps_rid            (fpga2hps_rid),
+      .fpga2hps_rdata          (fpga2hps_rdata),
+      .fpga2hps_rresp          (fpga2hps_rresp),
+      .fpga2hps_rlast          (fpga2hps_rlast),
+      .fpga2hps_ruser          (fpga2hps_ruser),
+      .fpga2hps_rvalid         (fpga2hps_rvalid),
+      .fpga2hps_rready         (`LIVE(1543, 1, 1'b1)),
+`endif
 
       .lwhps2fpga_awid    (awid),    .lwhps2fpga_awaddr  (awaddr),  .lwhps2fpga_awlen   (awlen),
       .lwhps2fpga_awsize  (awsize),  .lwhps2fpga_awburst (awburst), .lwhps2fpga_awlock  (awlock),
